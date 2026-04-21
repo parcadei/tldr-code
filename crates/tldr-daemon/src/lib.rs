@@ -153,6 +153,7 @@ async fn handle_status(socket_path: &PathBuf) -> anyhow::Result<()> {
 
     #[cfg(windows)]
     {
+        let _ = socket_path;
         eprintln!("Status check not yet implemented for Windows TCP");
         std::process::exit(1);
     }
@@ -180,6 +181,7 @@ async fn handle_stop(socket_path: &PathBuf) -> anyhow::Result<()> {
 
     #[cfg(windows)]
     {
+        let _ = socket_path;
         eprintln!("Stop not yet implemented for Windows TCP");
         std::process::exit(1);
     }

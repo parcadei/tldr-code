@@ -16,8 +16,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::{http::StatusCode, response::IntoResponse, routing::post, Json, Router};
+#[cfg(unix)]
 use tokio::net::UnixListener;
-use tracing::{error, info, warn};
+#[cfg(unix)]
+use tracing::{error, warn};
+use tracing::info;
 
 use crate::handlers;
 use crate::state::DaemonState;
@@ -85,6 +88,7 @@ pub fn compute_tcp_port(project: &Path) -> u16 {
 /// A socket is stale if:
 /// 1. The file exists but no daemon is listening
 /// 2. Connection attempt fails
+#[cfg(unix)]
 pub async fn is_socket_stale(socket_path: &Path) -> bool {
     if !socket_path.exists() {
         return false; // Not stale, just doesn't exist
@@ -105,6 +109,7 @@ pub async fn is_socket_stale(socket_path: &Path) -> bool {
 }
 
 /// Remove stale socket file (M17)
+#[cfg(unix)]
 pub fn remove_stale_socket(socket_path: &Path) -> std::io::Result<()> {
     if socket_path.exists() {
         std::fs::remove_file(socket_path)?;

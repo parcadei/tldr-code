@@ -14,6 +14,8 @@ LLMs waste context on raw source dumps. tldr extracts the signal: function signa
 
 Download the latest binary for your platform from [GitHub Releases](https://github.com/parcadei/tldr-code/releases).
 
+> **Note:** Pre-built binaries do not include semantic search (`tldr semantic`, `tldr similar`). For those commands, install via cargo with `--features semantic` (see below).
+
 ### Cargo
 
 ```bash
@@ -124,11 +126,13 @@ tldr health src/
 | Command | Description |
 |---------|-------------|
 | `search` | BM25 search with structural context |
-| `semantic` | Natural language code search |
-| `similar` | Find similar code fragments |
+| `semantic` | Natural language code search * |
+| `similar` | Find similar code fragments * |
 | `context` | LLM-ready context from entry point |
 | `definition` | Go-to-definition |
 | `explain` | Comprehensive function analysis |
+
+\* Requires the `semantic` feature: `cargo install tldr-cli --features semantic`
 
 ### Aggregated
 | Command | Description |
