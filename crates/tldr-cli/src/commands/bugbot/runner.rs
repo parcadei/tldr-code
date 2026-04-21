@@ -47,7 +47,7 @@ fn kill_process_by_id(pid: u32) {
                 0, // bInheritHandle = FALSE
                 pid,
             );
-            if !handle.is_null() {
+            if handle != 0 {
                 windows_sys::Win32::System::Threading::TerminateProcess(handle, 1);
                 windows_sys::Win32::Foundation::CloseHandle(handle);
             }

@@ -232,6 +232,18 @@ impl TldrDifferentialEngine {
             unsafe {
                 libc::kill(child_id as libc::pid_t, libc::SIGKILL);
             }
+            #[cfg(windows)]
+            unsafe {
+                let handle = windows_sys::Win32::System::Threading::OpenProcess(
+                    windows_sys::Win32::System::Threading::PROCESS_TERMINATE,
+                    0,
+                    child_id,
+                );
+                if handle != 0 {
+                    windows_sys::Win32::System::Threading::TerminateProcess(handle, 1);
+                    windows_sys::Win32::Foundation::CloseHandle(handle);
+                }
+            }
         });
 
         let output = child
