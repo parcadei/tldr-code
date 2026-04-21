@@ -1,0 +1,1 @@
+./main.go:5:17: cannot use s (variable of type string) as type []byte in variable declaration

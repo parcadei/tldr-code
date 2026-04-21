@@ -1,0 +1,51 @@
+[package]
+name = "tldr-daemon"
+version = "0.1.0"
+edition = "2021"
+description = "Background daemon for TLDR code analysis tool"
+repository = "https://github.com/parcadei/tldr-code"
+license = "AGPL-3.0"
+
+[lib]
+name = "tldr_daemon"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tldr-daemon"
+path = "src/main.rs"
+
+[package.metadata.dist]
+dist = false
+
+[dependencies]
+tldr-core = { path = "../tldr-core", version = "0.1.0" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+clap = { workspace = true }
+
+# HTTP server - Phase 10: Daemon
+axum = { workspace = true }
+tower = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+
+# Tracing for observability (M22)
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# MD5 for socket path hash
+md5 = { workspace = true }
+
+# Path normalization (M18)
+dunce = { workspace = true }
+
+# LRU cache for call graph/BM25 (M13)
+lru = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio-test = "0.4"
+serde_json = { workspace = true }

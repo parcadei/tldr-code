@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "unbound_local.py", line 4, in inc
+    counter += 1
+UnboundLocalError: cannot access local variable 'counter'

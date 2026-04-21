@@ -1,0 +1,1 @@
+{"code":"E0433","message":"failed to resolve: use of undeclared type `HashMap`","line":2,"col":12,"text":"    let m: HashMap<String, i32> = HashMap::new();","label":"use of undeclared type `HashMap`","children":[]}

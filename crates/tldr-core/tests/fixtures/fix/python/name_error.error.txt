@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "name_error.py", line 2, in load_config
+    data = json.loads('{"key": "value"}')
+NameError: name 'json' is not defined

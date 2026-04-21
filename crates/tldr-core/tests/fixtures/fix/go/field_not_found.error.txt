@@ -1,0 +1,1 @@
+./main.go:7:13: strings.Contians undefined (type strings has no field or method Contians)

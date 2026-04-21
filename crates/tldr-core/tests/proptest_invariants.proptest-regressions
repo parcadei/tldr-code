@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc d06d6bb0cf45e13a13b8c8db306068d89dad638f8cf6e701ef663ec262536b73 # shrinks to sources = ["=4\n\u{565c6}\"\n\n\n'\n\n\nI\u{edb29}\n\n🕴P\n\n\n\n\u{7f}\n\u{6518a}y\n&\n<\nH$\n=\n\u{d1003}\n🕴/\u{99c7d}Ѩ\"C\n/\"{*Ⱥ᰾\n\0\n🕴<\n'\n\n\n\u{107f37}{\n\n\u{5fec4}\n{\n\n\n\n\n\n\n\n�?\u{7f}\n\n\n\n\n\n\n\n\u{d73c3}\nR\u{2}\u{1b}'㈨\u{43921}\n\n\n\n🕴\n=\n\n\n\\m\0\n\u{9f7ea}\n\nÂ\n\n\0\u{acbb7}\n`\n\n\n\n\n<\n\n\n'\t\n\n\n~\n\u{3}\n\n\u{8ba98}\n \n\n\n\u{5f965}<\u{552b8}\n\n\n\u{d9d2b}\n>\n\t\u{ff446}\n𑖓/\u{feff}\nH\n\u{1b}\n\u{ba0e4}\n\n\u{1fe9d}\u{7eb38}\n'\n\n\t¥\n�\n\n(�)?\n/8\n\u{1a7c1}<\n\n\n\u{10a277}\nE^\n\n\n=\n\u{1a6c6}\n*\u{bccdb}=\\\u{7f}\u{8361d}\n\n\n%\n`#\n{\u{1}𓲻s\n\u{b}𤭦\n\n\n\0"]

@@ -1,0 +1,28 @@
+[package]
+name = "tldr-mcp"
+version = "0.1.0"
+edition = "2021"
+description = "MCP server for TLDR code analysis tool"
+repository = "https://github.com/parcadei/tldr-code"
+license = "AGPL-3.0"
+
+[lib]
+name = "tldr_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tldr-mcp"
+path = "src/main.rs"
+
+[package.metadata.dist]
+dist = false
+
+[dependencies]
+tldr-core = { path = "../tldr-core", version = "0.1.0" }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+anyhow = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -1,0 +1,97 @@
+[package]
+name = "tldr-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI binary for TLDR code analysis tool"
+repository = "https://github.com/parcadei/tldr-code"
+license = "AGPL-3.0"
+
+[lib]
+name = "tldr_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tldr"
+path = "src/main.rs"
+
+[[bin]]
+name = "tldr-daemon"
+path = "src/bin/tldr_daemon.rs"
+
+[[bin]]
+name = "tldr-mcp"
+path = "src/bin/tldr_mcp.rs"
+
+[features]
+default = []
+semantic = ["tldr-core/semantic"]
+experimental_callgraph = ["tldr-core/experimental_callgraph"]
+
+[dependencies]
+tldr-core = { path = "../tldr-core", version = "0.1.0", default-features = false }
+tldr-daemon = { path = "../tldr-daemon", version = "0.1.0" }
+tldr-mcp = { path = "../tldr-mcp", version = "0.1.0" }
+clap = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+colored = "2"
+comfy-table = "7"
+ctrlc = { workspace = true }
+chrono = { workspace = true }
+md5 = { workspace = true }
+dunce = { workspace = true }
+tokio = { version = "1", features = ["net", "io-util", "sync", "rt-multi-thread", "macros", "time", "signal"] }
+dashmap = "5"
+walkdir = "2"
+regex = "1"
+dirs = "5"
+which = "6"
+tempfile = { workspace = true }
+
+# Tree-sitter for AST parsing in contracts/patterns commands
+tree-sitter = { workspace = true }
+tree-sitter-python = { workspace = true }
+tree-sitter-typescript = { workspace = true }
+tree-sitter-go = { workspace = true }
+tree-sitter-rust = { workspace = true }
+tree-sitter-java = { workspace = true }
+tree-sitter-c = { workspace = true }
+tree-sitter-cpp = { workspace = true }
+tree-sitter-ruby = { workspace = true }
+tree-sitter-c-sharp = { workspace = true }
+tree-sitter-scala = { workspace = true }
+tree-sitter-php = { workspace = true }
+tree-sitter-lua = { workspace = true }
+tree-sitter-luau = { workspace = true }
+tree-sitter-elixir = { workspace = true }
+tree-sitter-ocaml = { workspace = true }
+tree-sitter-kotlin-ng = { workspace = true }
+tree-sitter-swift = { workspace = true }
+streaming-iterator = "0.1"
+
+# Difftastic L1/L2 graft - Phase 1
+bumpalo = { workspace = true }
+typed-arena = { workspace = true }
+strsim = { workspace = true }
+radix-heap = { workspace = true }
+hashbrown = { workspace = true }
+rustc-hash = { workspace = true }
+smallvec = { workspace = true }
+line-numbers = { workspace = true }
+wu-diff = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_Storage_FileSystem", "Win32_System_Threading", "Win32_Foundation", "Win32_System_IO"] }
+
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+proptest = "1.4"
+tokio = { version = "1", features = ["net", "io-util", "sync", "rt-multi-thread", "macros", "time", "test-util"] }

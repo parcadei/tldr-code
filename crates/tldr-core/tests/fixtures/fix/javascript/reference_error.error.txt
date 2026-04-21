@@ -1,0 +1,5 @@
+/app/app.js:1
+const data = fs.readFileSync('config.json', 'utf-8');
+             ^
+ReferenceError: fs is not defined
+    at Object.<anonymous> (/app/app.js:1:14)

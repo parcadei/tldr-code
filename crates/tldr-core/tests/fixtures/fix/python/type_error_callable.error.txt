@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "type_error_callable.py", line 7, in <module>
+    result = foo.bar()
+TypeError: 'int' object is not callable

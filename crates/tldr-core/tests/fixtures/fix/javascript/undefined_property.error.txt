@@ -1,0 +1,5 @@
+/app/app.js:2
+const host = config.server.host;
+                           ^
+TypeError: Cannot read properties of undefined (reading 'host')
+    at Object.<anonymous> (/app/app.js:2:28)

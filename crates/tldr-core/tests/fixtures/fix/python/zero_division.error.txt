@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "zero_division.py", line 2, in divide
+    return a / b
+ZeroDivisionError: division by zero

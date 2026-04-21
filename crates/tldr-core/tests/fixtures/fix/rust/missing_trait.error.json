@@ -1,0 +1,1 @@
+{"code":"E0599","message":"no method named `read_line` found for struct `Stdin` in the current scope","line":3,"col":21,"text":"    std::io::stdin().read_line(&mut buf);","label":"method not found in `Stdin`","children":[{"message":"the following trait is implemented but not in scope; perhaps add a `use` for it: `use std::io::BufRead;`"}]}

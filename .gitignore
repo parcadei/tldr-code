@@ -1,0 +1,61 @@
+target/
+target-linux/
+target-linux-compat/
+corpus/
+.claude/
+thoughts/
+tmp/
+dist/
+build/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Build/cache artifacts
+.bugbot/
+.fastembed_cache/
+.tldr/
+.tldrignore
+benchmark_results.json
+libdaemon_tests.rlib
+coverage.lcov
+${input:db_path}
+
+# Analysis session artifacts (ephemeral)
+*.yaml
+AUTOMATION_VS_UNIT_TESTS.md
+BETTER_COVERAGE_METRICS.md
+BUGS_FOUND.md
+BUG_ANALYSIS.md
+CLI_ARCHITECTURE.md
+CODEX_TASK.md
+FASTER_TEST_GENERATION.md
+FINAL_RESULTS.md
+FINAL_SUMMARY.md
+PERFORMANCE_ANALYSIS.md
+UNIT_TESTS_VS_COVERAGE.md
+UNIT_TEST_COVERAGE_REALITY.md
+WHO_FOUND_WHAT.md
+born-dead-investigation-report.md
+testing_principles.md
+why_line_coverage.md
+bugbot_out.json
+bugbot_stderr.txt
+
+# Ephemeral scripts
+auto_test_generator.py
+better_coverage_metrics.sh
+calculate_api_coverage.sh
+coverage_breakdown.sh
+generate_api_map.sh
+map_apis_to_commands.sh
+practical_api_coverage.sh
+
+# Ephemeral directories
+api_map/
+audit-results/
+tdd-p1-bugs/
+tldr-test/
+/tools/

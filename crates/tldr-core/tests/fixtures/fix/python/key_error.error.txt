@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "key_error.py", line 3, in lookup
+    return d[name]
+KeyError: 'name'

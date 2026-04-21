@@ -1,0 +1,117 @@
+[package]
+name = "tldr-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core analysis engine for TLDR code analysis tool"
+repository = "https://github.com/parcadei/tldr-code"
+license = "AGPL-3.0"
+
+[package.metadata.dist]
+dist = false
+
+[dependencies]
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Serialization - use preserve_order for M5 (JSON serialization consistency)
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["preserve_order"] }
+
+# Parsing - Phase 2: AST Layer
+tree-sitter = { workspace = true }
+tree-sitter-python = { workspace = true }
+tree-sitter-typescript = { workspace = true }
+tree-sitter-go = { workspace = true }
+tree-sitter-rust = { workspace = true }
+tree-sitter-java = { workspace = true }
+tree-sitter-c = { workspace = true }
+tree-sitter-cpp = { workspace = true }
+# Phase 3: Ruby, Kotlin, Swift grammars
+tree-sitter-ruby = { workspace = true }
+tree-sitter-kotlin-ng = { workspace = true }
+tree-sitter-swift = { workspace = true }
+# Phase 4: C#, Scala, PHP grammars
+tree-sitter-c-sharp = { workspace = true }
+tree-sitter-scala = { workspace = true }
+tree-sitter-php = { workspace = true }
+# Phase 5: Lua, Luau, Elixir, OCaml grammars
+tree-sitter-lua = { workspace = true }
+tree-sitter-luau = { workspace = true }
+tree-sitter-elixir = { workspace = true }
+tree-sitter-ocaml = { workspace = true }
+
+# File system traversal - Phase 2: tree command
+# M12: Use ignore crate for gitignore pattern handling
+# M13: walkdir for symlink cycle detection
+walkdir = "2"
+ignore = "0.4"
+
+# Path normalization - M9: Platform path handling
+dunce = "1.0"
+
+# Utilities
+lazy_static = "1.4"
+
+# Ordered map for deterministic JSON output (T24 mitigation)
+indexmap = { version = "2.0", features = ["serde"] }
+
+# Pattern matching for churn exclude patterns
+glob = "0.3"
+
+# Parallelization for O(n^2) similarity comparisons (T12 mitigation)
+rayon = "1.10"
+
+# Date arithmetic for hotspot recency weighting (Phase 3: Hotspot Upgrade)
+chrono = { workspace = true }
+
+# Bit vectors for efficient dataflow analysis (Phase 16 RD-4)
+bitvec = "1.0"
+
+# LRU cache for import resolution (Phase 5)
+lru = { workspace = true }
+
+# XML parsing for coverage reports (Session 15: Phase 4)
+# quick-xml does NOT support DTD/external entities by default (XXE safe)
+quick-xml = "0.37"
+
+# Phase 6: Search Layer
+# M8: Graceful degradation for embedding service
+# M11: BM25 tokenization parity with Python
+regex = "1.10"
+rustc-hash = { workspace = true }
+
+# Session 16: Semantic Search Layer
+# dirs: Platform-specific cache directory detection
+dirs = "5.0"
+
+# Phase 3: fastembed for embedding generation
+# PINNED per premortem P0 - do not use ^5.8 or 5
+fastembed = { workspace = true, optional = true }
+
+# Phase 4: Content hashing for cache keys
+md5 = { workspace = true }
+
+# Phase 5: File locking for embedding cache (P0 mitigation)
+fs2 = { workspace = true }
+
+[features]
+default = []
+semantic = ["dep:fastembed"]
+# Experimental V2 call graph builder with parallel processing (Phase 14)
+experimental_callgraph = []
+
+[dev-dependencies]
+tempfile = { workspace = true }
+md5 = { workspace = true }
+serde_json = { workspace = true }
+proptest = "1.4"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "core_benchmarks"
+harness = false
+
+[[bench]]
+name = "enriched_bench"
+harness = false

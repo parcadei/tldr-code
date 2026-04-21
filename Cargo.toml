@@ -1,0 +1,140 @@
+# TLDR-RS: Token-efficient code analysis tool
+# This is a virtual workspace - the actual package is in crates/tldr-core
+
+[workspace]
+members = [
+    "crates/tldr-core",
+    "crates/tldr-cli",
+    "crates/tldr-daemon",
+    "crates/tldr-mcp",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0"
+repository = "https://github.com/parcadei/tldr-code"
+
+[workspace.dependencies]
+# Core dependencies
+thiserror = "1.0"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+# M5: Use preserve_order for consistent JSON serialization
+serde_json = { version = "1.0", features = ["preserve_order"] }
+
+# Parsing - PINNED versions for PM-1.1 (Tree-sitter Version Mismatch)
+# See: docs/GRAMMAR_COMPATIBILITY.md for version rationale
+# See: crates/tldr-core/tests/grammar_stability_test.rs for node type verification
+#
+# IMPORTANT: Do not use ^ or ~ - use exact versions (=X.Y.Z) to prevent:
+#   1. Silent grammar version drift during cargo update
+#   2. AST node type renames breaking extraction logic
+#   3. ABI incompatibility between tree-sitter core and grammars
+#
+# To upgrade: Run grammar_stability_test first, then update both Cargo.toml and Cargo.lock
+tree-sitter = "=0.25.0"
+tree-sitter-python = "=0.23.6"
+tree-sitter-typescript = "=0.23.2"
+tree-sitter-go = "=0.23.4"
+tree-sitter-rust = "=0.23.3"
+tree-sitter-java = "=0.23.5"
+tree-sitter-c = "=0.23.4"
+tree-sitter-cpp = "=0.23.4"
+# Phase 3: Ruby grammar
+# Note: tree-sitter-ruby 0.23.1 uses tree-sitter-language crate for ABI compatibility
+tree-sitter-ruby = "=0.23.1"
+# Phase 3: Kotlin and Swift
+# - tree-sitter-kotlin-ng 1.1.0 requires tree-sitter ^0.24 (compatible!)
+#   See: https://github.com/tree-sitter-grammars/tree-sitter-kotlin
+# - tree-sitter-swift 0.7.1 grammar (ABI v15) - works with tree-sitter >=0.25.0
+#   See: https://github.com/alex-pinkus/tree-sitter-swift
+tree-sitter-swift = "=0.7.1"
+tree-sitter-kotlin-ng = "=1.1.0"
+# Phase 4: C#, Scala, PHP grammars
+tree-sitter-c-sharp = "=0.23.1"
+tree-sitter-scala = "=0.24.0"
+# Note: PHP 0.24.2 has ABI version 15, incompatible with tree-sitter 0.24.7 (expects v14)
+# Using 0.23.11 which should have ABI v14
+tree-sitter-php = "=0.23.11"
+# Phase 5: Lua, Luau, Elixir grammars
+# Note: tree-sitter-lua 0.4.1 requires tree-sitter ^0.26.3 (incompatible), using 0.2.0 (^0.23)
+tree-sitter-lua = "=0.2.0"
+# Note: tree-sitter-luau 1.2.0 requires tree-sitter ^0.24 (compatible)
+tree-sitter-luau = "=1.2.0"
+# Note: tree-sitter-elixir 0.3.4 requires tree-sitter ^0.23.0 (compatible)
+tree-sitter-elixir = "=0.3.4"
+# Note: tree-sitter-ocaml 0.24.2 - OCaml grammar
+tree-sitter-ocaml = "=0.24.2"
+
+# Async
+tokio = { version = "1.0", features = ["full", "sync"] }
+
+# CLI
+clap = { version = "4.0", features = ["derive"] }
+
+# HTTP server - Phase 10: Daemon
+axum = "0.7"
+tower = { version = "0.5", features = ["util"] }
+hyper = { version = "1.0", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio", "server"] }
+
+# Tracing for observability (M22)
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Hashing
+md5 = "0.7"
+
+# Session 16: Semantic Search - fastembed embeddings
+# PINNED per premortem P0 - do not use ^5.8 or 5
+fastembed = "=5.8.1"
+
+# Session 16 Phase 5: File locking for cache (P0 mitigation)
+fs2 = "0.4"
+
+# LRU cache
+lru = "0.12"
+
+# Testing
+tempfile = "3.0"
+assert_cmd = "2.0"
+predicates = "3.0"
+
+# Signal handling
+ctrlc = { version = "3.4", features = ["termination"] }
+
+# YAML parsing
+serde_yaml = "0.9"
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# File system - Phase 2
+walkdir = "2"
+ignore = "0.4"
+dunce = "1.0"
+
+# Difftastic L1/L2 graft - Phase 1
+bumpalo = "3.16.0"
+typed-arena = "2.0.2"
+strsim = "0.11.0"
+radix-heap = "0.4.2"
+hashbrown = "0.14.0"
+rustc-hash = "2.0.0"
+smallvec = "1.13.2"
+line-numbers = "0.3.0"
+wu-diff = "0.1.2"
+
+[profile.release]
+# Optimize for size and speed
+lto = true
+codegen-units = 1
+opt-level = 3
+strip = true
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

@@ -1,0 +1,1 @@
+app.ts(1,18): error TS7006: Parameter 'data' implicitly has an 'any' type.

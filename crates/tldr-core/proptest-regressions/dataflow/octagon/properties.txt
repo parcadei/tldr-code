@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc b25b7501628210f5a86c382f4edf58308dba37aaf8ff2d93b80069f4f9d1bd6b # shrinks to dbm = Dbm { n_vars: 3, data: [0.0, inf, 0.0, inf, inf, 0.0, inf, inf, inf, 0.0, inf, inf, inf, inf, 0.0, inf, inf, inf, inf, inf, 0.0] }, i = 1, j = 0, value = 0.0
+cc 899d8aa05db32f7ce8b4e7abe2f63ace22d259cefac0bb6d1dc043fe33104abd # shrinks to dbm = Dbm { n_vars: 3, data: [0.0, inf, 0.0, inf, inf, 0.0, inf, inf, inf, 0.0, inf, inf, inf, inf, 0.0, inf, inf, inf, inf, inf, 0.0], upper_diag: [inf, inf, inf] }, i = 0, j = 1, value = 0.0
+cc 98be39b23118b76dcb32152027a584952a77febf89e322245ade1925355e415b # shrinks to dbm = Dbm { n_vars: 3, data: [0.0, inf, 0.0, inf, inf, 0.0, inf, inf, 0.0, 0.0, inf, inf, inf, inf, 0.0, inf, inf, inf, inf, inf, 0.0], upper_diag: [inf, inf, inf] }, i = 2, j = 0, value = 0.0

@@ -1,0 +1,1 @@
+{"code":"E0425","message":"cannot find type `HashMap` in this scope: `HashMap` not found","line":2,"col":12,"text":"    let m: HashMap<String, i32> = HashMap::new();","label":"`HashMap` not found in this scope","children":[]}

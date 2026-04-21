@@ -1,0 +1,5 @@
+/app/app.js:2
+  const result = compute();
+
+SyntaxError: Unexpected end of input
+    at Object.<anonymous> (/app/app.js:2:28)
