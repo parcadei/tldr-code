@@ -778,9 +778,13 @@ mod structure_tests {
 
     #[test]
     fn test_structure_all_definitions_have_valid_kinds() {
+        // VAL-004: `field` is emitted for class-scope field/property
+        // declarations (Java field_declaration, Kotlin/Swift
+        // property_declaration inside class body, TS public_field_definition /
+        // field_definition).
         let valid_kinds = [
             "function", "method", "class", "struct", "module", "constant",
-            "interface", "trait", "enum", "type_alias", "object",
+            "interface", "trait", "enum", "type_alias", "object", "field",
         ];
         let cases: Vec<(&str, Language)> = vec![
             ("test_python.py", Language::Python),

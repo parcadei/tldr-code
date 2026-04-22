@@ -1,0 +1,50 @@
+{
+  "task": "4 definitions[] extraction bugs",
+  "assertion": "VAL-001,VAL-002,VAL-003,VAL-004",
+  "result": "success",
+  "implemented": "Four tightly-related fixes to collect_definitions / classify_definition_node / get_definition_node_name in crates/tldr-core/src/ast/extractor.rs. (1) C struct_specifier/enum_specifier without a `body` field is now skipped (still recurses into children) — fixes leakage of parameter type refs like `struct sockaddr *addr` into definitions[]. (2) Swift `init_declaration` added to is_func matches; new special case in get_definition_node_name returns \"init\" (mirroring extract_swift_methods). (3) Java/C# `constructor_declaration` added to is_func matches; get_definition_node_name now has a fallback for Java constructor_declaration (first identifier child) since the grammar may not expose a name field. (4) New helper try_field_definition, called from collect_definitions, emits kind=\"field\" for class-scope field/property declarations in Java (field_declaration, multi-declarator supported), Kotlin (property_declaration inside class_body only — top-level property_declaration NOT emitted as field), Swift (property_declaration inside class_body/enum_body/protocol_body/struct_body), and TypeScript/JavaScript (public_field_definition and field_definition inside class_body). Secondary fix: Swift try_constant_definition now skips class-scope `let` to avoid emitting duplicate constant+field entries for the same property.",
+  "remaining": "",
+  "tests": {
+    "added": [
+      {"file": "crates/tldr-core/src/ast/extractor.rs", "name": "test_c_struct_ref_not_emitted_as_definition_val_001", "verifies": "VAL-001"},
+      {"file": "crates/tldr-core/src/ast/extractor.rs", "name": "test_swift_init_emitted_as_method_definition_val_002", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/ast/extractor.rs", "name": "test_java_constructor_emitted_as_method_definition_val_003", "verifies": "VAL-003"},
+      {"file": "crates/tldr-core/src/ast/extractor.rs", "name": "test_class_fields_emitted_as_definitions_val_004", "verifies": "VAL-004"}
+    ],
+    "command": "cargo test -p tldr-core --lib -- _val_001 _val_002 _val_003 _val_004",
+    "exit_code": 0,
+    "tdd_evidence": "Before fix, all 4 tests ran and FAILED with the following outputs: VAL-001 panicked: `bare struct_specifier `struct sockaddr` (no body) must NOT appear in definitions; got [\"open_connection\", \"sockaddr\", \"sockaddr_in\"]`. VAL-002 panicked: `Swift init must be in definitions; got [(\"Foo\", \"class\"), (\"bar\", \"method\")]`. VAL-003 panicked: `Java constructor `Store` must be in definitions with kind='method'; got [(\"Store\", \"class\"), (\"get\", \"method\")]`. VAL-004 panicked: `Java: field `count` must appear in definitions; got fields=[], all defs=[(\"Store\", \"class\"), (\"get\", \"method\")]`. After fix all 4 pass."
+  },
+  "checks": [
+    {"command": "cargo test -p tldr-core --lib", "exit_code": 0, "observed": "4574 passed; 0 failed; 340 ignored"},
+    {"command": "cargo test -p tldr-core --test language_parity_test", "exit_code": 1, "observed": "52 passed; 2 failed — PRE-EXISTING failures in test_kotlin_returns_unsupported and test_swift_returns_unsupported that assert these grammars should error out. These grammars work fine in the lib (Swift/Kotlin AST probes succeeded); these tests encode outdated assumptions from before the Kotlin/Swift grammars were upgraded. NOT a regression from this change (only extractor.rs and bench_l1_multilang.rs were modified). Verified against HEAD: these tests existed pre-change."},
+    {"command": "cargo test -p tldr-core --test grammar_stability_test", "exit_code": 0, "observed": "7 passed"},
+    {"command": "cargo test -p tldr-core --test language_profile_tests", "exit_code": 0, "observed": "68 passed"},
+    {"command": "cargo test -p tldr-core --test bench_l1_multilang", "exit_code": 0, "observed": "62 passed — required updating the valid_kinds whitelist in test_structure_all_definitions_have_valid_kinds to include 'field' since this change legitimately introduces a new definition kind per VAL-004."},
+    {"command": "cargo test -p tldr-core --test definition_info_test", "exit_code": 0, "observed": "7 passed"},
+    {"command": "cargo test -p tldr-core --test field_extraction_test", "exit_code": 0, "observed": "30 passed"},
+    {"command": "cargo check -p tldr-core", "exit_code": 0},
+    {"command": "cargo clippy -p tldr-core --lib -- -D warnings", "exit_code": 0},
+    {"action": "CLI repro for Bug 1", "command": "./target/release/tldr structure /tmp/repro_bug1.c | jq '.files[0].definitions | map(.name)'", "observed": "[\"open_connection\"]"},
+    {"action": "CLI spot-check Swift", "command": "./target/release/tldr structure /tmp/repro_swift.swift", "observed": "definitions: Foo(class), x(field), y(field), init(method), bar(method)"},
+    {"action": "CLI spot-check Java", "command": "./target/release/tldr structure /tmp/repro_java.java", "observed": "definitions: Store(class), count(field), name(field), Store(method), get(method)"},
+    {"action": "CLI spot-check Kotlin", "command": "./target/release/tldr structure /tmp/repro_kotlin.kt", "observed": "definitions: Foo(class), x(field), y(field), bar(method) — top-level `val topLevelX` correctly NOT emitted as field"},
+    {"action": "CLI spot-check TypeScript", "command": "./target/release/tldr structure /tmp/repro_ts.ts", "observed": "definitions: Foo(class), count(field), name(field), bar(method)"}
+  ],
+  "bloks_used": [],
+  "corrections": [
+    "Pre-existing test language_parity_test::p2_language_status_tests::test_kotlin_returns_unsupported and test_swift_returns_unsupported fail because they assert these parsers should error, but the parsers actually work. Not updated since they are unrelated to this change and cite grammar-version assumptions that may be deliberate.",
+    "Updated bench_l1_multilang.rs::test_structure_all_definitions_have_valid_kinds whitelist to include 'field' — this is a legitimate update because VAL-004 adds a new valid kind. Comment added citing VAL-004."
+  ],
+  "discoveries": [
+    "tree-sitter-c: struct_specifier in parameter_declaration has a `name` field pointing to type_identifier but NO `body` field. get_definition_node_name successfully returns the type name — hence the Bug 1 guard must gate on body presence, not name presence.",
+    "tree-sitter-swift: init_declaration has no `name` field — children are literal `init`, `(`, `parameter`, `)`, `function_body`. get_definition_node_name needs a special case returning the literal string \"init\".",
+    "tree-sitter-swift: property_declaration structure is value_binding_pattern (var/let) → pattern → simple_identifier. Name extraction walks pattern → simple_identifier.",
+    "tree-sitter-java: field_declaration contains zero or more variable_declarator children. Multi-field statements like `int x, y;` produce multiple variable_declarator children — my implementation emits one DefinitionInfo per declarator.",
+    "tree-sitter-kotlin: property_declaration is the SAME kind at top level and inside class_body. Correct gating REQUIRES checking the direct parent kind; otherwise top-level `val topLevelX` incorrectly becomes a field.",
+    "tree-sitter-typescript: class fields parse as public_field_definition (with accessibility_modifier) or field_definition (no modifier). Both have a property_identifier child or accessible via child_by_field_name(\"name\").",
+    "Secondary bug discovered: Swift try_constant_definition fired on ANY `let x = ...` property_declaration, including class-scope ones. After adding field detection this produced a duplicate constant+field entry for the same property. Fixed by adding a parent-kind check to Swift constant detection: class/enum/protocol/struct body parent → skip (it's a field, not a module constant)."
+  ],
+  "issues": [],
+  "conventions": []
+}

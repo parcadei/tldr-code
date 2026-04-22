@@ -1632,7 +1632,16 @@ fn collect_definitions(
 
     let (is_func, is_class) = classify_definition_node(kind, language);
 
-    if is_func || is_class {
+    // VAL-001: In C, `struct_specifier` / `enum_specifier` without a `body`
+    // field is a bare type reference (parameter type like `struct sockaddr *a`,
+    // forward declaration, or sizeof expression) — NOT a definition. Guard
+    // here rather than in classify_definition_node because classify takes a
+    // `&str` kind without access to node fields.
+    let is_bodyless_c_specifier = is_class
+        && matches!(kind, "struct_specifier" | "enum_specifier")
+        && node.child_by_field_name("body").is_none();
+
+    if (is_func || is_class) && !is_bodyless_c_specifier {
         if let Some(name) = get_definition_node_name(node, source) {
             let line_start = node.start_position().row as u32 + 1; // 1-indexed
             let line_end = node.end_position().row as u32 + 1;
@@ -1666,6 +1675,11 @@ fn collect_definitions(
                 signature,
             });
         }
+    }
+
+    // VAL-004: Class-scope field/property declarations emit with kind="field".
+    if let Some(field_defs) = try_field_definition(node, source, language) {
+        definitions.extend(field_defs);
     }
 
     // Recurse into children
@@ -1868,6 +1882,16 @@ fn try_constant_definition(
             if kind != "property_declaration" {
                 return None;
             }
+            // VAL-004: class-scope `let`/`var` are fields, not module
+            // constants — skip to avoid emitting duplicate definitions.
+            if let Some(parent) = node.parent() {
+                if matches!(
+                    parent.kind(),
+                    "class_body" | "enum_body" | "protocol_body" | "struct_body"
+                ) {
+                    return None;
+                }
+            }
             let text = get_node_text(&node, source);
             if !text.starts_with("let ") {
                 return None;
@@ -2003,6 +2027,177 @@ fn make_constant_def(node: Node, name: String, source: &str) -> DefinitionInfo {
     }
 }
 
+/// VAL-004: Try to classify a tree-sitter node as a class-scope field /
+/// property declaration. Returns one `DefinitionInfo` per declared name so
+/// that a single Java statement like `int x, y;` emits two field entries.
+///
+/// Only emits when the node is a direct child of a class-like body (class,
+/// interface, enum, struct, protocol, actor body depending on language).
+/// Top-level Kotlin `val/var` parses as `property_declaration` too but must
+/// NOT be emitted — the parent check prevents that.
+fn try_field_definition(
+    node: Node,
+    source: &str,
+    language: Language,
+) -> Option<Vec<DefinitionInfo>> {
+    let kind = node.kind();
+
+    // Per-language kind gating.
+    let kind_matches = match language {
+        Language::Java => matches!(kind, "field_declaration"),
+        Language::Kotlin => matches!(kind, "property_declaration"),
+        Language::Swift => matches!(kind, "property_declaration"),
+        Language::TypeScript | Language::JavaScript => {
+            matches!(kind, "public_field_definition" | "field_definition")
+        }
+        _ => false,
+    };
+    if !kind_matches {
+        return None;
+    }
+
+    // Must sit directly inside a class-like body. This excludes top-level
+    // declarations (e.g. Kotlin `val topLevelX = 1` under `source_file`).
+    let parent = node.parent()?;
+    let parent_kind = parent.kind();
+    let parent_is_class_body = matches!(
+        parent_kind,
+        "class_body"           // Java, Kotlin, TS, Swift
+            | "interface_body" // Java
+            | "enum_body"      // Java / Swift
+            | "annotation_type_body" // Java
+            | "protocol_body"  // Swift
+            | "struct_body"    // (reserved)
+    );
+    if !parent_is_class_body {
+        return None;
+    }
+
+    // Extract names.
+    let mut defs: Vec<DefinitionInfo> = Vec::new();
+    let line_start = node.start_position().row as u32 + 1;
+    let line_end = node.end_position().row as u32 + 1;
+    let signature = extract_def_signature(node, source);
+
+    match language {
+        Language::Java => {
+            // field_declaration → variable_declarator+ → identifier ("name" field)
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "variable_declarator" {
+                    let name_opt = child
+                        .child_by_field_name("name")
+                        .and_then(|n| n.utf8_text(source.as_bytes()).ok().map(|s| s.to_string()))
+                        .or_else(|| {
+                            let mut c2 = child.walk();
+                            for inner in child.children(&mut c2) {
+                                if inner.kind() == "identifier" {
+                                    return inner
+                                        .utf8_text(source.as_bytes())
+                                        .ok()
+                                        .map(|s| s.to_string());
+                                }
+                            }
+                            None
+                        });
+                    if let Some(name) = name_opt {
+                        defs.push(DefinitionInfo {
+                            name,
+                            kind: "field".to_string(),
+                            line_start,
+                            line_end,
+                            signature: signature.clone(),
+                        });
+                    }
+                }
+            }
+        }
+        Language::Kotlin => {
+            // property_declaration → variable_declaration → identifier
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "variable_declaration" {
+                    let mut c2 = child.walk();
+                    for inner in child.children(&mut c2) {
+                        if inner.kind() == "identifier" {
+                            if let Ok(name) = inner.utf8_text(source.as_bytes()) {
+                                defs.push(DefinitionInfo {
+                                    name: name.to_string(),
+                                    kind: "field".to_string(),
+                                    line_start,
+                                    line_end,
+                                    signature: signature.clone(),
+                                });
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        Language::Swift => {
+            // property_declaration → pattern → simple_identifier
+            let mut cursor = node.walk();
+            for child in node.children(&mut cursor) {
+                if child.kind() == "pattern" {
+                    let mut c2 = child.walk();
+                    for inner in child.children(&mut c2) {
+                        if inner.kind() == "simple_identifier" {
+                            if let Ok(name) = inner.utf8_text(source.as_bytes()) {
+                                defs.push(DefinitionInfo {
+                                    name: name.to_string(),
+                                    kind: "field".to_string(),
+                                    line_start,
+                                    line_end,
+                                    signature: signature.clone(),
+                                });
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        Language::TypeScript | Language::JavaScript => {
+            // public_field_definition / field_definition: property_identifier
+            // is either the "name" field or an inline child.
+            let name_opt = node
+                .child_by_field_name("name")
+                .and_then(|n| n.utf8_text(source.as_bytes()).ok().map(|s| s.to_string()))
+                .or_else(|| {
+                    let mut cursor = node.walk();
+                    for child in node.children(&mut cursor) {
+                        if child.kind() == "property_identifier"
+                            || child.kind() == "private_property_identifier"
+                        {
+                            return child
+                                .utf8_text(source.as_bytes())
+                                .ok()
+                                .map(|s| s.to_string());
+                        }
+                    }
+                    None
+                });
+            if let Some(name) = name_opt {
+                defs.push(DefinitionInfo {
+                    name,
+                    kind: "field".to_string(),
+                    line_start,
+                    line_end,
+                    signature,
+                });
+            }
+        }
+        _ => {}
+    }
+
+    if defs.is_empty() {
+        None
+    } else {
+        Some(defs)
+    }
+}
+
 /// Try to extract a definition from an Elixir `call` node.
 /// In Elixir, `def`/`defp`/`defmodule` are macro calls that tree-sitter parses as `call` nodes.
 fn try_elixir_call_definition(node: Node, source: &str) -> Option<DefinitionInfo> {
@@ -2072,6 +2267,8 @@ fn classify_definition_node(kind: &str, _language: Language) -> (bool, bool) {
             | "func_literal"       // Go
             | "function_type"
             | "value_definition"   // OCaml top-level let binding (functions and values)
+            | "init_declaration"   // Swift init constructor (VAL-002)
+            | "constructor_declaration" // Java / C# constructor (VAL-003)
     );
 
     let is_class = matches!(
@@ -2099,10 +2296,30 @@ fn classify_definition_node(kind: &str, _language: Language) -> (bool, bool) {
 /// Extract the name from a function/class definition node.
 /// Mirrors `search/enriched.rs::get_definition_name`.
 fn get_definition_node_name(node: Node, source: &str) -> Option<String> {
+    // Swift `init_declaration` has no `name` field — the node starts with the
+    // literal token `init`. Mirror `extract_swift_methods` which also emits
+    // the literal string "init".
+    if node.kind() == "init_declaration" {
+        return Some("init".to_string());
+    }
+
     // Most languages use a "name" field
     if let Some(name_node) = node.child_by_field_name("name") {
         let text = name_node.utf8_text(source.as_bytes()).ok()?;
         return Some(text.to_string());
+    }
+
+    // Java `constructor_declaration` may not expose a `name` field in all
+    // grammar versions — fall back to the first identifier child (same
+    // fallback as `extract_csharp_methods`).
+    if node.kind() == "constructor_declaration" {
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if child.kind() == "identifier" {
+                let text = child.utf8_text(source.as_bytes()).ok()?;
+                return Some(text.to_string());
+            }
+        }
     }
 
     // C/C++ function_definition uses "declarator" instead of "name"
@@ -3333,5 +3550,245 @@ class Animal(val name: String) {
             "class",
             "Kotlin companion object kind must be 'class'"
         );
+    }
+
+    // ── Bug fix: C struct_specifier without body must not enter definitions ──
+
+    #[test]
+    fn test_c_struct_ref_not_emitted_as_definition_val_001() {
+        // VAL-001: In C, `struct sockaddr *addr` in a parameter list parses as a
+        // `struct_specifier` with a `name` field but NO `body`. It is a type
+        // reference, not a definition, and must not appear in definitions[].
+        let source = r#"
+int open_connection(struct sockaddr *addr, struct sockaddr_in *sin) {
+    return 0;
+}
+"#;
+        let tree = parse(source, Language::C).unwrap();
+        let defs = extract_definitions(&tree, source, Language::C);
+        let names: Vec<String> = defs.iter().map(|d| d.name.clone()).collect();
+
+        assert!(
+            names.contains(&"open_connection".to_string()),
+            "VAL-001: open_connection must be in definitions; got {:?}",
+            names
+        );
+        assert!(
+            !names.contains(&"sockaddr".to_string()),
+            "VAL-001: bare struct_specifier `struct sockaddr` (no body) \
+             must NOT appear in definitions; got {:?}",
+            names
+        );
+        assert!(
+            !names.contains(&"sockaddr_in".to_string()),
+            "VAL-001: bare struct_specifier `struct sockaddr_in` (no body) \
+             must NOT appear in definitions; got {:?}",
+            names
+        );
+    }
+
+    // ── Bug fix: Swift init_declaration must appear in definitions as method ──
+
+    #[test]
+    fn test_swift_init_emitted_as_method_definition_val_002() {
+        // VAL-002: Swift `init` inside a class must appear in definitions[]
+        // with kind="method". `extract_swift_methods` already handles this for
+        // the methods[] array; definitions[] must be consistent.
+        let source = r#"
+class Foo {
+    var x: Int = 0
+    init(x: Int) { self.x = x }
+    func bar() {}
+}
+"#;
+        let tree = parse(source, Language::Swift).unwrap();
+        let defs = extract_definitions(&tree, source, Language::Swift);
+        let named: Vec<(String, String)> = defs
+            .iter()
+            .map(|d| (d.name.clone(), d.kind.clone()))
+            .collect();
+
+        let init = defs.iter().find(|d| d.name == "init");
+        assert!(
+            init.is_some(),
+            "VAL-002: Swift init must be in definitions; got {:?}",
+            named
+        );
+        assert_eq!(
+            init.unwrap().kind,
+            "method",
+            "VAL-002: Swift init inside class must have kind='method'; got {:?}",
+            named
+        );
+    }
+
+    // ── Bug fix: Java constructor_declaration must appear as method ─────
+
+    #[test]
+    fn test_java_constructor_emitted_as_method_definition_val_003() {
+        // VAL-003: Java `public Store()` constructor must appear in
+        // definitions[] with kind="method" (mirroring C# / existing methods).
+        let source = r#"
+public class Store {
+    public Store() {}
+    public void get() {}
+}
+"#;
+        let tree = parse(source, Language::Java).unwrap();
+        let defs = extract_definitions(&tree, source, Language::Java);
+        let named: Vec<(String, String)> = defs
+            .iter()
+            .map(|d| (d.name.clone(), d.kind.clone()))
+            .collect();
+
+        let ctor = defs.iter().find(|d| d.name == "Store" && d.kind == "method");
+        assert!(
+            ctor.is_some(),
+            "VAL-003: Java constructor `Store` must be in definitions with \
+             kind='method'; got {:?}",
+            named
+        );
+        // Regular method still present
+        assert!(
+            defs.iter().any(|d| d.name == "get" && d.kind == "method"),
+            "VAL-003: Java method `get` must remain in definitions; got {:?}",
+            named
+        );
+    }
+
+    // ── Bug fix: Class-scope fields must appear in definitions as kind=field ──
+
+    #[test]
+    fn test_class_fields_emitted_as_definitions_val_004() {
+        // VAL-004: Class-scope field/property declarations must appear in
+        // definitions[] with kind="field". Covers Java, Kotlin, Swift, TS.
+        //
+        // Guard: Kotlin top-level `val/var` parses as property_declaration
+        // too, but must NOT be emitted as a field because it is not inside a
+        // class_body.
+
+        // Java
+        {
+            let source = r#"
+public class Store {
+    private int count = 0;
+    public String name;
+    int x, y;
+    public void get() {}
+}
+"#;
+            let tree = parse(source, Language::Java).unwrap();
+            let defs = extract_definitions(&tree, source, Language::Java);
+            let fields: Vec<String> = defs
+                .iter()
+                .filter(|d| d.kind == "field")
+                .map(|d| d.name.clone())
+                .collect();
+            for expected in ["count", "name", "x", "y"] {
+                assert!(
+                    fields.contains(&expected.to_string()),
+                    "VAL-004 (Java): field `{}` must appear in definitions; \
+                     got fields={:?}, all defs={:?}",
+                    expected,
+                    fields,
+                    defs.iter()
+                        .map(|d| (&d.name, &d.kind))
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
+
+        // Kotlin: class-scope val/var must be fields; top-level must NOT.
+        {
+            let source = r#"
+class Foo {
+    val x: Int = 0
+    var y: String = "hi"
+    fun bar() {}
+}
+
+val topLevelX = 1
+"#;
+            let tree = parse(source, Language::Kotlin).unwrap();
+            let defs = extract_definitions(&tree, source, Language::Kotlin);
+            let fields: Vec<String> = defs
+                .iter()
+                .filter(|d| d.kind == "field")
+                .map(|d| d.name.clone())
+                .collect();
+            assert!(
+                fields.contains(&"x".to_string()),
+                "VAL-004 (Kotlin): class-scope `val x` must be a field; \
+                 got fields={:?}",
+                fields
+            );
+            assert!(
+                fields.contains(&"y".to_string()),
+                "VAL-004 (Kotlin): class-scope `var y` must be a field; \
+                 got fields={:?}",
+                fields
+            );
+            assert!(
+                !fields.contains(&"topLevelX".to_string()),
+                "VAL-004 (Kotlin): top-level `val topLevelX` must NOT be a \
+                 field (only class-scope properties are fields); got \
+                 fields={:?}",
+                fields
+            );
+        }
+
+        // Swift
+        {
+            let source = r#"
+class Foo {
+    var x: Int = 0
+    let y: String = "hi"
+    func bar() {}
+}
+"#;
+            let tree = parse(source, Language::Swift).unwrap();
+            let defs = extract_definitions(&tree, source, Language::Swift);
+            let fields: Vec<String> = defs
+                .iter()
+                .filter(|d| d.kind == "field")
+                .map(|d| d.name.clone())
+                .collect();
+            for expected in ["x", "y"] {
+                assert!(
+                    fields.contains(&expected.to_string()),
+                    "VAL-004 (Swift): class-scope property `{}` must be a \
+                     field; got fields={:?}",
+                    expected,
+                    fields
+                );
+            }
+        }
+
+        // TypeScript
+        {
+            let source = r#"
+class Foo {
+    public count: number = 0;
+    name: string = "hi";
+    bar() {}
+}
+"#;
+            let tree = parse(source, Language::TypeScript).unwrap();
+            let defs = extract_definitions(&tree, source, Language::TypeScript);
+            let fields: Vec<String> = defs
+                .iter()
+                .filter(|d| d.kind == "field")
+                .map(|d| d.name.clone())
+                .collect();
+            for expected in ["count", "name"] {
+                assert!(
+                    fields.contains(&expected.to_string()),
+                    "VAL-004 (TypeScript): class field `{}` must be in \
+                     definitions; got fields={:?}",
+                    expected,
+                    fields
+                );
+            }
+        }
     }
 }
