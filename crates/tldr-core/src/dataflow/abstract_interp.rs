@@ -3427,7 +3427,7 @@ mod tests {
 
         assert_eq!(val.type_, Some("float".to_string()));
         if let Some(ConstantValue::Float(f)) = val.constant {
-            assert!((f - PI).abs() < f64::EPSILON);
+            assert_eq!(f, 3.14);
         } else {
             panic!("Expected float constant");
         }
