@@ -603,9 +603,14 @@ fn extract_c_structs(node: &Node, source: &str, structs: &mut Vec<String>) {
         match child.kind() {
             "struct_specifier" | "enum_specifier" => {
                 // Named struct/enum: struct Foo { ... }
-                if let Some(name_node) = child.child_by_field_name("name") {
-                    let name = get_node_text(&name_node, source);
-                    structs.push(name);
+                // Require a body field so we don't emit bare parameter type
+                // references (`void foo(struct Bar *b)`) or forward
+                // declarations (`struct Bar;`) as struct definitions.
+                if child.child_by_field_name("body").is_some() {
+                    if let Some(name_node) = child.child_by_field_name("name") {
+                        let name = get_node_text(&name_node, source);
+                        structs.push(name);
+                    }
                 }
             }
             "type_definition" => {
@@ -615,7 +620,13 @@ fn extract_c_structs(node: &Node, source: &str, structs: &mut Vec<String>) {
                 let mut typedef_name = None;
                 let mut inner_cursor = child.walk();
                 for inner in child.children(&mut inner_cursor) {
-                    if inner.kind() == "struct_specifier" || inner.kind() == "enum_specifier" {
+                    // Only count as a new struct/enum definition when the
+                    // inner specifier actually has a body. `typedef struct
+                    // Existing OtherName;` references an existing type and
+                    // must not register `OtherName` as a new struct.
+                    if (inner.kind() == "struct_specifier" || inner.kind() == "enum_specifier")
+                        && inner.child_by_field_name("body").is_some()
+                    {
                         has_struct_or_enum = true;
                     }
                     if inner.kind() == "type_identifier" {
@@ -2448,6 +2459,48 @@ enum Color {
             classes.contains(&"Color".to_string()),
             "Should find Color enum"
         );
+    }
+
+    #[test]
+    fn test_extract_c_structs_requires_body_val_001() {
+        // VAL-001: extract_c_structs must only emit struct/enum specifiers
+        // that have a `body` field. Bare parameter type references
+        // (`struct Bar *b`), forward declarations (`struct Bar;`), and
+        // typedef aliases of existing structs must NOT be emitted.
+        let source = r#"
+struct Foo { int x; };
+void use_bar(struct Bar *b);
+struct Forward;
+typedef struct { int y; } Anon;
+typedef struct Existing OtherName;
+enum E { A };
+enum F;
+void use_enum(enum G *e);
+"#;
+        let tree = parse(source, Language::C).unwrap();
+        let classes = extract_classes(&tree, source, Language::C);
+
+        let expected: std::collections::HashSet<String> =
+            ["Foo", "Anon", "E"].iter().map(|s| s.to_string()).collect();
+        let got: std::collections::HashSet<String> = classes.iter().cloned().collect();
+
+        assert_eq!(
+            got, expected,
+            "VAL-001: extract_c_structs must only emit bodied struct/enum \
+             definitions. Expected {:?}, got {:?}",
+            expected, got
+        );
+
+        // Explicit negative assertions for clarity.
+        for forbidden in ["Bar", "Forward", "Existing", "OtherName", "F", "G"] {
+            assert!(
+                !classes.contains(&forbidden.to_string()),
+                "VAL-001: must NOT emit `{}` (no body / alias / param type), \
+                 got classes = {:?}",
+                forbidden,
+                classes
+            );
+        }
     }
 
     #[test]
