@@ -1,6 +1,6 @@
 [package]
 name = "tldr-cli"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 description = "CLI binary for TLDR code analysis tool"
 repository = "https://github.com/parcadei/tldr-code"
@@ -28,9 +28,9 @@ semantic = ["tldr-core/semantic"]
 experimental_callgraph = ["tldr-core/experimental_callgraph"]
 
 [dependencies]
-tldr-core = { path = "../tldr-core", version = "0.1.2", default-features = false }
-tldr-daemon = { path = "../tldr-daemon", version = "0.1.2" }
-tldr-mcp = { path = "../tldr-mcp", version = "0.1.2" }
+tldr-core = { path = "../tldr-core", version = "0.1.3", default-features = false }
+tldr-daemon = { path = "../tldr-daemon", version = "0.1.3" }
+tldr-mcp = { path = "../tldr-mcp", version = "0.1.3" }
 clap = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
