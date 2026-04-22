@@ -1,6 +1,6 @@
 [package]
 name = "tldr-core"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 description = "Core analysis engine for TLDR code analysis tool"
 repository = "https://github.com/parcadei/tldr-code"
