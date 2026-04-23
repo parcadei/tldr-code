@@ -306,7 +306,12 @@ fn extract_ts_functions(
                     }
                 }
             }
-            "method_definition" => {
+            "method_definition" | "method_signature" | "abstract_method_signature" => {
+                // VAL-001: `method_signature` covers interface methods and
+                // abstract class signatures in some grammar versions;
+                // `abstract_method_signature` covers `abstract foo(): void;`
+                // inside `abstract class` bodies in tree-sitter-typescript.
+                // Both expose the name via the "name" field (property_identifier).
                 if methods_only {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = get_node_text(&name_node, source);
@@ -2258,6 +2263,8 @@ fn classify_definition_node(kind: &str, _language: Language) -> (bool, bool) {
             | "function_declaration"
             | "function_item"     // Rust
             | "method_definition"
+            | "method_signature"           // TS: interface methods & abstract class signature (VAL-001)
+            | "abstract_method_signature"  // TS: `abstract foo(): void;` inside abstract class (VAL-001)
             | "method_declaration"
             | "method"            // Ruby
             | "singleton_method"  // Ruby class methods
@@ -2275,6 +2282,7 @@ fn classify_definition_node(kind: &str, _language: Language) -> (bool, bool) {
         kind,
         "class_definition"
             | "class_declaration"
+            | "abstract_class_declaration"  // TS: `abstract class Foo {}` (VAL-001)
             | "class_specifier"   // C++
             | "class"             // Ruby
             | "module"            // Ruby
@@ -2414,12 +2422,15 @@ fn is_inside_class_or_impl(node: &Node, language: Language) -> bool {
             kind,
             "class_definition"
                 | "class_declaration"
+                | "abstract_class_declaration"  // TS (VAL-001)
                 | "class_specifier"   // C++
                 | "class"             // Ruby
                 | "class_body"
                 | "impl_item"
                 | "struct_item"
                 | "trait_item"
+                | "interface_declaration"  // TS/Java/C# (VAL-001)
+                | "interface_body"         // TS body wrapper (VAL-001)
                 | "companion_object"  // Kotlin
                 | "object_declaration" // Kotlin
         ) || (kind == "module" && module_is_class) // Ruby module
@@ -3789,6 +3800,66 @@ class Foo {
                     fields
                 );
             }
+        }
+    }
+
+    /// VAL-001: TypeScript signature-only methods (abstract class methods
+    /// and interface methods) must appear in both `definitions[]` (kind=method)
+    /// and `methods[]`. Previously `classify_definition_node` only matched
+    /// `method_definition`, so `method_signature` / `abstract_method_signature`
+    /// nodes were silently dropped.
+    #[test]
+    fn test_typescript_abstract_and_interface_methods_emitted_val_001() {
+        let source = r#"
+export abstract class Repo<T> {
+  abstract save(item: T): Promise<void>;
+  find(id: string): T | null { return null; }
+}
+interface IFace {
+  greet(name: string): void;
+  defaulted(): number;
+}
+"#;
+        let tree = parse(source, Language::TypeScript).unwrap();
+
+        // === definitions[] assertions ===
+        let defs = extract_definitions(&tree, source, Language::TypeScript);
+        let by_name: std::collections::BTreeMap<String, String> = defs
+            .iter()
+            .map(|d| (d.name.clone(), d.kind.clone()))
+            .collect();
+
+        assert_eq!(
+            by_name.get("Repo").map(String::as_str),
+            Some("class"),
+            "VAL-001: `Repo` must be kind=class; got defs={:?}",
+            defs
+        );
+        assert_eq!(
+            by_name.get("IFace").map(String::as_str),
+            Some("interface"),
+            "VAL-001: `IFace` must be kind=interface; got defs={:?}",
+            defs
+        );
+        for expected in ["save", "find", "greet", "defaulted"] {
+            assert_eq!(
+                by_name.get(expected).map(String::as_str),
+                Some("method"),
+                "VAL-001: `{}` must appear in definitions with kind=method; got defs={:?}",
+                expected,
+                defs
+            );
+        }
+
+        // === methods[] assertions ===
+        let methods = extract_methods(&tree, source, Language::TypeScript);
+        for expected in ["save", "find", "greet", "defaulted"] {
+            assert!(
+                methods.contains(&expected.to_string()),
+                "VAL-001: `{}` must appear in methods[]; got methods={:?}",
+                expected,
+                methods
+            );
         }
     }
 }
