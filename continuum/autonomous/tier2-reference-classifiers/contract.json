@@ -1,0 +1,23 @@
+{
+  "task": "Add ReferenceKind classifiers for 13 Tier-2 languages so tldr references emits call/definition/read/write/import/type instead of kind=other",
+  "complexity": "feature",
+  "milestones": [
+    {"name": "tier2-classifiers", "status": "pending",
+     "assertions": ["VAL-Java","VAL-C","VAL-Cpp","VAL-Csharp","VAL-Kotlin","VAL-Scala","VAL-Swift","VAL-Php","VAL-Ruby","VAL-Lua","VAL-Luau","VAL-Elixir","VAL-Ocaml"]}
+  ],
+  "assertions": [
+    {"id":"VAL-Java","type":"invariant","text":"For Java fixtures containing a method definition and two call sites, classify_reference_kind returns ReferenceKind::Definition for the definition identifier and ReferenceKind::Call for the two call sites. No ReferenceKind::Other for these core cases.","milestone":"tier2-classifiers","status":"pending","depends":[],"worker":null,"evidence":null},
+    {"id":"VAL-C","type":"invariant","text":"Same invariant for C: function_definition name = Definition, call_expression callee = Call.","milestone":"tier2-classifiers","status":"pending","depends":[],"worker":null,"evidence":null},
+    {"id":"VAL-Cpp","type":"invariant","text":"Same invariant for C++: function_definition name = Definition, call_expression callee = Call. Qualified calls (ns::func()) also classify correctly.","milestone":"tier2-classifiers","status":"pending","depends":[],"worker":null,"evidence":null},
+    {"id":"VAL-Csharp","type":"invariant","text":"Same for C#: method_declaration name = Definition, invocation_expression callee = Call.","milestone":"tier2-classifiers","status":"pending","depends":[],"worker":null,"evidence":null},
+    {"id":"VAL-Kotlin","type":"invariant","text":"Same for Kotlin: function_declaration name = Definition, call_expression callee = Call.","milestone":"tier2-classifiers","status":"pending","depends":[],"worker":null,"evidence":null},
+    {"id":"VAL-Scala","type":"invariant","text":"Same for Scala: function_definition/function_declaration name = Definition, call_expression callee = Call.","milestone":"tier2-classifiers","status":"pending","depends":[],"worker":null,"evidence":null},
+    {"id":"VAL-Swift","type":"invariant","text":"Same for Swift: function_declaration/init_declaration name = Definition, call_expression callee = Call.","milestone":"tier2-classifiers","status":"pending","depends":[],"worker":null,"evidence":null},
+    {"id":"VAL-Php","type":"invariant","text":"Same for PHP: function_definition name = Definition, function_call_expression callee = Call.","milestone":"tier2-classifiers","status":"pending","depends":[],"worker":null,"evidence":null},
+    {"id":"VAL-Ruby","type":"invariant","text":"Same for Ruby: method/singleton_method name = Definition, call callee = Call.","milestone":"tier2-classifiers","status":"pending","depends":[],"worker":null,"evidence":null},
+    {"id":"VAL-Lua","type":"invariant","text":"Same for Lua: function_declaration/function_definition_statement/local_function name = Definition, function_call callee = Call.","milestone":"tier2-classifiers","status":"pending","depends":[],"worker":null,"evidence":null},
+    {"id":"VAL-Luau","type":"invariant","text":"Same for Luau: function_declaration name = Definition, function_call callee = Call. (Luau grammar largely mirrors Lua.)","milestone":"tier2-classifiers","status":"pending","depends":[],"worker":null,"evidence":null},
+    {"id":"VAL-Elixir","type":"invariant","text":"For Elixir's call-macro model: `def` / `defp` module-calls are Definition; direct function calls (bare atoms or aliased calls) are Call. Use the existing Elixir callgraph handler as reference for grammar kinds.","milestone":"tier2-classifiers","status":"pending","depends":[],"worker":null,"evidence":null},
+    {"id":"VAL-Ocaml","type":"invariant","text":"For OCaml: value_definition (let binding) name = Definition; application_expression callee = Call. Shadowing rebinding also emits Definition (not Write).","milestone":"tier2-classifiers","status":"pending","depends":[],"worker":null,"evidence":null}
+  ]
+}

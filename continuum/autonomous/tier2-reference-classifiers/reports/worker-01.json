@@ -1,0 +1,77 @@
+{
+  "task": "Add ReferenceKind classifiers for 13 Tier-2 languages so tldr references emits call/definition (and Read/Write/Import/Type where clean) instead of kind=other",
+  "assertions": [
+    "VAL-Java", "VAL-C", "VAL-Cpp", "VAL-Csharp",
+    "VAL-Kotlin", "VAL-Scala", "VAL-Swift", "VAL-Php",
+    "VAL-Ruby", "VAL-Lua", "VAL-Luau", "VAL-Elixir", "VAL-Ocaml"
+  ],
+  "result": "success",
+  "implemented": "Added 13 classifier handlers (classify_java_reference, classify_c_reference, classify_cpp_reference, classify_csharp_reference, classify_kotlin_reference, classify_scala_reference, classify_swift_reference, classify_php_reference, classify_ruby_reference, classify_lua_reference, classify_luau_reference, classify_elixir_reference, classify_ocaml_reference) in crates/tldr-core/src/analysis/references.rs and extended the dispatch match inside classify_reference_kind to route each Language variant to its handler. Lua and Luau share a common inner helper (classify_lua_family_reference) because their grammars align for the core call/def nodes. Each handler matches on parent.kind() and returns ReferenceKind::{Call, Definition, Read, Write, Import, Type, Other}. Must-have invariants (Definition at declaration site + Call at invocation callee) are covered for all 13; nice-to-have classifications (Write on assignment LHS, Import in use/import statements, Type in type annotations) are added where grammar support is clean. Languages without imperative assignment (OCaml, Elixir) do not emit Write — rebinding is modeled as Definition/Read per language semantics as instructed. Also added a helper `first_named_child_of_kind` for consistent name-field fallback, and a tiny `classify_c_declarator_as_definition` helper for C. TDD workflow: all 13 tests were added FIRST and confirmed failing (each returned three Other values for the `greet` identifier), then the classifiers were implemented and all 13 now pass. No existing test assertions were weakened; no existing classifier (Python/TypeScript/Go/Rust) was refactored.",
+  "remaining": "",
+  "tests": {
+    "added": [
+      {"file": "crates/tldr-core/src/analysis/references.rs", "name": "analysis::references::tests::test_java_classifier_emits_call_and_definition",   "verifies": "VAL-Java"},
+      {"file": "crates/tldr-core/src/analysis/references.rs", "name": "analysis::references::tests::test_c_classifier_emits_call_and_definition",      "verifies": "VAL-C"},
+      {"file": "crates/tldr-core/src/analysis/references.rs", "name": "analysis::references::tests::test_cpp_classifier_emits_call_and_definition",    "verifies": "VAL-Cpp"},
+      {"file": "crates/tldr-core/src/analysis/references.rs", "name": "analysis::references::tests::test_csharp_classifier_emits_call_and_definition", "verifies": "VAL-Csharp"},
+      {"file": "crates/tldr-core/src/analysis/references.rs", "name": "analysis::references::tests::test_kotlin_classifier_emits_call_and_definition", "verifies": "VAL-Kotlin"},
+      {"file": "crates/tldr-core/src/analysis/references.rs", "name": "analysis::references::tests::test_scala_classifier_emits_call_and_definition",  "verifies": "VAL-Scala"},
+      {"file": "crates/tldr-core/src/analysis/references.rs", "name": "analysis::references::tests::test_swift_classifier_emits_call_and_definition",  "verifies": "VAL-Swift"},
+      {"file": "crates/tldr-core/src/analysis/references.rs", "name": "analysis::references::tests::test_php_classifier_emits_call_and_definition",    "verifies": "VAL-Php"},
+      {"file": "crates/tldr-core/src/analysis/references.rs", "name": "analysis::references::tests::test_ruby_classifier_emits_call_and_definition",   "verifies": "VAL-Ruby"},
+      {"file": "crates/tldr-core/src/analysis/references.rs", "name": "analysis::references::tests::test_lua_classifier_emits_call_and_definition",    "verifies": "VAL-Lua"},
+      {"file": "crates/tldr-core/src/analysis/references.rs", "name": "analysis::references::tests::test_luau_classifier_emits_call_and_definition",   "verifies": "VAL-Luau"},
+      {"file": "crates/tldr-core/src/analysis/references.rs", "name": "analysis::references::tests::test_elixir_classifier_emits_call_and_definition", "verifies": "VAL-Elixir"},
+      {"file": "crates/tldr-core/src/analysis/references.rs", "name": "analysis::references::tests::test_ocaml_classifier_emits_call_and_definition",  "verifies": "VAL-Ocaml"}
+    ],
+    "command": "cargo test -p tldr-core --lib analysis::references::tests::test_",
+    "exit_code": 0
+  },
+  "checks": [
+    {"command": "cargo test -p tldr-core --lib analysis::references::tests::test_", "exit_code": 0, "note": "31 passed, 0 failed (includes the 13 new classifier tests plus 18 pre-existing tests in the module)"},
+    {"command": "cargo test -p tldr-core --lib analysis::", "exit_code": 0, "note": "481 passed, 0 failed, 191 ignored"},
+    {"command": "cargo test -p tldr-core --lib", "exit_code": 0, "note": "4588 passed, 0 failed, 340 ignored (full lib regression clean)"},
+    {"command": "cargo test -p tldr-core --test grammar_stability_test", "exit_code": 0, "note": "7 passed, 0 failed"},
+    {"command": "cargo check -p tldr-core", "exit_code": 0},
+    {"command": "cargo clippy -p tldr-core --lib -- -D warnings", "exit_code": 0}
+  ],
+  "cli_verification": [
+    {"language": "Java",   "file": "/tmp/tier2_cli_check/App.java",   "kinds": ["call","definition"]},
+    {"language": "C",      "file": "/tmp/tier2_cli_check/main.c",     "kinds": ["call","definition"]},
+    {"language": "C++",    "file": "/tmp/tier2_cli_check/main.cpp",   "kinds": ["call","definition"]},
+    {"language": "C#",     "file": "/tmp/tier2_cli_check/App.cs",     "kinds": ["call","definition"]},
+    {"language": "Kotlin", "file": "/tmp/tier2_cli_check/App.kt",     "kinds": ["call","definition"]},
+    {"language": "Scala",  "file": "/tmp/tier2_cli_check/App.scala",  "kinds": ["call","definition"]},
+    {"language": "Swift",  "file": "/tmp/tier2_cli_check/app.swift",  "kinds": ["call","definition"]},
+    {"language": "PHP",    "file": "/tmp/tier2_cli_check/app.php",    "kinds": ["call","definition"]},
+    {"language": "Ruby",   "file": "/tmp/tier2_cli_check/app.rb",     "kinds": ["call","definition"]},
+    {"language": "Lua",    "file": "/tmp/tier2_cli_check/app.lua",    "kinds": ["call","definition"]},
+    {"language": "Luau",   "file": "/tmp/tier2_cli_check/app.luau",   "kinds": ["call","definition"]},
+    {"language": "Elixir", "file": "/tmp/tier2_cli_check/app.exs",    "kinds": ["call","definition"]},
+    {"language": "OCaml",  "file": "/tmp/tier2_cli_check/app.ml",     "kinds": ["call","definition"]}
+  ],
+  "bloks_used": [],
+  "corrections": [],
+  "discoveries": [
+    "Java: method_declaration's name is the first `identifier` child (return types are `type_identifier` or `void_type`, never `identifier`, so no confusion). Call sites are `method_invocation` with the callee as a direct `identifier` child (when no receiver) or under a `field_access` parent (when `obj.method()`). Verified with probe: `*identifier parent=method_declaration \"greet\"` at def site and `*identifier parent=method_invocation \"greet\"` at each call site.",
+    "C / C++: function_definition's name is buried under `function_declarator > identifier`. So the classifier must fire on parent==`function_declarator`, not on parent==`function_definition`. call_expression has the callee as child(0) (no `function` field in the C grammar used here — `parent.child(0)` is the authoritative lookup). C++ adds `qualified_identifier` and `field_expression` parents for namespaced / method calls.",
+    "C#: invocation_expression's callee is child(0), no `function` field. method_declaration has a `name` field in this grammar version (confirmed via probe and via callgraph csharp.rs fallback handling).",
+    "Kotlin: call_expression's callee is child(0), no field. function_declaration exposes a `name` field. Receiver-calls use `navigation_expression` (not `field_expression`).",
+    "Scala: function_definition's name is a direct `identifier` child (no `name` field exposed by this grammar); call_expression callee is child(0). Dotted calls parent is `field_expression` or `select_expression`.",
+    "Swift: function_declaration exposes a `name` field pointing at a `simple_identifier`. call_expression's callable is child(0). init_declaration has no name — any simple_identifier inside it (the `init` keyword location) is a Definition semantically; we treat the first simple_identifier as the Definition anchor.",
+    "PHP: function_definition and method_declaration have a `name` field pointing at a `name` node (PHP's identifier-equivalent). function_call_expression has a `function` field; member_call_expression and scoped_call_expression have a `name` field.",
+    "Ruby: `method` / `singleton_method` nodes hold the method name as a direct `identifier` child (matches callgraph ruby.rs). `call` nodes use `argument_list` to separate the callee from the arguments — the callee is the LAST `identifier` child before the `argument_list` child. For `puts greet(...)` the call node contains `identifier(puts)`+`argument_list(call(greet, ...))` — we correctly classify the outer `puts` via the same path, and the inner `greet` as Call.",
+    "Lua / Luau: function_declaration's name is a direct `identifier` child (or `dot_index_expression`/`method_index_expression` for `M.foo`/`M:foo`). function_call's callee is child(0). nvim-treesitter's Lua grammar exposes assignment as `assignment_statement` with a `variable_list` child for LHS. Luau grammar kinds are identical for the core cases so the handlers share a helper.",
+    "Elixir: Everything is a `call`. To distinguish `def greet(...)` from `greet(...)` we look UP the tree: the def-call is `call{ identifier(def|defp|defmacro|defmacrop), arguments{ call{ identifier(greet), ... } } }`. So when classifying an identifier whose parent is `call`, we check if grandparent is `arguments` and great-grandparent is a call whose first identifier text is one of the def-keywords. Dotted calls (`Mod.greet(...)`) have the identifier under a `dot` parent whose parent is a `call`; the callee identifier is the LAST identifier child of the dot.",
+    "OCaml: The identifier-like node is `value_name`. At definition sites its parent is `let_binding` (not `value_definition` directly — `value_definition` wraps one or more `let_binding`s). At call sites its parent is `value_path`, whose parent is `application_expression` with the `value_path` as child(0). Shadowing rebinding is Definition (not Write) per OCaml semantics."
+  ],
+  "issues": [
+    "Pre-existing, unrelated test failures in crates/tldr-core/tests/language_parity_test.rs: `test_kotlin_returns_unsupported` (line 1928) and `test_swift_returns_unsupported` (line 1940) assert that `ParserPool::parse(..., Language::{Kotlin,Swift})` returns `Err(UnsupportedLanguage(_))`. Both Kotlin and Swift parsers actually work in this build — confirmed by the probe test that successfully parses both fixtures, by `parser_tests::test_kotlin_parse`/`test_swift_parse` which pass, and by the full lib suite's 4588 passing tests. These two parity tests are stale assertions (the file comment at line 1922 even says 'their corresponding test_*_returns_unsupported tests have been removed' but Kotlin & Swift were left behind). Verified the test file is untouched by this change via `git diff HEAD -- crates/tldr-core/tests/language_parity_test.rs`. I did not modify these tests — they are orthogonal to reference classification and the instruction said not to weaken existing assertions. Recommend a separate fix to remove these stale tests or flip them to assert successful parsing."
+  ],
+  "conventions": [
+    "Tests live in `#[cfg(test)] mod tests` at the bottom of references.rs and use a common harness `collect_reference_kinds_for(source, lang, needle, identifier_kinds)` + `assert_def_and_calls(results, language_name)` to keep the 13 tests uniform.",
+    "Test name convention follows the prompt's contract: `test_<lang>_classifier_emits_call_and_definition`.",
+    "Classifier function naming: `classify_<lang>_reference` matching existing Python/TypeScript/Go/Rust handlers. Lua and Luau share `classify_lua_family_reference` internally since their grammars align for the core cases.",
+    "Each handler follows the Python/TypeScript template: match on `parent.kind()`, route each arm to a specific ReferenceKind, default arm returns Read."
+  ]
+}

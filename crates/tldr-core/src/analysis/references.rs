@@ -1094,7 +1094,19 @@ pub fn classify_reference_kind(node: &Node, source: &[u8], language: Language) -
         }
         Language::Go => classify_go_reference(node, &parent, source),
         Language::Rust => classify_rust_reference(node, &parent, source),
-        _ => ReferenceKind::Other,
+        Language::Java => classify_java_reference(node, &parent, source),
+        Language::C => classify_c_reference(node, &parent, source),
+        Language::Cpp => classify_cpp_reference(node, &parent, source),
+        Language::CSharp => classify_csharp_reference(node, &parent, source),
+        Language::Kotlin => classify_kotlin_reference(node, &parent, source),
+        Language::Scala => classify_scala_reference(node, &parent, source),
+        Language::Swift => classify_swift_reference(node, &parent, source),
+        Language::Php => classify_php_reference(node, &parent, source),
+        Language::Ruby => classify_ruby_reference(node, &parent, source),
+        Language::Lua => classify_lua_reference(node, &parent, source),
+        Language::Luau => classify_luau_reference(node, &parent, source),
+        Language::Elixir => classify_elixir_reference(node, &parent, source),
+        Language::Ocaml => classify_ocaml_reference(node, &parent, source),
     }
 }
 
@@ -1444,6 +1456,1030 @@ fn classify_rust_reference(node: &Node, parent: &Node, _source: &[u8]) -> Refere
             }
             ReferenceKind::Read
         }
+
+        _ => ReferenceKind::Read,
+    }
+}
+
+/// Return the first named child of `node` whose kind is in `kinds`.
+fn first_named_child_of_kind<'a>(node: &Node<'a>, kinds: &[&str]) -> Option<Node<'a>> {
+    for i in 0..node.child_count() {
+        if let Some(child) = node.child(i) {
+            if kinds.contains(&child.kind()) {
+                return Some(child);
+            }
+        }
+    }
+    None
+}
+
+/// Classify Java reference kind.
+///
+/// Grammar reference: tree-sitter-java. `method_declaration` /
+/// `constructor_declaration` hold the method name as their first `identifier`
+/// child (return types are `type_identifier` / `void_type`, so not confused).
+/// Call sites use `method_invocation` whose callee identifier is a direct
+/// `identifier` child (for `obj.method()` the callee is under a `field_access`
+/// parent — we classify on the direct identifier attached to the invocation).
+fn classify_java_reference(node: &Node, parent: &Node, _source: &[u8]) -> ReferenceKind {
+    let parent_kind = parent.kind();
+
+    match parent_kind {
+        // Direct call site: greet()
+        "method_invocation" => {
+            // The callee identifier appears as the "name" field or the first
+            // identifier child of the invocation. Arguments are in argument_list,
+            // so an identifier that is NOT inside argument_list is the callee.
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node.id() == name.id() {
+                    return ReferenceKind::Call;
+                }
+            }
+            // Fallback: if no "name" field, the first identifier child is the callee.
+            if let Some(first_id) = first_named_child_of_kind(parent, &["identifier"]) {
+                if node.id() == first_id.id() {
+                    return ReferenceKind::Call;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        // Method / constructor definition: first identifier child is the name.
+        "method_declaration" | "constructor_declaration" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node.id() == name.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            if let Some(first_id) = first_named_child_of_kind(parent, &["identifier"]) {
+                if node.id() == first_id.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        // Class / interface / enum declarations: name field
+        "class_declaration" | "interface_declaration" | "enum_declaration" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node.id() == name.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        // Assignment: lhs is Write
+        "assignment_expression" => {
+            if let Some(left) = parent.child_by_field_name("left") {
+                if node_contains(node, &left) {
+                    return ReferenceKind::Write;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        // Imports
+        "import_declaration" => ReferenceKind::Import,
+
+        // Field access / scoped access: if grandparent is method_invocation
+        // and this field_access is the callee, it's a Call.
+        "field_access" => {
+            if let Some(grandparent) = parent.parent() {
+                if grandparent.kind() == "method_invocation" {
+                    if let Some(name) = grandparent.child_by_field_name("name") {
+                        if node_contains(node, &name) {
+                            return ReferenceKind::Call;
+                        }
+                    }
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        // Type references
+        "type_identifier" | "generic_type" | "array_type" => ReferenceKind::Type,
+
+        _ => ReferenceKind::Read,
+    }
+}
+
+/// Classify C reference kind.
+///
+/// Grammar reference: tree-sitter-c. `function_definition` contains a
+/// `function_declarator` whose first `identifier` child is the function name.
+/// `call_expression` has the callee as its first child (an `identifier` for
+/// direct calls).
+fn classify_c_reference(node: &Node, parent: &Node, _source: &[u8]) -> ReferenceKind {
+    let parent_kind = parent.kind();
+
+    match parent_kind {
+        // Direct call: greet()
+        "call_expression" => {
+            if let Some(func) = parent.child_by_field_name("function") {
+                if node_contains(node, &func) {
+                    return ReferenceKind::Call;
+                }
+            }
+            // Fallback: first child of call_expression is the callee
+            if let Some(first) = parent.child(0) {
+                if node.id() == first.id() {
+                    return ReferenceKind::Call;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        // Function name inside function_declarator: definition
+        "function_declarator" => {
+            // The first identifier child is the function name.
+            if let Some(decl) = parent.child_by_field_name("declarator") {
+                if node.id() == decl.id() {
+                    return classify_c_declarator_as_definition(parent);
+                }
+            }
+            if let Some(first_id) = first_named_child_of_kind(parent, &["identifier"]) {
+                if node.id() == first_id.id() {
+                    // Check whether this declarator is inside a function_definition
+                    // — if so, this is a Definition. Otherwise it's still the name
+                    // of a declared function (forward declaration), also Definition.
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        // Parameter declaration name
+        "parameter_declaration" => {
+            if let Some(decl) = parent.child_by_field_name("declarator") {
+                if node_contains(node, &decl) {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        // Initializers / assignments: lhs of assignment_expression is a Write.
+        "assignment_expression" => {
+            if let Some(left) = parent.child_by_field_name("left") {
+                if node_contains(node, &left) {
+                    return ReferenceKind::Write;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        // Preprocessor includes
+        "preproc_include" => ReferenceKind::Import,
+
+        // Field access used as callee
+        "field_expression" => {
+            if let Some(grandparent) = parent.parent() {
+                if grandparent.kind() == "call_expression" {
+                    if let Some(first) = grandparent.child(0) {
+                        if first.id() == parent.id() {
+                            return ReferenceKind::Call;
+                        }
+                    }
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        // Type references
+        "type_identifier" | "sized_type_specifier" => ReferenceKind::Type,
+
+        _ => ReferenceKind::Read,
+    }
+}
+
+/// Helper: a function_declarator within a function_definition/declaration
+/// always names a function-kind entity (not a variable), so its identifier
+/// is a Definition. Kept as a tiny helper to match the established pattern.
+fn classify_c_declarator_as_definition(_declarator: &Node) -> ReferenceKind {
+    ReferenceKind::Definition
+}
+
+/// Classify C++ reference kind.
+///
+/// Grammar reference: tree-sitter-cpp. Structure mirrors C for the
+/// must-have cases (`function_definition` → `function_declarator` →
+/// `identifier` for the name; `call_expression` with direct `identifier`
+/// callee). Adds handling for qualified identifiers (ns::func()) and
+/// field expressions for method calls.
+fn classify_cpp_reference(node: &Node, parent: &Node, _source: &[u8]) -> ReferenceKind {
+    let parent_kind = parent.kind();
+
+    match parent_kind {
+        "call_expression" => {
+            if let Some(func) = parent.child_by_field_name("function") {
+                if node_contains(node, &func) {
+                    return ReferenceKind::Call;
+                }
+            }
+            if let Some(first) = parent.child(0) {
+                if node.id() == first.id() {
+                    return ReferenceKind::Call;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "function_declarator" => {
+            if let Some(first_id) = first_named_child_of_kind(
+                parent,
+                &[
+                    "identifier",
+                    "field_identifier",
+                    "qualified_identifier",
+                    "destructor_name",
+                ],
+            ) {
+                if node.id() == first_id.id() || node_contains(node, &first_id) {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        // Qualified identifier: ns::func — if part of a call, it's a Call
+        "qualified_identifier" => {
+            if let Some(grandparent) = parent.parent() {
+                if grandparent.kind() == "call_expression" {
+                    if let Some(first) = grandparent.child(0) {
+                        if first.id() == parent.id() {
+                            return ReferenceKind::Call;
+                        }
+                    }
+                }
+                // Qualified identifier inside a declarator is part of a Definition.
+                if grandparent.kind() == "function_declarator" {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "field_expression" => {
+            if let Some(grandparent) = parent.parent() {
+                if grandparent.kind() == "call_expression" {
+                    if let Some(first) = grandparent.child(0) {
+                        if first.id() == parent.id() {
+                            return ReferenceKind::Call;
+                        }
+                    }
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "assignment_expression" => {
+            if let Some(left) = parent.child_by_field_name("left") {
+                if node_contains(node, &left) {
+                    return ReferenceKind::Write;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "parameter_declaration" => {
+            if let Some(decl) = parent.child_by_field_name("declarator") {
+                if node_contains(node, &decl) {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "preproc_include" => ReferenceKind::Import,
+
+        "type_identifier" | "template_type" | "sized_type_specifier" => ReferenceKind::Type,
+
+        "class_specifier" | "struct_specifier" | "namespace_definition" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node_contains(node, &name) {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        _ => ReferenceKind::Read,
+    }
+}
+
+/// Classify C# reference kind.
+///
+/// Grammar reference: tree-sitter-c-sharp. `method_declaration`,
+/// `constructor_declaration`, and `class_declaration` expose a "name" field
+/// (and also have the name as a direct identifier child). Call sites are
+/// `invocation_expression` — the callee is a direct `identifier` child or
+/// a `member_access_expression`.
+fn classify_csharp_reference(node: &Node, parent: &Node, _source: &[u8]) -> ReferenceKind {
+    let parent_kind = parent.kind();
+
+    match parent_kind {
+        "invocation_expression" => {
+            if let Some(func) = parent.child_by_field_name("function") {
+                if node_contains(node, &func) {
+                    return ReferenceKind::Call;
+                }
+            }
+            if let Some(first) = parent.child(0) {
+                if node.id() == first.id() {
+                    return ReferenceKind::Call;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "method_declaration" | "constructor_declaration" | "local_function_statement" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node.id() == name.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            // Fallback: for method_declaration the name is the second identifier
+            // (first is return type when type_identifier isn't emitted). Safely
+            // take the first identifier — this is the established fallback in
+            // the C# callgraph handler.
+            if let Some(first_id) = first_named_child_of_kind(parent, &["identifier"]) {
+                if node.id() == first_id.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "class_declaration" | "interface_declaration" | "struct_declaration"
+        | "enum_declaration" | "record_declaration" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node.id() == name.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "member_access_expression" => {
+            if let Some(grandparent) = parent.parent() {
+                if grandparent.kind() == "invocation_expression" {
+                    if let Some(func) = grandparent.child_by_field_name("function") {
+                        if func.id() == parent.id() {
+                            return ReferenceKind::Call;
+                        }
+                    }
+                    if let Some(first) = grandparent.child(0) {
+                        if first.id() == parent.id() {
+                            return ReferenceKind::Call;
+                        }
+                    }
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "assignment_expression" => {
+            if let Some(left) = parent.child_by_field_name("left") {
+                if node_contains(node, &left) {
+                    return ReferenceKind::Write;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "using_directive" | "namespace_declaration" => ReferenceKind::Import,
+
+        "type_parameter" | "type_argument_list" => ReferenceKind::Type,
+
+        _ => ReferenceKind::Read,
+    }
+}
+
+/// Classify Kotlin reference kind.
+///
+/// Grammar reference: tree-sitter-kotlin. `function_declaration` /
+/// `class_declaration` have the name as a direct `identifier` child.
+/// `call_expression` has the callee as a direct `identifier` or a
+/// `navigation_expression` child.
+fn classify_kotlin_reference(node: &Node, parent: &Node, _source: &[u8]) -> ReferenceKind {
+    let parent_kind = parent.kind();
+
+    match parent_kind {
+        "call_expression" => {
+            if let Some(first) = parent.child(0) {
+                if node.id() == first.id() || node_contains(node, &first) {
+                    return ReferenceKind::Call;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "function_declaration" | "class_declaration" | "object_declaration"
+        | "property_declaration" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node.id() == name.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            if let Some(first_id) = first_named_child_of_kind(parent, &["identifier"]) {
+                if node.id() == first_id.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "navigation_expression" => {
+            if let Some(grandparent) = parent.parent() {
+                if grandparent.kind() == "call_expression" {
+                    if let Some(first) = grandparent.child(0) {
+                        if first.id() == parent.id() {
+                            return ReferenceKind::Call;
+                        }
+                    }
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "assignment" => {
+            if let Some(left) = parent.child_by_field_name("left") {
+                if node_contains(node, &left) {
+                    return ReferenceKind::Write;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "import_header" | "import_list" => ReferenceKind::Import,
+
+        "user_type" | "type_reference" => ReferenceKind::Type,
+
+        _ => ReferenceKind::Read,
+    }
+}
+
+/// Classify Scala reference kind.
+///
+/// Grammar reference: tree-sitter-scala. `function_definition` /
+/// `function_declaration` / `class_definition` / `object_definition` have the
+/// name as a direct `identifier` or `type_identifier` child. Call sites are
+/// `call_expression` with the callee as the first non-arguments child.
+fn classify_scala_reference(node: &Node, parent: &Node, _source: &[u8]) -> ReferenceKind {
+    let parent_kind = parent.kind();
+
+    match parent_kind {
+        "call_expression" => {
+            if let Some(first) = parent.child(0) {
+                if node.id() == first.id() || node_contains(node, &first) {
+                    return ReferenceKind::Call;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "function_definition" | "function_declaration" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node.id() == name.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            if let Some(first_id) =
+                first_named_child_of_kind(parent, &["identifier", "type_identifier"])
+            {
+                if node.id() == first_id.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "class_definition" | "object_definition" | "trait_definition" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node.id() == name.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            if let Some(first_id) =
+                first_named_child_of_kind(parent, &["identifier", "type_identifier"])
+            {
+                if node.id() == first_id.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "field_expression" | "select_expression" => {
+            if let Some(grandparent) = parent.parent() {
+                if grandparent.kind() == "call_expression" {
+                    if let Some(first) = grandparent.child(0) {
+                        if first.id() == parent.id() {
+                            return ReferenceKind::Call;
+                        }
+                    }
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "assignment_expression" => {
+            if let Some(left) = parent.child_by_field_name("left") {
+                if node_contains(node, &left) {
+                    return ReferenceKind::Write;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "import_declaration" | "import_expression" | "import_selectors" => ReferenceKind::Import,
+
+        "type_identifier" | "generic_type" | "compound_type" => ReferenceKind::Type,
+
+        _ => ReferenceKind::Read,
+    }
+}
+
+/// Classify Swift reference kind.
+///
+/// Grammar reference: tree-sitter-swift. `function_declaration` /
+/// `protocol_function_declaration` expose a "name" field (a
+/// `simple_identifier`). `init_declaration` doesn't have a simple name but
+/// its identifier site is still a Definition. `call_expression` has the
+/// callable as its first child (usually `simple_identifier` or
+/// `navigation_expression`).
+fn classify_swift_reference(node: &Node, parent: &Node, _source: &[u8]) -> ReferenceKind {
+    let parent_kind = parent.kind();
+
+    match parent_kind {
+        "call_expression" => {
+            if let Some(first) = parent.child(0) {
+                if node.id() == first.id() || node_contains(node, &first) {
+                    return ReferenceKind::Call;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "function_declaration" | "protocol_function_declaration" | "init_declaration" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node.id() == name.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            if let Some(first_id) = first_named_child_of_kind(parent, &["simple_identifier"]) {
+                if node.id() == first_id.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "class_declaration" | "protocol_declaration" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node_contains(node, &name) {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "property_declaration" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node_contains(node, &name) {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "navigation_expression" => {
+            if let Some(grandparent) = parent.parent() {
+                if grandparent.kind() == "call_expression" {
+                    if let Some(first) = grandparent.child(0) {
+                        if first.id() == parent.id() {
+                            return ReferenceKind::Call;
+                        }
+                    }
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "assignment" => {
+            if let Some(left) = parent.child_by_field_name("left") {
+                if node_contains(node, &left) {
+                    return ReferenceKind::Write;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "import_declaration" => ReferenceKind::Import,
+
+        "user_type" | "type_identifier" => ReferenceKind::Type,
+
+        _ => ReferenceKind::Read,
+    }
+}
+
+/// Classify PHP reference kind.
+///
+/// Grammar reference: tree-sitter-php. `function_definition` and
+/// `method_declaration` expose a "name" field (a `name` node). Call sites are
+/// `function_call_expression` / `member_call_expression` /
+/// `scoped_call_expression` — all with a "function"/"name" field.
+fn classify_php_reference(node: &Node, parent: &Node, _source: &[u8]) -> ReferenceKind {
+    let parent_kind = parent.kind();
+
+    match parent_kind {
+        "function_call_expression" => {
+            if let Some(func) = parent.child_by_field_name("function") {
+                if node_contains(node, &func) {
+                    return ReferenceKind::Call;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "member_call_expression" | "scoped_call_expression" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node_contains(node, &name) {
+                    return ReferenceKind::Call;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "function_definition" | "method_declaration" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node.id() == name.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "class_declaration" | "trait_declaration" | "interface_declaration" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node.id() == name.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "assignment_expression" => {
+            if let Some(left) = parent.child_by_field_name("left") {
+                if node_contains(node, &left) {
+                    return ReferenceKind::Write;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "namespace_use_declaration" | "namespace_use_clause" | "namespace_name" => {
+            ReferenceKind::Import
+        }
+
+        "named_type" | "primitive_type" => ReferenceKind::Type,
+
+        _ => ReferenceKind::Read,
+    }
+}
+
+/// Classify Ruby reference kind.
+///
+/// Grammar reference: tree-sitter-ruby. `method` / `singleton_method` have
+/// the name as a direct `identifier` child. Call sites are `call` nodes
+/// where the callee identifier is also a direct `identifier` child (with
+/// `argument_list` containing arguments).
+fn classify_ruby_reference(node: &Node, parent: &Node, _source: &[u8]) -> ReferenceKind {
+    let parent_kind = parent.kind();
+
+    match parent_kind {
+        "call" => {
+            // The callee is the identifier that is NOT inside argument_list and
+            // NOT a receiver. Ruby's `call` can look like:
+            //   call { identifier(callee), argument_list }
+            //   call { identifier(receiver), ".", identifier(callee), argument_list }
+            // The callee is the LAST identifier child before the argument_list
+            // (or at the end if no arguments).
+            if let Some(name) = parent.child_by_field_name("method") {
+                if node_contains(node, &name) {
+                    return ReferenceKind::Call;
+                }
+            }
+            // Fallback: find the last identifier child before argument_list.
+            let mut last_id: Option<Node> = None;
+            for i in 0..parent.child_count() {
+                if let Some(child) = parent.child(i) {
+                    if child.kind() == "argument_list" {
+                        break;
+                    }
+                    if child.kind() == "identifier" {
+                        last_id = Some(child);
+                    }
+                }
+            }
+            if let Some(id) = last_id {
+                if node.id() == id.id() {
+                    return ReferenceKind::Call;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "method" | "singleton_method" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node.id() == name.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            if let Some(first_id) = first_named_child_of_kind(parent, &["identifier"]) {
+                if node.id() == first_id.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "class" | "module" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node_contains(node, &name) {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "assignment" | "operator_assignment" => {
+            if let Some(left) = parent.child_by_field_name("left") {
+                if node_contains(node, &left) {
+                    return ReferenceKind::Write;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        _ => ReferenceKind::Read,
+    }
+}
+
+/// Classify Lua reference kind.
+///
+/// Grammar reference: tree-sitter-lua (nvim-treesitter). `function_declaration`
+/// has the name as a direct `identifier` child (or `dot_index_expression` /
+/// `method_index_expression`). Call sites are `function_call` with the callee
+/// as the first child.
+fn classify_lua_reference(node: &Node, parent: &Node, _source: &[u8]) -> ReferenceKind {
+    classify_lua_family_reference(node, parent)
+}
+
+/// Classify Luau reference kind.
+///
+/// Luau's grammar mirrors Lua's for the core call/definition nodes
+/// (`function_call`, `function_declaration`, `identifier`). Share the impl.
+fn classify_luau_reference(node: &Node, parent: &Node, _source: &[u8]) -> ReferenceKind {
+    classify_lua_family_reference(node, parent)
+}
+
+fn classify_lua_family_reference(node: &Node, parent: &Node) -> ReferenceKind {
+    let parent_kind = parent.kind();
+
+    match parent_kind {
+        "function_call" => {
+            if let Some(first) = parent.child(0) {
+                if node.id() == first.id() || node_contains(node, &first) {
+                    return ReferenceKind::Call;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "function_declaration" | "local_function" | "function_definition_statement" => {
+            if let Some(name) = parent.child_by_field_name("name") {
+                if node.id() == name.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            if let Some(first_id) = first_named_child_of_kind(parent, &["identifier"]) {
+                if node.id() == first_id.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "dot_index_expression" | "method_index_expression" => {
+            // If we're the function name (last identifier) and grandparent is
+            // function_call, it's a Call. If grandparent is function_declaration,
+            // it's a Definition.
+            if let Some(grandparent) = parent.parent() {
+                match grandparent.kind() {
+                    "function_call" => {
+                        if let Some(first) = grandparent.child(0) {
+                            if first.id() == parent.id() {
+                                return ReferenceKind::Call;
+                            }
+                        }
+                    }
+                    "function_declaration" => {
+                        return ReferenceKind::Definition;
+                    }
+                    _ => {}
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "assignment_statement" => {
+            if let Some(left) = parent.child_by_field_name("variables") {
+                if node_contains(node, &left) {
+                    return ReferenceKind::Write;
+                }
+            }
+            // Fallback: check if the node is in the "variable_list" (first
+            // named child) — that's the LHS in the nvim grammar.
+            for i in 0..parent.child_count() {
+                if let Some(child) = parent.child(i) {
+                    if child.kind() == "variable_list" {
+                        if node_contains(node, &child) {
+                            return ReferenceKind::Write;
+                        }
+                        break;
+                    }
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "variable_declaration" => {
+            // Local declarations: `local foo = ...` — the name is a Definition.
+            ReferenceKind::Definition
+        }
+
+        _ => ReferenceKind::Read,
+    }
+}
+
+/// Classify Elixir reference kind.
+///
+/// Elixir's grammar uses `call` nodes for nearly everything. The pattern for a
+/// function definition is `call { identifier("def"|"defp"), arguments { call {
+/// identifier(funcname), ... } } }`. So to detect Definition, we check: our
+/// identifier is the first identifier child of a `call`, that call's parent is
+/// `arguments`, and the argument's parent `call` has first identifier "def" /
+/// "defp" / "defmacro" / "defmacrop".
+///
+/// Direct call sites: our identifier is the first identifier child of a `call`
+/// node (not inside the def-pattern above). Dotted calls (`Mod.func`) have
+/// parent `dot`.
+fn classify_elixir_reference(node: &Node, parent: &Node, source: &[u8]) -> ReferenceKind {
+    let parent_kind = parent.kind();
+
+    match parent_kind {
+        "call" => {
+            // Is this the first identifier child of the call?
+            if let Some(first_id) = first_named_child_of_kind(parent, &["identifier"]) {
+                if node.id() == first_id.id() {
+                    // Check if this call is inside `arguments` of a def-style call.
+                    if is_elixir_def_call(parent, source) {
+                        return ReferenceKind::Definition;
+                    }
+                    // Otherwise it's a plain function call.
+                    return ReferenceKind::Call;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "dot" => {
+            // Dotted call: App.greet — if the dot's parent is a call whose first
+            // child is this dot, it's a Call.
+            if let Some(grandparent) = parent.parent() {
+                if grandparent.kind() == "call" {
+                    if let Some(first) = grandparent.child(0) {
+                        if first.id() == parent.id() {
+                            // Check we're the name side (usually the LAST identifier child of dot).
+                            let mut last_id: Option<Node> = None;
+                            for i in 0..parent.child_count() {
+                                if let Some(child) = parent.child(i) {
+                                    if child.kind() == "identifier" {
+                                        last_id = Some(child);
+                                    }
+                                }
+                            }
+                            if let Some(id) = last_id {
+                                if node.id() == id.id() {
+                                    return ReferenceKind::Call;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        _ => ReferenceKind::Read,
+    }
+}
+
+/// Returns true if `call_node` is the inner `call` inside
+/// `outer_call(def|defp|defmacro|defmacrop, arguments { call_node, ... })`.
+fn is_elixir_def_call(call_node: &Node, source: &[u8]) -> bool {
+    // call_node.parent() should be `arguments`.
+    let args = match call_node.parent() {
+        Some(p) if p.kind() == "arguments" => p,
+        _ => return false,
+    };
+    let outer_call = match args.parent() {
+        Some(p) if p.kind() == "call" => p,
+        _ => return false,
+    };
+    // Find the first identifier child of outer_call.
+    for i in 0..outer_call.child_count() {
+        if let Some(child) = outer_call.child(i) {
+            if child.kind() == "identifier" {
+                let start = child.start_byte();
+                let end = child.end_byte();
+                if end <= source.len() {
+                    let text = &source[start..end];
+                    return matches!(text, b"def" | b"defp" | b"defmacro" | b"defmacrop");
+                }
+                return false;
+            }
+        }
+    }
+    false
+}
+
+/// Classify OCaml reference kind.
+///
+/// Grammar reference: tree-sitter-ocaml. The identifier-like node is a
+/// `value_name`. At definition sites its parent is `let_binding` (or
+/// `value_definition`). At call sites its parent is `value_path`, whose
+/// parent is `application_expression` with this `value_path` as the first
+/// child. Shadowing rebinding is another Definition (per OCaml semantics —
+/// `let x = ... let x = ...` is two separate bindings, not a Write).
+fn classify_ocaml_reference(node: &Node, parent: &Node, _source: &[u8]) -> ReferenceKind {
+    let parent_kind = parent.kind();
+
+    match parent_kind {
+        "let_binding" | "value_definition" => {
+            // The bound name is the first `value_name` child.
+            if let Some(name) = parent.child_by_field_name("pattern") {
+                if node.id() == name.id() || node_contains(node, &name) {
+                    return ReferenceKind::Definition;
+                }
+            }
+            if let Some(first_name) = first_named_child_of_kind(parent, &["value_name"]) {
+                if node.id() == first_name.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "value_path" => {
+            // If this path is the callee of an application_expression, it's a Call.
+            // Otherwise it's a Read.
+            if let Some(grandparent) = parent.parent() {
+                if matches!(grandparent.kind(), "application_expression" | "application") {
+                    if let Some(first) = grandparent.child(0) {
+                        if first.id() == parent.id() {
+                            return ReferenceKind::Call;
+                        }
+                    }
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "application_expression" | "application" => {
+            // Bare value_name used as callee (no module qualifier).
+            if let Some(first) = parent.child(0) {
+                if node.id() == first.id() {
+                    return ReferenceKind::Call;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "module_binding" | "module_definition" => {
+            if let Some(first_name) = first_named_child_of_kind(parent, &["module_name"]) {
+                if node.id() == first_name.id() {
+                    return ReferenceKind::Definition;
+                }
+            }
+            ReferenceKind::Read
+        }
+
+        "open_module" | "include_module" => ReferenceKind::Import,
+
+        "type_constructor" | "type_constructor_path" => ReferenceKind::Type,
 
         _ => ReferenceKind::Read,
     }
@@ -2594,5 +3630,297 @@ mod tests {
         assert!(report.references.is_empty());
         assert_eq!(report.total_references, 0);
         assert_eq!(report.stats.files_searched, 50);
+    }
+
+    // =========================================================================
+    // Tier-2 classifier tests (VAL-Java..VAL-Ocaml)
+    //
+    // Each test parses a minimal fixture with one definition of `greet`
+    // and two call sites. It walks the tree, classifies every identifier
+    // whose text is `greet`, and asserts:
+    //   1. at least one Definition
+    //   2. at least two Calls
+    //   3. NO Other for any occurrence of `greet`
+    // =========================================================================
+
+    /// Collect (kind, line) for every identifier-like node whose text equals `needle`.
+    fn collect_reference_kinds_for(
+        source: &str,
+        lang: Language,
+        needle: &str,
+        identifier_kinds: &[&str],
+    ) -> Vec<(ReferenceKind, usize)> {
+        use crate::ast::parser;
+        let tree = parser::parse(source, lang).expect("parse should succeed");
+        let src_bytes = source.as_bytes();
+        let mut results = Vec::new();
+
+        fn walk<'a>(
+            node: tree_sitter::Node<'a>,
+            source: &'a [u8],
+            src_str: &'a str,
+            needle: &str,
+            identifier_kinds: &[&str],
+            language: Language,
+            out: &mut Vec<(ReferenceKind, usize)>,
+        ) {
+            if identifier_kinds.contains(&node.kind()) {
+                let start = node.start_byte();
+                let end = node.end_byte();
+                if end <= src_str.len() {
+                    let text = &src_str[start..end];
+                    if text == needle {
+                        let kind = classify_reference_kind(&node, source, language);
+                        let line = node.start_position().row + 1;
+                        out.push((kind, line));
+                    }
+                }
+            }
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    walk(child, source, src_str, needle, identifier_kinds, language, out);
+                }
+            }
+        }
+
+        walk(
+            tree.root_node(),
+            src_bytes,
+            source,
+            needle,
+            identifier_kinds,
+            lang,
+            &mut results,
+        );
+        results
+    }
+
+    /// Assert the classifier found at least one Definition and at least two Calls,
+    /// and never returned Other for the needle identifier.
+    fn assert_def_and_calls(results: &[(ReferenceKind, usize)], language_name: &str) {
+        assert!(
+            !results.is_empty(),
+            "{}: no occurrences of `greet` matched by walker",
+            language_name
+        );
+        let def_count = results
+            .iter()
+            .filter(|(k, _)| *k == ReferenceKind::Definition)
+            .count();
+        let call_count = results
+            .iter()
+            .filter(|(k, _)| *k == ReferenceKind::Call)
+            .count();
+        let other_count = results
+            .iter()
+            .filter(|(k, _)| *k == ReferenceKind::Other)
+            .count();
+        assert!(
+            def_count >= 1,
+            "{}: expected >=1 Definition, got {} (results={:?})",
+            language_name,
+            def_count,
+            results
+        );
+        assert!(
+            call_count >= 2,
+            "{}: expected >=2 Calls, got {} (results={:?})",
+            language_name,
+            call_count,
+            results
+        );
+        assert_eq!(
+            other_count, 0,
+            "{}: expected 0 Other, got {} (results={:?})",
+            language_name, other_count, results
+        );
+    }
+
+    #[test]
+    fn test_java_classifier_emits_call_and_definition() {
+        let src = r#"
+class App {
+    static String greet(String name) { return "Hello " + name; }
+    public static void main(String[] args) {
+        System.out.println(greet("World"));
+        System.out.println(greet("Alice"));
+    }
+}
+"#;
+        let results = collect_reference_kinds_for(src, Language::Java, "greet", &["identifier"]);
+        assert_def_and_calls(&results, "Java");
+    }
+
+    #[test]
+    fn test_c_classifier_emits_call_and_definition() {
+        let src = r#"
+#include <stdio.h>
+void greet(const char *name) { printf("Hello %s\n", name); }
+int main(void) {
+    greet("World");
+    greet("Alice");
+    return 0;
+}
+"#;
+        let results = collect_reference_kinds_for(src, Language::C, "greet", &["identifier"]);
+        assert_def_and_calls(&results, "C");
+    }
+
+    #[test]
+    fn test_cpp_classifier_emits_call_and_definition() {
+        let src = r#"
+#include <iostream>
+void greet(const std::string &name) { std::cout << "Hello " << name; }
+int main() {
+    greet("World");
+    greet("Alice");
+    return 0;
+}
+"#;
+        let results = collect_reference_kinds_for(src, Language::Cpp, "greet", &["identifier"]);
+        assert_def_and_calls(&results, "C++");
+    }
+
+    #[test]
+    fn test_csharp_classifier_emits_call_and_definition() {
+        let src = r#"
+class App {
+    static string greet(string name) { return "Hello " + name; }
+    static void Main() {
+        System.Console.WriteLine(greet("World"));
+        System.Console.WriteLine(greet("Alice"));
+    }
+}
+"#;
+        let results =
+            collect_reference_kinds_for(src, Language::CSharp, "greet", &["identifier"]);
+        assert_def_and_calls(&results, "C#");
+    }
+
+    #[test]
+    fn test_kotlin_classifier_emits_call_and_definition() {
+        let src = r#"
+fun greet(name: String): String { return "Hello " + name }
+fun main() {
+    println(greet("World"))
+    println(greet("Alice"))
+}
+"#;
+        let results =
+            collect_reference_kinds_for(src, Language::Kotlin, "greet", &["identifier"]);
+        assert_def_and_calls(&results, "Kotlin");
+    }
+
+    #[test]
+    fn test_scala_classifier_emits_call_and_definition() {
+        let src = r#"
+object App {
+  def greet(name: String): String = "Hello " + name
+  def main(args: Array[String]): Unit = {
+    println(greet("World"))
+    println(greet("Alice"))
+  }
+}
+"#;
+        let results = collect_reference_kinds_for(
+            src,
+            Language::Scala,
+            "greet",
+            &["identifier", "type_identifier"],
+        );
+        assert_def_and_calls(&results, "Scala");
+    }
+
+    #[test]
+    fn test_swift_classifier_emits_call_and_definition() {
+        let src = r#"
+func greet(name: String) -> String { return "Hello " + name }
+func main() {
+    print(greet(name: "World"))
+    print(greet(name: "Alice"))
+}
+"#;
+        let results =
+            collect_reference_kinds_for(src, Language::Swift, "greet", &["simple_identifier"]);
+        assert_def_and_calls(&results, "Swift");
+    }
+
+    #[test]
+    fn test_php_classifier_emits_call_and_definition() {
+        let src = r#"<?php
+function greet($name) { return "Hello " . $name; }
+echo greet("World");
+echo greet("Alice");
+"#;
+        let results = collect_reference_kinds_for(src, Language::Php, "greet", &["name"]);
+        assert_def_and_calls(&results, "PHP");
+    }
+
+    #[test]
+    fn test_ruby_classifier_emits_call_and_definition() {
+        let src = r#"
+def greet(name)
+  "Hello " + name
+end
+puts greet("World")
+puts greet("Alice")
+"#;
+        let results = collect_reference_kinds_for(src, Language::Ruby, "greet", &["identifier"]);
+        assert_def_and_calls(&results, "Ruby");
+    }
+
+    #[test]
+    fn test_lua_classifier_emits_call_and_definition() {
+        let src = r#"
+function greet(name)
+  return "Hello " .. name
+end
+print(greet("World"))
+print(greet("Alice"))
+"#;
+        let results = collect_reference_kinds_for(src, Language::Lua, "greet", &["identifier"]);
+        assert_def_and_calls(&results, "Lua");
+    }
+
+    #[test]
+    fn test_luau_classifier_emits_call_and_definition() {
+        let src = r#"
+function greet(name: string): string
+  return "Hello " .. name
+end
+print(greet("World"))
+print(greet("Alice"))
+"#;
+        let results = collect_reference_kinds_for(src, Language::Luau, "greet", &["identifier"]);
+        assert_def_and_calls(&results, "Luau");
+    }
+
+    #[test]
+    fn test_elixir_classifier_emits_call_and_definition() {
+        let src = r#"
+defmodule App do
+  def greet(name) do
+    "Hello " <> name
+  end
+end
+
+IO.puts(App.greet("World"))
+IO.puts(App.greet("Alice"))
+"#;
+        let results =
+            collect_reference_kinds_for(src, Language::Elixir, "greet", &["identifier"]);
+        assert_def_and_calls(&results, "Elixir");
+    }
+
+    #[test]
+    fn test_ocaml_classifier_emits_call_and_definition() {
+        let src = r#"
+let greet name = "Hello " ^ name
+let _ = print_string (greet "World")
+let _ = print_string (greet "Alice")
+"#;
+        let results =
+            collect_reference_kinds_for(src, Language::Ocaml, "greet", &["value_name"]);
+        assert_def_and_calls(&results, "OCaml");
     }
 }
