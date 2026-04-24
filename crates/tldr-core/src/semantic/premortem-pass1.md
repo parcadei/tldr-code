@@ -551,12 +551,14 @@ User searches for code that exists but gets no results because it wasn't chunked
 /// - function_declaration
 /// - arrow_function
 /// - method_definition
+/// - method_signature
+/// - abstract_method_signature
 /// - generator_function
 /// - async_function
 const FUNCTION_NODE_TYPES: &[(&str, &[&str])] = &[
     ("python", &["function_definition", "lambda", "async_function_definition"]),
     ("rust", &["function_item", "closure_expression"]),
-    ("typescript", &["function_declaration", "arrow_function", "method_definition"]),
+    ("typescript", &["function_declaration", "arrow_function", "method_definition", "method_signature", "abstract_method_signature"]),
     // ...
 ];
 
