@@ -1,0 +1,44 @@
+{
+  "task": "VAL-004 parser dialect awareness",
+  "assertion": "VAL-004",
+  "result": "success",
+  "implemented": "Path-aware TS/JS grammar selection in ParserPool. New TsDialect enum (Ts/Tsx/None) and ParserKey cache key replace the single-TldrLanguage key. New select_ts_grammar() picks LANGUAGE_TSX for .tsx/.jsx, LANGUAGE_TYPESCRIPT otherwise. New parse_with_path(source, lang, Option<&Path>) routes through dialect-aware selection; parse_file now threads the path into parse_with_path. Legacy parse(source, lang) preserved as path-less default (returns non-TSX for TS/JS). Tier-1 smell detectors got _with_path variants (detect_deep_nesting_with_path, detect_data_classes_with_path, detect_lazy_elements_with_path, detect_message_chains_with_path, detect_primitive_obsession_with_path); collect_tier1_ast_smells forwards the file path so JSX files get the correct grammar and the message-chain detector stays linear. Files changed: crates/tldr-core/src/ast/parser.rs (+349, -10 LOC) and crates/tldr-core/src/quality/smells.rs (+183, -30 LOC). Option (a) from the plan was feasible; option (b) was not needed — no cascading test breakage.",
+  "remaining": "",
+  "tests": {
+    "added": [
+      {"file": "crates/tldr-core/src/ast/parser.rs", "name": "test_parse_file_tsx_uses_tsx_grammar", "verifies": "VAL-004: .tsx path routes to LANGUAGE_TSX, zero ERROR nodes"},
+      {"file": "crates/tldr-core/src/ast/parser.rs", "name": "test_parse_file_jsx_uses_tsx_grammar", "verifies": "VAL-004: .jsx path routes to LANGUAGE_TSX, zero ERROR nodes"},
+      {"file": "crates/tldr-core/src/ast/parser.rs", "name": "test_parse_cache_distinguishes_dialects", "verifies": "VAL-004: cache keyed on (lang, dialect) — .ts/.tsx/.ts roundtrip parses cleanly, proves no slot collision"},
+      {"file": "crates/tldr-core/src/ast/parser.rs", "name": "test_legacy_parse_without_path_uses_ts_default", "verifies": "VAL-004: path-less API contract — plain TS clean, JSX produces ERROR nodes as documented"},
+      {"file": "crates/tldr-core/src/quality/smells.rs", "name": "test_smells_on_tsx_completes_quickly", "verifies": "VAL-004 regression: synthetic SVG-in-JSX fixture — detect_smells completes <5s AND parse_file produces zero ERROR nodes on .tsx"}
+    ],
+    "command": "cargo test -p tldr-core --lib",
+    "exit_code": 0,
+    "baseline": "4616 passing pre-change; 4621 passing post-change (+5 new tests); 340 ignored unchanged"
+  },
+  "checks": [
+    {"command": "cargo build --release", "exit_code": 0, "observed": "compiles clean in 2m37s"},
+    {"command": "cargo test -p tldr-core --lib", "exit_code": 0, "observed": "4621 passed; 0 failed; 340 ignored"},
+    {"command": "cargo test -p tldr-cli --lib", "exit_code": 1, "observed": "1359 passed; 1 failed (test_text_format_generic_evidence_shows_numbers) — pre-existing working-tree change in crates/tldr-cli/src/commands/bugbot/text_format.rs, unrelated to VAL-004 (I modified only parser.rs and smells.rs)"},
+    {"command": "cargo clippy --workspace -- -D warnings", "exit_code": 0, "observed": "clean, no suppressions added"},
+    {"command": "cargo fmt --check", "exit_code": 0, "observed": "formatted clean"},
+    {"command": "tldr smells screenshot.tsx (1584 LOC)", "observed": "exit=0 elapsed=1s size=889 bytes (was >30s timeout pre-fix)"},
+    {"command": "tldr smells apps/web", "observed": "exit=0 elapsed=1s size=1014025 bytes, 1692 smells across 3216 files (was 60s timeout pre-fix)"},
+    {"command": "tldr smells . (dub repo root)", "observed": "exit=0 elapsed=2s size=1175872 bytes, 1957 smells across 3928 files (was 90s timeout pre-fix)"}
+  ],
+  "bloks_used": [],
+  "corrections": [],
+  "discoveries": [
+    {"lib": "tldr-code", "finding": "tree-sitter-typescript does not ship a separate JSX grammar — LANGUAGE_TSX handles both TSX and JSX. Routing .jsx files through TSX is the correct (and only) fix."},
+    {"lib": "tldr-code", "finding": "callgraph subsystem (callgraph/languages/mod.rs:543, callgraph/types.rs:644) was already doing its own dialect selection — those call sites are untouched and continue to work. Only the smells/Tier-1 detector pipeline was broken."},
+    {"lib": "tldr-code", "finding": "Pre-fix ERROR-node count on the synthetic 500-line SVG-in-JSX fixture was 1010 via LANGUAGE_TYPESCRIPT; post-fix is 0 via LANGUAGE_TSX. That's a direct measure of the grammar mismatch's severity."},
+    {"lib": "tldr-code", "finding": "The pathological traversal in find_message_chains (smells.rs:1436-1486) was fed by the ERROR-laden AST but also needed a visited_lines set to terminate — under the wrong grammar, near-duplicate chain candidates multiplied and even with the visited set the recursion ballooned. Fixing the grammar is the root cause; the detector itself is sound on well-formed trees."}
+  ],
+  "issues": [
+    {"issue": "Pre-existing tldr-cli test failure: commands::bugbot::text_format::tests::test_text_format_generic_evidence_shows_numbers. Unrelated to VAL-004 — file was already modified in the working tree by prior work (diff: 2394 -> 2399 LOC) before this session. Not caused by this milestone."}
+  ],
+  "conventions": [
+    {"convention": "Path-aware parsing: callers that know a file path should use ParserPool::parse_file or parse_with_path. Callers without a path can keep using the legacy parse(source, lang), which documents a conservative default for TS/JS (no TSX)."},
+    {"convention": "Tier-1 smell detector pattern: each public detector has a path-less form (legacy API) and a _with_path variant accepting Option<&Path>. Internal orchestration (collect_tier1_ast_smells) uses the _with_path variants to forward the file path through the parse stack."}
+  ]
+}

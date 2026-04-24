@@ -1,0 +1,42 @@
+{
+  "milestone": "walker-consolidation",
+  "assertion": "VAL-001",
+  "status": "passed",
+  "commit": "dc896a7",
+  "date": "2026-04-24",
+  "checks": {
+    "cargo_build_release": "green",
+    "walker_module_tests": "8/8 pass (tldr-core lib)",
+    "walker_integration_tests": "4/4 pass (walker_consolidation_tests.rs)",
+    "clippy_workspace": "clean (-D warnings)",
+    "cargo_fmt": "clean",
+    "grep_audit": "0 raw WalkDir::new in production paths (commands/, quality/, analysis/, wrappers/); only archived/ and tests/ retain walkdir, as specified"
+  },
+  "dub_fixture_repros": {
+    "secure_root": {"findings_under_node_modules": 0, "status": "FIXED (was: all critical findings inside node_modules/.pnpm/node-gyp/*.py)"},
+    "vuln_root_lang_typescript": {"files_scanned": 1000, "findings_under_node_modules": 0, "status": "FIXED (was: files_scanned=0 with findings in node_modules .py files; --lang was ignored)"},
+    "smells_packages_scoped": {"duration_s": 1, "files_scanned": 712, "smells_found": 152, "status": "FIXED when scoped"},
+    "smells_root_NEW_ISSUE_FOUND": {
+      "status": "still_hangs",
+      "cause": "SEPARATE pre-existing bug in smells ANALYZER (not walker)",
+      "evidence": "tldr smells apps/web/app/(ee)/partners.dub.co/(apply)/[programSlug]/(default)/apply/success/screenshot.tsx (1584 lines, 92KB) hangs at 5s timeout on single-file invocation, confirming the analyzer itself (not the walker) is the culprit for the root-level smells hang",
+      "recommendation": "Document in M3 reassessment; likely regex/cognitive-complexity algorithm pathology on a specific TS construct"
+    }
+  },
+  "walker_module": {
+    "path": "crates/tldr-core/src/walker.rs",
+    "api": ["walk_project(root)", "ProjectWalker::new(root).no_default_ignore().respect_gitignore(bool).max_depth(n).extensions(&[\"ext\"]).iter()"],
+    "default_exclude": ["node_modules", "target", "dist", "build", ".next", "__pycache__", "vendor", ".git"]
+  },
+  "cli_additions": {
+    "no_default_ignore_flag": ["smells", "dead", "vuln", "secure"],
+    "lang_flag": ["vuln", "secure"],
+    "vuln_lang_awareness": "is_supported_source_file now language-specific (TypeScript=ts/tsx, Rust=rs, Python=py, JavaScript=js/mjs/cjs/jsx, Go=go, Java=java; fallback py|rs when lang=None)"
+  },
+  "pre_existing_failures_confirmed_unrelated": [
+    "crates/tldr-core/tests/gate3_octagon_ab_comparison.rs references ENABLE_OCTAGON_DOMAIN — identical before and after commit (verified via git show HEAD~1 and HEAD)",
+    "2 bugbot lib tests (test_bugbot_finds_real_bugs, test_text_format_generic_evidence_shows_numbers)",
+    "~40 CLI integration tests referencing nonexistent subcommands (cfg, dfg, ssa, alias, dominators, live_vars, bounds, behavioral, --hotspots)",
+    "tldr smells hangs on specific 1584-line screenshot.tsx — confirmed via single-file invocation bypassing walker entirely"
+  ]
+}

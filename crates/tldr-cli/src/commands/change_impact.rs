@@ -19,7 +19,9 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Args;
 
-use tldr_core::{change_impact_extended, ChangeImpactReport, DetectionMethod, Language};
+use tldr_core::{
+    change_impact_extended, ChangeImpactReport, ChangeImpactStatus, DetectionMethod, Language,
+};
 
 use crate::output::{format_change_impact_text, OutputFormat, OutputWriter};
 
@@ -143,7 +145,8 @@ impl ChangeImpactArgs {
             explicit_files,
         )?;
 
-        // Output based on format/runner
+        // Output based on format/runner — always emit the report (including
+        // failure states) so JSON consumers see the new `status` field.
         if let Some(runner) = self.runner {
             let runner_output = format_for_runner(&report, runner);
             println!("{}", runner_output);
@@ -154,7 +157,23 @@ impl ChangeImpactArgs {
             writer.write(&report)?;
         }
 
-        Ok(())
+        // Map failure states to a distinct exit code so shell callers can
+        // distinguish "no baseline" from "no changes" without parsing JSON.
+        match &report.status {
+            ChangeImpactStatus::Completed | ChangeImpactStatus::NoChanges => Ok(()),
+            ChangeImpactStatus::NoBaseline { reason } => {
+                eprintln!(
+                    "ERROR: change-impact: no baseline ({reason}). Try --files <path> or --base <ref>."
+                );
+                std::process::exit(3);
+            }
+            ChangeImpactStatus::DetectionFailed { reason } => {
+                eprintln!(
+                    "ERROR: change-impact: detection failed ({reason}). Try --files <path> or --base <ref>."
+                );
+                std::process::exit(3);
+            }
+        }
     }
 }
 
@@ -342,6 +361,7 @@ mod tests {
             affected_functions: vec![],
             detection_method: "explicit".to_string(),
             metadata: None,
+            status: tldr_core::ChangeImpactStatus::Completed,
         };
 
         let output = format_for_runner(&report, RunnerFormat::Pytest);
@@ -357,6 +377,7 @@ mod tests {
             affected_functions: vec![],
             detection_method: "explicit".to_string(),
             metadata: None,
+            status: tldr_core::ChangeImpactStatus::Completed,
         };
 
         let output = format_for_runner(&report, RunnerFormat::Jest);
@@ -387,6 +408,7 @@ mod tests {
             affected_functions: vec![],
             detection_method: "explicit".to_string(),
             metadata: None,
+            status: tldr_core::ChangeImpactStatus::Completed,
         };
 
         let output = format_for_runner(&report, RunnerFormat::PytestK);

@@ -1,0 +1,39 @@
+{
+  "task": "VAL-003 post-consolidation reassessment",
+  "assertion": "VAL-003",
+  "result": "success",
+  "implemented": "reports/post-consolidation-assessment.md with per-bug status and root-cause traces for bugs 2, 4, and 6 that remain after M1+M2",
+  "remaining": "Bug 2 (change-impact empty-success UX), Bug 4 (message-chain exponential on .tsx due to LANGUAGE_TYPESCRIPT used instead of LANGUAGE_TSX), Bug 6 (impact 0-callers due to no workspace-aware module index)",
+  "tests": {"added": [], "command": "n/a", "exit_code": null},
+  "checks": [
+    {"command": "tldr structure /tmp/tldr-real/dub --format json --quiet", "observed": "language=typescript, autodetect works; 3.6s; bug 7 resolved"},
+    {"command": "tldr smells /tmp/tldr-real/dub --lang typescript --format json --quiet", "observed": "timeout >90s (killed); narrowed to single-file apps/web/app/(ee)/partners.dub.co/(apply)/[programSlug]/(default)/apply/success/screenshot.tsx which hangs >30s bypassing the walker; bug 4 partially open"},
+    {"command": "tldr secure /tmp/tldr-real/dub --lang typescript --format json --quiet", "observed": "40s completion; findings in apps/web/app, ZERO findings under node_modules; bug 5 resolved"},
+    {"command": "tldr vuln /tmp/tldr-real/dub --lang typescript --format json --quiet", "observed": "files_scanned=1000 (hard cap of MAX_DIRECTORY_FILES in vuln.rs:55), 0 findings, 217ms; walker no longer descends node_modules (bug 3 walker aspect fixed); findings quality not exhaustively validated"},
+    {"command": "tldr impact getHighestSeverity /tmp/tldr-real/dub --lang typescript --format json --quiet", "observed": "caller_count=0 with note 'Function found via AST but has no call edges in analyzed scope'; 6.4s; bug 6 still broken; grep confirms real caller at apps/web/lib/api/fraud/get-partner-application-risks.ts:50 via @/lib/get-highest-severity alias"},
+    {"command": "tldr change-impact /tmp/tldr-real/dub --lang typescript --format json --quiet", "observed": "empty JSON success with detection_method=git:HEAD, call_graph_nodes=0, 100ms; bug 2 still broken on clean tree; positive control with --files works"},
+    {"command": "tldr resources apps/web/lib/get-highest-severity.ts getHighestSeverity --lang typescript --format json --quiet", "observed": "valid JSON, 0 resources, 9ms; bug 1 resolved (pre-M1)"},
+    {"command": "tldr smells apps/web/app/(ee)/partners.dub.co/.../screenshot.tsx --lang typescript --smell-type message-chain", "observed": "exponential: 390 lines=228ms, 400=2710ms, 405=10652ms; isolated to message-chain detector on .tsx"},
+    {"command": "tldr smells /tmp/tldr-real/dub/packages --lang typescript", "observed": "1.2s, 142 smells; packages/ has no JSX-heavy files"}
+  ],
+  "bugs_resolved": [1, 5, 7],
+  "bugs_remaining": [2, 4, 6],
+  "newly_found": [
+    "vuln scans silently cap at 1000 files (MAX_DIRECTORY_FILES in tldr-cli/src/commands/remaining/vuln.rs:55); dub has 3928 TS files",
+    "vuln without --lang scans 0 TS files (historical py/rs-only fallback at vuln.rs:549)",
+    "WorkspaceConfig API plumbed through build_project_call_graph but every one of the 18 production callers passes None; feature is dead code"
+  ],
+  "bloks_used": [],
+  "corrections": [],
+  "discoveries": [
+    {"lib": "tldr-code", "finding": "ParserPool in crates/tldr-core/src/ast/parser.rs:40-42 uses LANGUAGE_TYPESCRIPT for both TypeScript and JavaScript, which does not parse JSX. The callgraph subsystem correctly uses LANGUAGE_TSX (cross-file_types.rs:644, languages/mod.rs:543) — but quality/smells/patterns all go through ParserPool and produce pathological error-recovery trees on .tsx files, causing the message-chain detector's recursive traversal to exponentially blow up"},
+    {"lib": "tldr-code", "finding": "detect_ts_base_url and detect_ts_paths in crates/tldr-core/src/callgraph/module_index.rs:1025-1059 only read <root>/tsconfig.json with no scanning for sibling tsconfigs. A pnpm monorepo with per-package tsconfigs cannot be handled by running at the workspace root"},
+    {"lib": "tldr-code", "finding": "The impact_analysis_with_ast_fallback message 'Function found via AST but has no call edges in analyzed scope' (crates/tldr-core/src/analysis/impact.rs:158) is emitted whenever the call-graph lookup fails, including the common case where the function has callers but the call graph failed to resolve them — making the note actively misleading on pnpm monorepos"}
+  ],
+  "issues": [
+    "change-impact default to GitHead with silent empty-success shape collapses three distinct failure modes (clean tree, git unavailable, explicit session mode) into identical output",
+    "message-chain detector is exponential on tree-sitter error-recovery trees (root cause: wrong grammar)",
+    "impact/whatbreaks lie softly when @/ alias resolution misses"
+  ],
+  "conventions": []
+}

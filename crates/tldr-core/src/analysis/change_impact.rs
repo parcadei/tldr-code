@@ -27,6 +27,31 @@ use crate::fs::tree::{collect_files, get_file_tree};
 use crate::types::{FunctionRef, IgnoreSpec, Language, ProjectCallGraph};
 use crate::TldrResult;
 
+/// Outcome classification for change-impact analysis.
+///
+/// Distinguishes the four real-world outcomes so that CLI consumers can map
+/// them to distinct exit codes and error messages, instead of collapsing all
+/// non-success states into an empty-OK result (VAL-005).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "details")]
+pub enum ChangeImpactStatus {
+    /// Changes detected and analyzed successfully.
+    #[default]
+    Completed,
+    /// Baseline available (git repo, HEAD exists) but zero changed files vs. HEAD.
+    NoChanges,
+    /// Baseline could not be established (not a git repo, no HEAD, etc.).
+    NoBaseline {
+        /// Human-readable description of why the baseline could not be found.
+        reason: String,
+    },
+    /// Unexpected error during change detection.
+    DetectionFailed {
+        /// Human-readable description of the detection failure.
+        reason: String,
+    },
+}
+
 /// Change impact analysis report
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeImpactReport {
@@ -44,6 +69,11 @@ pub struct ChangeImpactReport {
     /// Analysis metadata
     #[serde(default)]
     pub metadata: Option<ChangeImpactMetadata>,
+    /// Outcome classification (VAL-005). Distinguishes real analysis
+    /// from empty/missing-baseline states. `#[serde(default)]` keeps
+    /// backwards compatibility with pre-existing JSON consumers.
+    #[serde(default)]
+    pub status: ChangeImpactStatus,
 }
 
 /// Individual test function with location information
@@ -179,41 +209,83 @@ pub fn change_impact_extended(
     _test_patterns: &[String], // TODO: Use this in Phase 3
     explicit_files: Option<Vec<PathBuf>>,
 ) -> TldrResult<ChangeImpactReport> {
-    // Step 1: Determine changed files based on detection method
-    let (files, actual_method) = match &method {
+    // Step 1: Determine changed files based on detection method.
+    //
+    // VAL-005: No more silent downgrades to Session mode. Each detection
+    // outcome maps to a distinct ChangeImpactStatus so CLI consumers can
+    // report the real situation (no git vs. clean tree vs. detection
+    // error) instead of collapsing everything into empty-OK.
+    let files: Vec<PathBuf> = match &method {
         DetectionMethod::Explicit => {
-            let files = explicit_files.unwrap_or_default();
-            (files, method.clone())
-        }
-        DetectionMethod::GitHead => {
-            match detect_git_changes_head(project) {
-                Ok(files) if !files.is_empty() => (files, method.clone()),
-                Ok(_) => (vec![], method.clone()), // No changes is valid
-                Err(_) => (vec![], DetectionMethod::Session), // Git not available
-            }
-        }
-        DetectionMethod::GitBase { base } => {
-            match detect_git_changes_base(project, base) {
-                Ok(files) => (files, method.clone()),
-                Err(e) => {
-                    // Check if it's a branch not found error
-                    let err_str = e.to_string();
-                    if err_str.contains("not found") || err_str.contains("unknown revision") {
-                        return Err(e);
-                    }
-                    (vec![], DetectionMethod::Session)
+            match explicit_files {
+                Some(ref f) if !f.is_empty() => f.clone(),
+                _ => {
+                    // User asked for explicit mode but provided no paths.
+                    return Ok(make_status_report(
+                        method.clone(),
+                        language,
+                        depth,
+                        ChangeImpactStatus::NoBaseline {
+                            reason: "--files flag passed with no paths".to_string(),
+                        },
+                    ));
                 }
             }
         }
+        DetectionMethod::GitHead => match detect_git_changes_head(project) {
+            Ok(files) => files,
+            Err(e) => {
+                return Ok(make_status_report(
+                    method.clone(),
+                    language,
+                    depth,
+                    classify_detection_error(&e),
+                ));
+            }
+        },
+        DetectionMethod::GitBase { base } => match detect_git_changes_base(project, base) {
+            Ok(files) => files,
+            Err(e) => {
+                // Branch-not-found and similar "invalid base ref" errors
+                // are DetectionFailed -- baseline *was* attempted but the
+                // user-supplied reference was bad. Surface reason so the
+                // CLI can exit non-zero.
+                return Ok(make_status_report(
+                    method.clone(),
+                    language,
+                    depth,
+                    classify_detection_error(&e),
+                ));
+            }
+        },
         DetectionMethod::GitStaged => match detect_git_changes_staged(project) {
-            Ok(files) => (files, method.clone()),
-            Err(_) => (vec![], DetectionMethod::Session),
+            Ok(files) => files,
+            Err(e) => {
+                return Ok(make_status_report(
+                    method.clone(),
+                    language,
+                    depth,
+                    classify_detection_error(&e),
+                ));
+            }
         },
         DetectionMethod::GitUncommitted => match detect_git_changes_uncommitted(project) {
-            Ok(files) => (files, method.clone()),
-            Err(_) => (vec![], DetectionMethod::Session),
+            Ok(files) => files,
+            Err(e) => {
+                return Ok(make_status_report(
+                    method.clone(),
+                    language,
+                    depth,
+                    classify_detection_error(&e),
+                ));
+            }
         },
-        DetectionMethod::Session => (vec![], method.clone()),
+        DetectionMethod::Session => {
+            // Session mode is legitimately empty-call-graph territory;
+            // the user explicitly opted into it. Treat as Completed even
+            // with zero files.
+            vec![]
+        }
     };
 
     // Filter to only files matching the target language
@@ -227,21 +299,20 @@ pub fn change_impact_extended(
         })
         .collect();
 
-    // If no changed files, return empty report
+    // If no changed files, return empty report with the appropriate status.
+    //
+    // - Session mode: user asked for session tracking; empty is fine.
+    // - Explicit mode: we already early-returned above if empty_files, so
+    //   reaching here with an empty changed_files means the explicit files
+    //   were filtered out by the language mismatch -> still NoChanges.
+    // - Git modes: baseline was established successfully but zero files
+    //   differ from HEAD. NoChanges.
     if changed_files.is_empty() {
-        return Ok(ChangeImpactReport {
-            changed_files: vec![],
-            affected_tests: vec![],
-            affected_test_functions: vec![],
-            affected_functions: vec![],
-            detection_method: actual_method.to_string(),
-            metadata: Some(ChangeImpactMetadata {
-                language: language.to_string(),
-                call_graph_nodes: 0,
-                call_graph_edges: 0,
-                analysis_depth: Some(depth),
-            }),
-        });
+        let status = match &method {
+            DetectionMethod::Session => ChangeImpactStatus::Completed,
+            _ => ChangeImpactStatus::NoChanges,
+        };
+        return Ok(make_status_report(method, language, depth, status));
     }
 
     // Step 2: Build call graph
@@ -284,7 +355,7 @@ pub fn change_impact_extended(
         affected_tests,
         affected_test_functions,
         affected_functions,
-        detection_method: actual_method.to_string(),
+        detection_method: method.to_string(),
         metadata: {
             let edge_count = call_graph.edges().count();
             Some(ChangeImpactMetadata {
@@ -294,7 +365,61 @@ pub fn change_impact_extended(
                 analysis_depth: Some(depth),
             })
         },
+        status: ChangeImpactStatus::Completed,
     })
+}
+
+/// Build an empty-shape report with the specified status.
+///
+/// Used for all early-return paths (NoChanges, NoBaseline, DetectionFailed,
+/// and Session-mode Completed with no files).
+fn make_status_report(
+    method: DetectionMethod,
+    language: Language,
+    depth: usize,
+    status: ChangeImpactStatus,
+) -> ChangeImpactReport {
+    ChangeImpactReport {
+        changed_files: vec![],
+        affected_tests: vec![],
+        affected_test_functions: vec![],
+        affected_functions: vec![],
+        detection_method: method.to_string(),
+        metadata: Some(ChangeImpactMetadata {
+            language: language.to_string(),
+            call_graph_nodes: 0,
+            call_graph_edges: 0,
+            analysis_depth: Some(depth),
+        }),
+        status,
+    }
+}
+
+/// Classify a detection error into NoBaseline vs DetectionFailed.
+///
+/// - "Git not available" / "not a git repository" / missing HEAD
+///   => NoBaseline (baseline could not be established at all).
+/// - Branch-not-found / unknown-revision => DetectionFailed (git was
+///   queried successfully but the supplied ref was invalid).
+/// - Everything else => DetectionFailed (git ran but something went
+///   wrong — surface the detail).
+fn classify_detection_error(err: &crate::error::TldrError) -> ChangeImpactStatus {
+    let msg = err.to_string();
+    let lower = msg.to_lowercase();
+
+    let baseline_missing = lower.contains("git not available")
+        || lower.contains("not a git repository")
+        || lower.contains("does not have any commits")
+        || lower.contains("does not exist")
+        || lower.contains("no such file or directory")
+        || lower.contains("unknown revision head")
+        || lower.contains("needed a single revision");
+
+    if baseline_missing {
+        ChangeImpactStatus::NoBaseline { reason: msg }
+    } else {
+        ChangeImpactStatus::DetectionFailed { reason: msg }
+    }
 }
 
 /// Extract test functions from a list of test files
@@ -897,6 +1022,7 @@ mod tests {
             affected_functions: vec![],
             detection_method: "explicit".to_string(),
             metadata: None,
+            status: ChangeImpactStatus::NoChanges,
         };
 
         assert!(report.changed_files.is_empty());
@@ -1058,5 +1184,311 @@ func TestLogout(t *testing.T) {
         assert_eq!(functions.len(), 2);
         assert!(functions.iter().any(|f| f.function == "TestLogin"));
         assert!(functions.iter().any(|f| f.function == "TestLogout"));
+    }
+
+    // =========================================================================
+    // VAL-005: ChangeImpactStatus classification tests
+    //
+    // These tests pin down the four-way outcome distinction:
+    //   - Completed      (analysis ran against real changes)
+    //   - NoChanges      (baseline OK, tree clean)
+    //   - NoBaseline     (baseline could not be established)
+    //   - DetectionFailed(baseline attempted, unexpected error)
+    // =========================================================================
+
+    /// Helper: initialize a temp dir as a git repo with one commit so
+    /// `git diff HEAD` works and reports zero changed files on a clean tree.
+    fn init_git_repo_with_one_commit(dir: &Path) {
+        let run = |args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .args(args)
+                .current_dir(dir)
+                .output()
+                .expect("git should be available in the test environment");
+            assert!(
+                out.status.success(),
+                "git {:?} failed: stdout={} stderr={}",
+                args,
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+
+        run(&["init", "-q"]);
+        run(&["config", "user.email", "test@test.com"]);
+        run(&["config", "user.name", "Test"]);
+        run(&["config", "commit.gpgsign", "false"]);
+        // Write a trivial committed file so HEAD exists and the tree is
+        // clean afterwards.
+        std::fs::write(dir.join("README.md"), "# seed\n").unwrap();
+        run(&["add", "README.md"]);
+        run(&["commit", "-q", "-m", "seed"]);
+    }
+
+    /// VAL-005 #1: explicit files with a real path -> status: Completed.
+    #[test]
+    fn test_status_completed_on_real_changes() {
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path();
+
+        // Minimal Python file so the call graph has something to chew on.
+        let src = project.join("src");
+        std::fs::create_dir_all(&src).unwrap();
+        let file_path = src.join("module.py");
+        std::fs::write(&file_path, "def f():\n    return 1\n").unwrap();
+
+        let report = change_impact_extended(
+            project,
+            DetectionMethod::Explicit,
+            Language::Python,
+            10,
+            true,
+            &[],
+            Some(vec![file_path.clone()]),
+        )
+        .expect("change_impact_extended should not error on explicit files");
+
+        assert_eq!(
+            report.status,
+            ChangeImpactStatus::Completed,
+            "explicit with existing python file should be Completed, got {:?}",
+            report.status
+        );
+        assert!(
+            !report.changed_files.is_empty(),
+            "changed_files should be non-empty for a real file"
+        );
+    }
+
+    /// VAL-005 #2: clean git tree (HEAD exists, no working-tree changes)
+    /// -> status: NoChanges, changed_files empty.
+    #[test]
+    fn test_status_no_changes_on_clean_githead() {
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path();
+        init_git_repo_with_one_commit(project);
+
+        let report = change_impact_extended(
+            project,
+            DetectionMethod::GitHead,
+            Language::Python,
+            10,
+            true,
+            &[],
+            None,
+        )
+        .expect("GitHead on clean tree should return Ok");
+
+        assert_eq!(
+            report.status,
+            ChangeImpactStatus::NoChanges,
+            "clean-tree GitHead should be NoChanges, got {:?}",
+            report.status
+        );
+        assert!(report.changed_files.is_empty());
+        assert_eq!(report.detection_method, "git:HEAD");
+    }
+
+    /// VAL-005 #3: non-git tempdir -> status: NoBaseline { reason: ... }.
+    #[test]
+    fn test_status_no_baseline_when_not_git() {
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path();
+        // NOTE: no `git init` -- bare directory.
+
+        let report = change_impact_extended(
+            project,
+            DetectionMethod::GitHead,
+            Language::Python,
+            10,
+            true,
+            &[],
+            None,
+        )
+        .expect("GitHead on non-git dir should return Ok(report) with status");
+
+        match &report.status {
+            ChangeImpactStatus::NoBaseline { reason } => {
+                let lower = reason.to_lowercase();
+                assert!(
+                    lower.contains("git")
+                        || lower.contains("repository")
+                        || lower.contains("baseline"),
+                    "NoBaseline reason should mention git/repository, got: {}",
+                    reason
+                );
+            }
+            other => panic!("expected NoBaseline for non-git dir, got {:?}", other),
+        }
+        assert!(report.changed_files.is_empty());
+    }
+
+    /// VAL-005 #4: git repo but bogus base branch -> DetectionFailed (or error).
+    /// The task allows either: status=DetectionFailed { reason } OR propagated Err.
+    /// After our VAL-005 refactor, we classify into the status enum and return Ok.
+    #[test]
+    fn test_status_detection_failed_on_bad_base() {
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path();
+        init_git_repo_with_one_commit(project);
+
+        let result = change_impact_extended(
+            project,
+            DetectionMethod::GitBase {
+                base: "nonexistent-branch-xyz".to_string(),
+            },
+            Language::Python,
+            10,
+            true,
+            &[],
+            None,
+        );
+
+        match result {
+            Ok(report) => match &report.status {
+                ChangeImpactStatus::DetectionFailed { reason }
+                | ChangeImpactStatus::NoBaseline { reason } => {
+                    let lower = reason.to_lowercase();
+                    assert!(
+                        lower.contains("not found")
+                            || lower.contains("branch")
+                            || lower.contains("unknown")
+                            || lower.contains("nonexistent"),
+                        "reason should mention the bad branch, got: {}",
+                        reason
+                    );
+                }
+                other => panic!(
+                    "expected DetectionFailed/NoBaseline for bogus base, got {:?}",
+                    other
+                ),
+            },
+            Err(e) => {
+                // Also acceptable per task spec.
+                let msg = e.to_string().to_lowercase();
+                assert!(
+                    msg.contains("not found") || msg.contains("branch") || msg.contains("unknown"),
+                    "error should mention the bad branch, got: {}",
+                    e
+                );
+            }
+        }
+    }
+
+    /// VAL-005 #5: Session mode -> status: Completed even with empty files.
+    /// Session mode is legitimately empty-call-graph territory.
+    #[test]
+    fn test_status_completed_session_mode() {
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path();
+
+        let report = change_impact_extended(
+            project,
+            DetectionMethod::Session,
+            Language::Python,
+            10,
+            true,
+            &[],
+            None,
+        )
+        .expect("Session mode should not error");
+
+        assert_eq!(
+            report.status,
+            ChangeImpactStatus::Completed,
+            "Session mode should be Completed even with no files, got {:?}",
+            report.status
+        );
+        assert!(report.changed_files.is_empty());
+    }
+
+    /// VAL-005 #6: Explicit mode with no paths -> NoBaseline { reason: ... }.
+    /// This is user error -- they asked for explicit mode but supplied nothing.
+    #[test]
+    fn test_status_explicit_empty_is_no_baseline() {
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path();
+
+        let report = change_impact_extended(
+            project,
+            DetectionMethod::Explicit,
+            Language::Python,
+            10,
+            true,
+            &[],
+            None,
+        )
+        .expect("Explicit-empty should return Ok(report) with NoBaseline");
+
+        match &report.status {
+            ChangeImpactStatus::NoBaseline { reason } => {
+                let lower = reason.to_lowercase();
+                assert!(
+                    lower.contains("files") || lower.contains("paths") || lower.contains("no"),
+                    "reason should mention no files/paths supplied, got: {}",
+                    reason
+                );
+            }
+            other => panic!(
+                "expected NoBaseline for explicit-empty, got {:?}",
+                other
+            ),
+        }
+    }
+
+    /// Also validate the empty-Vec path (Some(vec![]) instead of None).
+    #[test]
+    fn test_status_explicit_empty_vec_is_no_baseline() {
+        use tempfile::TempDir;
+
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path();
+
+        let report = change_impact_extended(
+            project,
+            DetectionMethod::Explicit,
+            Language::Python,
+            10,
+            true,
+            &[],
+            Some(vec![]),
+        )
+        .expect("Explicit with empty Vec should return Ok(report) with NoBaseline");
+
+        match &report.status {
+            ChangeImpactStatus::NoBaseline { .. } => {}
+            other => panic!(
+                "expected NoBaseline for explicit empty Vec, got {:?}",
+                other
+            ),
+        }
+    }
+
+    /// Regression: `#[serde(default)]` on `status` lets older JSON (no status
+    /// field) deserialize into a Completed report.
+    #[test]
+    fn test_status_deserializes_with_default_for_legacy_json() {
+        let legacy_json = r#"{
+            "changed_files": [],
+            "affected_tests": [],
+            "affected_functions": [],
+            "detection_method": "explicit"
+        }"#;
+
+        let report: ChangeImpactReport =
+            serde_json::from_str(legacy_json).expect("legacy JSON should deserialize");
+        assert_eq!(report.status, ChangeImpactStatus::Completed);
     }
 }

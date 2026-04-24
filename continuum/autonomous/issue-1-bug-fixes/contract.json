@@ -15,8 +15,28 @@
     },
     {
       "name": "reassess-structural-bugs",
-      "status": "pending",
+      "status": "passed",
       "assertions": ["VAL-003"]
+    },
+    {
+      "name": "parser-dialect",
+      "status": "pending",
+      "assertions": ["VAL-004"]
+    },
+    {
+      "name": "change-impact-status",
+      "status": "pending",
+      "assertions": ["VAL-005"]
+    },
+    {
+      "name": "vuln-autodetect-and-cap",
+      "status": "pending",
+      "assertions": ["VAL-006"]
+    },
+    {
+      "name": "workspace-discovery",
+      "status": "pending",
+      "assertions": ["VAL-007"]
     }
   ],
   "assertions": [
@@ -47,8 +67,48 @@
       "type": "behavioral",
       "text": "Re-run the issue's six bug repros on `/tmp/tldr-real/dub` AFTER M1+M2 are complete. Produce a report at `continuum/autonomous/issue-1-bug-fixes/reports/post-consolidation-assessment.md` that, for each of the six bugs in the issue, states: (a) reproduces / does not reproduce, (b) if reproduces, the new (post-consolidation) root cause diagnosis. Expected outcomes based on static analysis: #3 vuln (walker fixed + --lang gating added in M1) → should pass; #4 smells (walker fixed) → should pass; #5 secure (walker fixed) → should pass; #7 structure autodetect (detector fixed in M2) → should pass. Expected to REMAIN broken: #2 change-impact empty-success (single code path swallows three distinct failure modes — `change_impact.rs:231` returns empty OK regardless of whether git-missing or no-changes or user-asked-session-mode), #6 impact 0-callers-with-AST-hit (on dub specifically this is workspace-awareness in the call graph: pnpm monorepo with per-package tsconfigs, `build_project_call_graph(root, lang, None, true)` at `impact.rs:83` doesn't discover sibling workspaces). This assertion's purpose is to confirm which remain and produce a fresh, clean root-cause diagnosis for #2 and #6 uncontaminated by walker/detector noise. The report gates follow-up work — do NOT attempt to fix #2 or #6 in this session; the user wants to assess first.",
       "milestone": "reassess-structural-bugs",
-      "status": "pending",
+      "status": "passed",
       "depends": ["VAL-001", "VAL-002"],
+      "worker": "sleuth (VAL-003)",
+      "evidence": "reports/post-consolidation-assessment.md, reports/m3-reassessment.json"
+    },
+    {
+      "id": "VAL-004",
+      "type": "invariant",
+      "text": "ParserPool selects the correct tree-sitter grammar dialect for `.tsx` and `.jsx` files. Currently `crates/tldr-core/src/ast/parser.rs:40-42` maps `TldrLanguage::TypeScript | TldrLanguage::JavaScript` to `tree_sitter_typescript::LANGUAGE_TYPESCRIPT` regardless of dialect. JSX content causes error-recovery, producing pathological AST that makes `find_message_chains` in `crates/tldr-core/src/quality/smells.rs:1436-1526` run in exponential time (3x per 5 extra lines on dub's `screenshot.tsx`). Fix: make `get_ts_language` and/or `parse_file` path-aware. Preferred shape: add `ParserPool::get_ts_language_for_path(lang: TldrLanguage, path: Option<&Path>) -> Option<Language>` (or rename/replace the existing `get_ts_language`), returning `LANGUAGE_TSX` for `.tsx` and `LANGUAGE_JSX` (if the grammar ships one; tree-sitter-typescript ships `LANGUAGE_TSX` only — verify and use that for both `.tsx` and `.jsx`). `ParserPool::parse_file` at line 124 already has the path — thread it through. For the path-less `ParserPool::parse(source, lang)` API, add a `parse_with_dialect(source, lang, dialect: TsxDialect)` or similar so callers who have path knowledge (callgraph/languages/mod.rs:543 already does this manually) can consolidate. The parser cache keyed by `TldrLanguage` must now key by `(TldrLanguage, Dialect)` or similar. DO NOT split `TldrLanguage::TypeScript` into `TypeScript|Tsx` variants — that would touch hundreds of match sites across the codebase; dialect selection stays inside the parser module. Acceptance: (1) `tldr smells <1584-line-tsx-file>` completes in under 5 seconds (currently times out). (2) `tldr smells /tmp/tldr-real/dub/apps/web --lang typescript --format json --quiet` completes in under 60s (currently times out). (3) A new unit test in parser.rs parses a small .tsx file with JSX (`const X = () => <div>{foo}</div>;`) and asserts zero ERROR nodes in the tree. (4) A new unit test covers message-chain smells on a representative JSX snippet with known chain length — asserts accurate count. (5) The call graph subsystem's existing TSX logic at `callgraph/languages/mod.rs:543` and `callgraph/types.rs:644` CAN migrate to the new consolidated API but this is not required; if left alone, document that both paths produce equivalent results. (6) `cargo test --workspace` no regression. (7) `cargo clippy --workspace -- -D warnings` clean.",
+      "milestone": "parser-dialect",
+      "status": "pending",
+      "depends": [],
+      "worker": null,
+      "evidence": null
+    },
+    {
+      "id": "VAL-005",
+      "type": "invariant",
+      "text": "`change_impact_extended` distinguishes 'no changes detected' from 'detection failed' from 'session mode' in its return shape, and the CLI layer maps failure states to non-zero exit codes. Root cause: `crates/tldr-core/src/analysis/change_impact.rs:188-216` collapses `Err(git not available)`, `Err(staged detection failed)`, `Err(uncommitted detection failed)` all into `(vec![], DetectionMethod::Session)` — then `231-244` returns empty OK. Users running `tldr change-impact .` on a clean tree OR without git get identical JSON to a successful analysis of an empty diff. Fix: (a) Add `pub status: ChangeImpactStatus` field to `ChangeImpactReport` struct in the same file (around line 30-47). Enum variants: `Completed`, `NoChanges`, `NoBaseline { reason: String }`, `DetectionFailed { reason: String }`. Use `#[serde(tag = \"kind\", content = \"details\")]` or similar so JSON is readable. (b) In the detection-method dispatch at lines 188-216, replace each silent-downgrade `Err(_) => (vec![], Session)` with propagation: either return early with `NoBaseline { reason }` OR bubble the error up — do NOT silently downgrade. A `GitHead` detection that found zero changes returns `NoChanges` (not `Session`). (c) The CLI wrapper `crates/tldr-cli/src/commands/change_impact.rs:109-158` inspects `report.status` and: `Completed | NoChanges` → exit 0; `NoBaseline | DetectionFailed` → print stderr line `ERROR: change-impact: <reason>; try --files <path> or --base <ref>` and exit code 3. JSON output includes the new `status` field. (d) Update/add tests: clean git tree (HEAD only, no diff) → status `NoChanges`, exit 0. Non-git dir → status `NoBaseline { reason: \"git not available\" }`, exit 3. Explicit `--files` path → status `Completed`. Staged files change → status `Completed`. Acceptance: (1) `tldr change-impact /tmp/tldr-real/dub` on the clean dub fixture (no uncommitted changes) exits 0 with JSON containing `\"status\": {\"kind\": \"NoChanges\"}` (NOT an all-empty generic success). (2) `cd /tmp && mkdir notgit && tldr change-impact /tmp/notgit` (no .git dir) exits 3 with stderr message containing 'baseline' or 'git'. (3) `cargo test --workspace` passes. (4) `cargo clippy --workspace -- -D warnings` clean. Backward-compat: consumers who parse `changed_files`, `affected_tests`, etc. see the same fields; the new `status` field is additive.",
+      "milestone": "change-impact-status",
+      "status": "pending",
+      "depends": [],
+      "worker": null,
+      "evidence": null
+    },
+    {
+      "id": "VAL-006",
+      "type": "invariant",
+      "text": "`tldr vuln` has no silent 1000-file truncation cap, and when `--lang` is omitted, it autodetects the project language via M2's `Language::from_directory`. Root cause A: `crates/tldr-cli/src/commands/remaining/vuln.rs:499` — `MAX_DIRECTORY_FILES` predates the walker and is now a vestigial foot-gun that silently truncates dub (3928 TS files) to 1000. After M1's walker hardening, the cap no longer serves a safety purpose; it causes data loss. Root cause B: `vuln.rs:523-549` — with `lang == None`, `is_supported_source_file` falls back to `\"py\" | \"rs\"` only. `tldr vuln .` on a TS repo scans 0 files because no `.py` or `.rs` file is present (outside vendored python tooling), and the user didn't pass `--lang`. Fix A: delete `MAX_DIRECTORY_FILES` and its guard at line 499. If a loud warning is desired at very high file counts, emit stderr (`WARNING: scanned N files, analysis may be slow`) but never drop input. Fix B: when `VulnArgs.lang == None`, call `Language::from_directory(&self.path)` (the M2 detector) in the command's run() method. If detection returns a language in {Python, Rust} (the taint engine's actually-supported set today), use it. If detection returns anything else, emit stderr (`ERROR: vuln does not yet support <language> taint analysis; run with --lang python or --lang rust to scan supported files`) and exit with a diagnostic code (1 or 3). If detection returns None (empty dir), preserve current behavior: empty report, exit 0. Acceptance: (1) `tldr vuln /tmp/tldr-real/dub --lang typescript --format json --quiet` reports `files_scanned >= 3000` (currently 1000 due to cap). (2) `tldr vuln /tmp/tldr-real/dub --format json --quiet` (no --lang) exits non-zero with stderr informing user TS isn't supported and suggesting `--lang python/rust`. (3) `tldr vuln <rust-repo>` (no --lang, e.g. on tldr-code itself) autodetects Rust and scans .rs files. (4) `tldr vuln <python-repo>` autodetects Python and scans .py files. (5) New unit/integration tests in `crates/tldr-cli/tests/` covering all three lang-none branches (supported-by-taint, unsupported-by-taint, empty-dir). (6) `cargo test --workspace` passes, clippy clean.",
+      "milestone": "vuln-autodetect-and-cap",
+      "status": "pending",
+      "depends": ["VAL-002"],
+      "worker": null,
+      "evidence": null
+    },
+    {
+      "id": "VAL-007",
+      "type": "invariant",
+      "text": "Call graph construction auto-discovers workspace roots from filesystem markers when no explicit `WorkspaceConfig` is passed; `impact_analysis_with_ast_fallback` emits an accurate note when its scope is limited. Root cause: `crates/tldr-core/src/callgraph/builder.rs:29-51` accepts `Option<&WorkspaceConfig>` but all 18 production callers pass `None` (verified this session: impact.rs:83, hubs.rs:111, dead.rs:123, daemon.rs:366/730/750/780/834, bugbot/first_run.rs:347, archived/arch.rs:132/340, tldr-mcp/src/tools/callgraph.rs:34, tldr-core/src/analysis/whatbreaks.rs, context/builder.rs). The `use_workspace_config: true` branch in `scanner.rs:175-228` and `builder_v2` is dead code in practice. Additionally `module_index.rs:1025-1059` (`detect_ts_base_url`, `detect_ts_paths`) scan only `<root>/tsconfig.json`, so pnpm monorepos with per-app tsconfigs get empty alias tables. Fix: (a) Add `impl WorkspaceConfig { pub fn discover(root: &Path) -> Option<WorkspaceConfig> }` in `crates/tldr-core/src/types.rs` (near the existing struct around line 920). Discovery checks, in order: `pnpm-workspace.yaml` (yaml with `packages:` glob list), root `package.json` with `\"workspaces\": [...]` (npm/yarn/pnpm style), root `Cargo.toml` with `[workspace] members = [...]`, `go.work` with `use` directives. Expand globs via `glob` crate (check if already a dep; if not, use `ignore` crate's overrides). Returns `Some(WorkspaceConfig { roots: [...] })` with absolute paths; `None` if no marker found (preserves current single-root behavior). (b) In `build_project_call_graph` at `builder.rs:29-51`, when `workspace_config` is `None`, call `WorkspaceConfig::discover(root)` and use the result if `Some`. (c) In `module_index.rs`, `detect_ts_paths` and `detect_ts_base_url` become multi-root when `config.use_workspace_config` is true: scan each workspace root's own tsconfig.json, merge alias tables with per-root scoping (e.g. alias `@/` from apps/web/tsconfig.json resolves only within apps/web/**). For simplicity v1 can merge all tsconfig path maps into a single table; improve scoping in a later pass if needed. (d) In `impact_analysis_with_ast_fallback` at `crates/tldr-core/src/analysis/impact.rs:145-164`, when returning a `CallerTree` with `caller_count: 0`, check whether the target function has `export`-visible declarations AND whether `WorkspaceConfig::discover` returned `None` or multiple roots. Refine the `note` text accordingly: (i) isolated private function → keep current `'Function found via AST but has no call edges in analyzed scope'`; (ii) exported function in a workspace monorepo → `'Function is exported but no callers found in workspace roots [/path/a, /path/b, ...]; if this is unexpected, ensure tsconfig.json path aliases resolve correctly or run from a specific package directory'`; (iii) exported function with no discovered workspace → `'Function is exported but no callers found in <root>; if this is a monorepo, the call graph currently scans only the given root — run from the workspace root or a specific package directory'`. Acceptance: (1) `tldr impact getHighestSeverity /tmp/tldr-real/dub --lang typescript` either (a) reports `caller_count >= 1` with the real caller in `apps/web/lib/api/fraud/get-partner-application-risks.ts`, OR (b) returns 0 callers but with the NEW honest note mentioning workspace/exports. Ideally (a). (2) `tldr whatbreaks getHighestSeverity /tmp/tldr-real/dub --lang typescript` same. (3) New unit tests: `WorkspaceConfig::discover` on a tempdir with `pnpm-workspace.yaml` returns workspace members; on `Cargo.toml` with `[workspace]` returns members; on bare dir returns None. (4) New integration test: a small synthetic pnpm-style workspace (apps/foo/tsconfig.json with `\"@/*\":[\"src/*\"]`) where `apps/foo/src/util.ts` exports `myUtil` and `apps/foo/src/app.ts` imports `@/util` and calls `myUtil()` — `tldr impact myUtil` from the workspace root reports >= 1 caller (currently 0). (5) `cargo test --workspace` passes, clippy clean. (6) Existing tests continue to pass — workspace discovery must not change behavior for single-root projects (no workspace markers present).",
+      "milestone": "workspace-discovery",
+      "status": "pending",
+      "depends": [],
       "worker": null,
       "evidence": null
     }

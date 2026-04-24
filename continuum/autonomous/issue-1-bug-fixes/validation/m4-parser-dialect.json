@@ -1,0 +1,22 @@
+{
+  "milestone": "parser-dialect",
+  "assertion": "VAL-004",
+  "status": "passed",
+  "commit": "9697d21",
+  "date": "2026-04-24",
+  "checks": {
+    "cargo_build_release": "green",
+    "tldr_core_lib_tests": "4621 passed (up from 4616 — 5 new VAL-004 tests)",
+    "clippy_workspace": "clean",
+    "cargo_fmt": "clean"
+  },
+  "dub_fixture_repros": {
+    "smells_screenshot_tsx_1584_lines": {"before": ">30s timeout", "after": "1s", "status": "FIXED"},
+    "smells_apps_web": {"before": "60s timeout", "after": "1s / 3216 files / 1MB JSON", "status": "FIXED"},
+    "smells_dub_root": {"before": "90s timeout", "after": "2s / 3928 files / 1.2MB JSON / 0 node_modules refs", "status": "FIXED"}
+  },
+  "changes": {
+    "crates/tldr-core/src/ast/parser.rs": "+349 -10 (path-aware grammar selection, ParserKey cache, new parse_with_path)",
+    "crates/tldr-core/src/quality/smells.rs": "+183 -30 (test + minor wiring; no algorithmic change needed once parser produces well-formed trees)"
+  }
+}

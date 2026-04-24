@@ -1,0 +1,41 @@
+{
+  "milestone": "detector-consolidation",
+  "assertion": "VAL-002",
+  "status": "passed",
+  "commit": "c492f49",
+  "date": "2026-04-24",
+  "checks": {
+    "cargo_build_release": "green",
+    "tldr_core_lib_tests": "4616 passed / 0 failed / 340 ignored (up from 4596 — 20 new tests, zero regressions)",
+    "clippy_workspace": "clean (-D warnings)",
+    "grep_audit": "fn from_directory: 1 definition (types.rs:193); fn detect_lang_from_directory: 0; fn detect_language in quality/: 0"
+  },
+  "dub_fixture_repros": {
+    "structure_root": {
+      "before": "language: python, files: []",
+      "after": "language: typescript, files: [... real TS files ...]",
+      "status": "FIXED"
+    }
+  },
+  "changes": {
+    "types.rs": "+640 lines (new manifest-priority from_directory + 20 tests)",
+    "surface_mod_rs": "-66 lines (deleted detect_lang_from_directory + detect_lang_from_directory_recursive)",
+    "quality_dead_code_rs": "-50 lines (deleted fn detect_language duplicate)",
+    "quality_health_rs": "-52 lines (deleted fn detect_language duplicate)",
+    "quality_martin_rs": "-50 lines (deleted fn detect_language duplicate)"
+  },
+  "manifest_priority": [
+    "tsconfig.json",
+    "package.json (TypeScript dep → TS, else JS)",
+    "Cargo.toml",
+    "go.mod",
+    "pyproject.toml / setup.py / requirements.txt",
+    "pom.xml",
+    "build.gradle.kts / build.gradle",
+    "Gemfile",
+    "composer.json",
+    "mix.exs",
+    "Package.swift"
+  ],
+  "fallback": "extension majority via crate::walker::walk_project (inherits DEFAULT_EXCLUDE_DIRS)"
+}
