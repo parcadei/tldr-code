@@ -48,11 +48,16 @@ use crate::output::OutputFormat;
 /// Maximum depth for taint propagation (TIGER-04 mitigation)
 const MAX_TAINT_DEPTH: usize = 5;
 
-/// Maximum file size to analyze (10 MB)
+/// Maximum file size to analyze (10 MB).
+///
+/// Per-file safety cap for the parser: an oversized file can tie up
+/// the tree-sitter parser or the line-scanner indefinitely. Unrelated
+/// to the total file count (which is bounded structurally by the
+/// walker's gitignore + default excludes rather than by a numeric
+/// cap — the legacy `MAX_DIRECTORY_FILES = 1000` cap was removed in
+/// VAL-006 because it silently truncated input on medium-to-large
+/// repos).
 const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
-
-/// Maximum files to scan in directory mode
-const MAX_DIRECTORY_FILES: u32 = 1000;
 
 // =============================================================================
 // CLI Arguments
@@ -398,8 +403,52 @@ impl VulnArgs {
             return Err(RemainingError::file_not_found(&self.path).into());
         }
 
+        // Resolve the effective language. When the user passes
+        // --lang <L> explicitly, honor it as-is (this is the VAL-001
+        // contract: the user knows what they're asking for, even if
+        // L lies outside the taint engine's native-analysis set).
+        //
+        // When --lang is omitted, consult Language::from_directory
+        // (the VAL-002 detector: manifest-priority + extension
+        // majority, skipping vendored trees). The detector returns
+        // Some(L) for any recognised language or None for an empty
+        // or unrecognised tree.
+        //
+        // VAL-006: if the autodetected language lies outside the
+        // native-analysis set {Python, Rust}, error out early with
+        // exit code 2 and a message that points the user at an
+        // explicit --lang flag. This prevents the prior silent
+        // behavior where `tldr vuln .` on a TypeScript repo would
+        // report "0 files scanned" and exit 0 (misleading).
+        //
+        // The None case (empty/unrecognised tree) preserves the
+        // historical empty-report-exit-0 behavior: the user ran the
+        // command with no analyzable input; that's not an error.
+        let effective_lang: Option<Language> = match self.lang {
+            Some(l) => Some(l),
+            None => {
+                let detected = if self.path.is_dir() {
+                    Language::from_directory(&self.path)
+                } else {
+                    Language::from_path(&self.path)
+                };
+                if let Some(l) = detected {
+                    if !is_natively_analyzed(l) {
+                        return Err(RemainingError::autodetect_unsupported(format!(
+                            "vuln: taint analysis for {} is not yet supported by autodetect; \
+                             use --lang python or --lang rust to scan files of a supported \
+                             language, or omit --lang in a pure Python/Rust project.",
+                            l.as_str()
+                        ))
+                        .into());
+                    }
+                }
+                detected
+            }
+        };
+
         // Collect files to analyze
-        let files = collect_files(&self.path, self.lang, self.no_default_ignore)?;
+        let files = collect_files(&self.path, effective_lang, self.no_default_ignore)?;
 
         // Analyze all files
         let mut all_findings: Vec<VulnFinding> = Vec::new();
@@ -490,18 +539,21 @@ fn collect_files(
         }
         files.push(path.to_path_buf());
     } else if path.is_dir() {
-        // Directory - walk and collect supported source files.
+        // Directory - walk and collect supported source files. The
+        // walker is bounded structurally (honors .gitignore and
+        // default vendor/build excludes from VAL-001); no numeric
+        // file-count cap here, since that silently truncated input
+        // on medium-to-large repos (VAL-006).
         let mut walker = ProjectWalker::new(path).max_depth(10);
         if no_default_ignore {
             walker = walker.no_default_ignore();
         }
         for entry in walker.iter() {
-            if files.len() >= MAX_DIRECTORY_FILES as usize {
-                break;
-            }
             let entry_path = entry.path();
             if entry_path.is_file() && is_supported_source_file(entry_path, lang) {
-                // Check file size
+                // Per-file size cap — an oversized file can stall
+                // the parser, but the total file count is not
+                // capped.
                 if let Ok(metadata) = fs::metadata(entry_path) {
                     if metadata.len() <= MAX_FILE_SIZE {
                         files.push(entry_path.to_path_buf());
@@ -512,6 +564,27 @@ fn collect_files(
     }
 
     Ok(files)
+}
+
+/// The languages for which the vuln command has a native, dedicated
+/// taint-analysis path.
+///
+/// - Python: tree-sitter-driven intra-procedural taint tracker in
+///   `analyze_python_file` + `analyze_node` / `analyze_function`.
+/// - Rust: line-scanning unsafe-pattern detector in `analyze_rust_file`.
+///
+/// Other languages (JS/TS, Go, Java, C, C++, Ruby, Kotlin, Swift,
+/// C#, Scala, PHP, Lua/Luau, Elixir, OCaml) fall through to the
+/// pattern-based scanner in `tldr_core::security::vuln` — those are
+/// meaningful but weaker than the dedicated paths. VAL-006 draws the
+/// autodetect-supported set at the native paths so `tldr vuln .`
+/// without `--lang` on a non-Python/Rust tree surfaces an explicit
+/// error rather than silently delivering weaker analysis.
+///
+/// An explicit `--lang <L>` bypasses this — the user has signalled
+/// they understand which backend will run.
+fn is_natively_analyzed(lang: Language) -> bool {
+    matches!(lang, Language::Python | Language::Rust)
 }
 
 /// Check whether `path` is a source file the vuln scanner should analyze.

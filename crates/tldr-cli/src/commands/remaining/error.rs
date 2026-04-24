@@ -46,6 +46,18 @@ pub enum RemainingError {
     #[error("{count} findings detected")]
     FindingsDetected { count: u32 },
 
+    /// Autodetected language is not in the command's supported set.
+    ///
+    /// Distinct from [`Self::UnsupportedLanguage`]: that variant fires
+    /// on `--lang <L>` explicitly passed where the command cannot
+    /// handle L. This variant fires when no `--lang` was given, the
+    /// autodetector identified L, and L is outside the command's
+    /// supported set. Emitted with exit code 2 so tooling can
+    /// distinguish "analysis not attempted" from "analysis attempted
+    /// and failed" (exit 1).
+    #[error("{message}")]
+    AutodetectUnsupported { message: String },
+
     /// Timeout.
     #[error("analysis timed out after {seconds}s")]
     Timeout { seconds: u64 },
@@ -120,6 +132,15 @@ impl RemainingError {
         Self::FindingsDetected { count }
     }
 
+    /// Create an AutodetectUnsupported error with a full user-facing
+    /// message. The message must describe the detected language and
+    /// point the user at explicit `--lang` flags they can pass.
+    pub fn autodetect_unsupported(message: impl Into<String>) -> Self {
+        Self::AutodetectUnsupported {
+            message: message.into(),
+        }
+    }
+
     /// Create a Timeout error
     pub fn timeout(seconds: u64) -> Self {
         Self::Timeout { seconds }
@@ -128,8 +149,15 @@ impl RemainingError {
     /// Get the appropriate exit code for this error
     pub fn exit_code(&self) -> i32 {
         match self {
-            Self::FindingsDetected { .. } => 2, // Special exit code for findings
-            _ => 1,                             // General error
+            // Special exit code for findings (scan ran, had results)
+            Self::FindingsDetected { .. } => 2,
+            // Special exit code for "scan not attempted because
+            // autodetected language is outside the supported set".
+            // Distinct from exit 1 (general failure) so tooling can
+            // tell the difference between "ran and errored" and
+            // "didn't run at all".
+            Self::AutodetectUnsupported { .. } => 2,
+            _ => 1, // General error
         }
     }
 }
@@ -159,5 +187,9 @@ mod tests {
     fn test_exit_codes() {
         assert_eq!(RemainingError::file_not_found("/foo").exit_code(), 1);
         assert_eq!(RemainingError::findings_detected(5).exit_code(), 2);
+        assert_eq!(
+            RemainingError::autodetect_unsupported("nope").exit_code(),
+            2
+        );
     }
 }
