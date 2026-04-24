@@ -8,7 +8,7 @@
 
 ## Install from Binary (Recommended)
 
-Download the latest binary for your platform from [GitHub Releases](https://github.com/parcadei/tldr-code/releases):
+Download the latest binary for macOS or Linux from [GitHub Releases](https://github.com/parcadei/tldr-code/releases). Windows users should install from source (see below).
 
 ```bash
 # macOS (Apple Silicon)

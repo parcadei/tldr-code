@@ -12,7 +12,7 @@ LLMs waste context on raw source dumps. tldr extracts the signal: function signa
 
 ### Binary (recommended)
 
-Download the latest binary for your platform from [GitHub Releases](https://github.com/parcadei/tldr-code/releases).
+Download the latest binary for macOS or Linux from [GitHub Releases](https://github.com/parcadei/tldr-code/releases). Windows users should install via cargo (see below).
 
 > **Note:** Pre-built binaries do not include semantic search (`tldr semantic`, `tldr similar`). For those commands, install via cargo with `--features semantic` (see below).
 
