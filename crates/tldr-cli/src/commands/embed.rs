@@ -34,9 +34,19 @@ pub struct EmbedArgs {
     #[arg(short, long, default_value = "arctic-m")]
     pub model: String,
 
-    /// Filter by language (e.g., rust, python)
-    #[arg(long)]
-    pub lang: Option<Vec<String>>,
+    /// Filter by language via file extensions (comma-separated, e.g., `--langs rs,py`).
+    ///
+    /// Values are parsed by `Language::from_extension`, which accepts file
+    /// extensions such as `rs`, `py`, `ts`, `go`, `java`, `rb`, `kt`, `cpp`.
+    /// Language names (`rust`, `python`) are NOT accepted here; use the
+    /// global `--lang <LANG>` flag above for name-based single-language
+    /// selection. Passing an unknown extension silently drops that entry
+    /// from the filter.
+    ///
+    /// Renamed from `--lang` (pre-VAL-009) to avoid a clap TypeId collision
+    /// with the global `--lang` arg which is `Option<Language>`.
+    #[arg(long = "langs", value_delimiter = ',')]
+    pub langs: Option<Vec<String>>,
 
     /// Include embedding vectors in output
     #[arg(long)]
@@ -76,7 +86,7 @@ impl EmbedArgs {
         ));
 
         // Convert language filters
-        let languages = self.lang.as_ref().map(|langs| {
+        let languages = self.langs.as_ref().map(|langs| {
             langs
                 .iter()
                 .filter_map(|s| tldr_core::Language::from_extension(s))

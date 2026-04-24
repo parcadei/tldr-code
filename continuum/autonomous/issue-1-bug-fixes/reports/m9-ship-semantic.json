@@ -1,0 +1,134 @@
+{
+  "milestone": "M9 / VAL-009 — ship-semantic-by-default",
+  "date": "2026-04-24",
+  "worker": "kraken",
+  "status": "passed",
+  "summary": "Shipped the `semantic` feature (semantic search + embed + similar subcommands, powered by fastembed + ONNX Runtime) in default builds. Three fixes bundled: (1) fixed the clap `--lang` panic in `tldr semantic` by renaming the subcommand-local `lang: Option<Vec<String>>` field to `langs` with `#[arg(long = \"langs\", value_delimiter = ',')]`, resolving the TypeId mismatch against the global `--lang: Option<Language>` arg. The SAME bug existed on `tldr embed` — fixed preemptively in the same commit. (2) gated `crates/tldr-core/tests/semantic_tests.rs` AND the second test file `crates/tldr-core/tests/semantic_test.rs` with `#![cfg(feature = \"semantic\")]` so workspace test builds without the feature flag compile cleanly. (3) flipped `default = []` → `default = [\"semantic\"]` in both `crates/tldr-core/Cargo.toml` and `crates/tldr-cli/Cargo.toml`. Added a regression test covering all three clap entry points. End-to-end verified: plain `cargo build --release` ships a 65MB binary with `semantic`, `embed`, `similar` subcommands; `tldr semantic \"walker that skips node_modules\" /tmp/fixture` returns the expected function at score 0.89 after a ~110MB model download on first run.",
+
+  "panic_repro": {
+    "command": "./target/release/tldr semantic 'walker' /tmp/sem-test --lang rust --format json --quiet",
+    "fixture": "/tmp/sem-test/main.rs containing `pub fn walker_that_skips_node_modules() {}`",
+    "output_before_fix": "thread 'main' panicked at clap_builder-4.5.56/src/parser/error.rs:32:9: Mismatch between definition and access of `lang`. Could not downcast to TypeId(0x8f24b19dbf5d8456e45d273df5ffe406), need to downcast to TypeId(0xc895fb3e4b2b14a22d76171e867603bb)",
+    "root_cause": "Global `--lang` arg on top-level Cli struct is `Option<Language>` (single-valued enum). `SemanticArgs` and `EmbedArgs` each defined `pub lang: Option<Vec<String>>`. Clap globbed both under the same `lang` key and panicked at runtime on TypeId downcast whenever either subcommand saw `--lang <value>`.",
+    "output_after_fix": "JSON result with total_chunks: 1, top-ranked function walker_that_skips_node_modules at score 0.58 (or filtered out when extension doesn't match — non-panic path)."
+  },
+
+  "fix_1_lang_panic": {
+    "approach": "Option A — renamed field",
+    "files_modified": [
+      "crates/tldr-cli/src/commands/semantic.rs",
+      "crates/tldr-cli/src/commands/embed.rs"
+    ],
+    "before": "pub lang: Option<Vec<String>> (no explicit long=, inherits field name)",
+    "after": "pub langs: Option<Vec<String>> with #[arg(long = \"langs\", value_delimiter = ',')]",
+    "reason_for_option_a_over_b": "Option B (change the type to Option<Language>) would lose the multi-language filter capability. Option A preserves multi-value semantics and eliminates the TypeId collision at the same time.",
+    "collateral_embed_fix": "embed.rs had the identical bug shape (pub lang: Option<Vec<String>>). Fixed it in the same commit — otherwise `tldr embed --lang rust` would continue to panic after `tldr semantic` was fixed, because embed also ships by default now.",
+    "value_delimiter_rationale": "The pre-existing doc comment promised `--lang rust,python` comma-separated syntax, but clap's default does not split on commas. Added value_delimiter = ',' to make the documented syntax actually work.",
+    "docstring_correction": "The pre-VAL-009 doc comment said `e.g., rust, python` — but `crate::Language::from_extension(\"rust\")` returns None (it expects `rs`, not `rust`). Corrected the doc to describe extensions explicitly and point users at the global `--lang <LANG>` for name-based selection.",
+    "usage_examples": {
+      "old_panic": "tldr semantic 'q' path --lang rust (PANICKED)",
+      "new_subcommand_filter": "tldr semantic 'q' path --langs rs,py (filter to .rs + .py)",
+      "new_global_flag": "tldr semantic 'q' path --lang rust (global single-language selection — works via Cli.lang)"
+    }
+  },
+
+  "fix_2_test_gating": {
+    "files_modified": [
+      "crates/tldr-core/tests/semantic_tests.rs",
+      "crates/tldr-core/tests/semantic_test.rs"
+    ],
+    "change": "Added `#![cfg(feature = \"semantic\")]` as line 1 of each file.",
+    "two_files": "The task spec named the plural form `semantic_tests.rs` but the singular `semantic_test.rs` (a separate TDD red-phase file from Session 16) had the identical `use tldr_core::semantic::...` imports and the identical failure mode. Gated both to ensure `cargo test --workspace` without the feature compiles in clean standalone.",
+    "preserved_behavior": "With --features semantic both files compile and their tests run as before; without the feature they are excluded from the test build."
+  },
+
+  "fix_3_flip_defaults": {
+    "files_modified": [
+      "crates/tldr-core/Cargo.toml",
+      "crates/tldr-cli/Cargo.toml"
+    ],
+    "change": "default = [] → default = [\"semantic\"] in both [features] sections.",
+    "downstream_impact": {
+      "plain_cargo_build_release": "now compiles the semantic stack (fastembed + ort + tokenizers + hf-hub)",
+      "cargo_install_tldr_code": "ships a semantic-enabled binary by default",
+      "make_install": "ships semantic-enabled (no --features flag needed)",
+      "binary_size_increase": "on mac arm64: 45MB (no-semantic release) → 65MB (semantic release). +20MB from ONNX Runtime + fastembed.",
+      "cold_build_time_increase": "first build of the semantic deps takes ~2-3min on a warm cargo cache (ort + fastembed + tokenizers transitive graph). Subsequent builds are near-instant after incremental compilation caches.",
+      "first_run_model_download": "~110MB from Hugging Face hub for the default arctic-m model; cached under ~/.cache/tldr (or OS equivalent via dirs crate)."
+    }
+  },
+
+  "regression_test": {
+    "file": "crates/tldr-cli/tests/semantic_lang_flag_test.rs (NEW)",
+    "gated_with": "#![cfg(feature = \"semantic\")]",
+    "tests_added": 3,
+    "coverage": {
+      "test_semantic_langs_flag_does_not_panic": "asserts `tldr semantic q <dir> --langs rs` exits without a clap panic or TypeId error",
+      "test_semantic_global_lang_flag_does_not_panic": "asserts `tldr semantic q <dir> --lang rust` (global flag inherited from Cli struct) exits without a clap panic or TypeId error",
+      "test_embed_langs_flag_does_not_panic": "asserts `tldr embed <dir> --langs rs` exits without a clap panic or TypeId error — protects against regression on the embed command's parallel fix"
+    },
+    "invocation": "cargo test -p tldr-cli --test semantic_lang_flag_test --features semantic",
+    "result": "3 passed / 0 failed / 0 ignored"
+  },
+
+  "verification": {
+    "cargo_build_release_default_features": "success (binary ships semantic, embed, similar subcommands)",
+    "cargo_clippy_workspace_D_warnings_default_features": "clean",
+    "cargo_clippy_workspace_D_warnings_all_features": "clean",
+    "cargo_test_tldr_core_lib": "4737 passed / 0 failed / 356 ignored (up from VAL-008 baseline 4675 — the +62 comes from the now-compiled semantic module's unit tests that were previously gated out with `default = []`)",
+    "cargo_test_workspace_no_features_compile": "compiles; only pre-existing gate2_corpus_scan + gate3_octagon_ab_comparison test binaries fail to compile (they reference `ENABLE_GUARD_NARROWING` / `ENABLE_OCTAGON_DOMAIN` which do not exist at HEAD — this failure also exists pre-VAL-009 and is unrelated to this milestone)",
+    "cargo_test_workspace_semantic_features_compile": "same two pre-existing gate failures — no new failures introduced by feature flip",
+    "installed_binary_help_shows_three_subcommands": "embed, semantic, similar all listed under Commands",
+    "lang_flag_no_panic": "tldr semantic 'q' path --langs rs exits 0 with valid JSON; tldr semantic 'q' path --lang rust exits 0 with valid JSON (global flag path); tldr embed path --langs rs exits 0 with valid JSON",
+    "end_to_end_semantic": {
+      "fixture": "/tmp/sem-e2e/main.rs (2 functions: walker_that_skips_node_modules, parse_json_string)",
+      "query": "walker that skips node_modules",
+      "top_hit": "walker_that_skips_node_modules",
+      "top_score": 0.89,
+      "runner_up": "parse_json_string at 0.70",
+      "search_latency_ms": 7,
+      "total_chunks_indexed": 2
+    }
+  },
+
+  "files_modified": [
+    "crates/tldr-core/Cargo.toml",
+    "crates/tldr-cli/Cargo.toml",
+    "crates/tldr-core/tests/semantic_tests.rs",
+    "crates/tldr-core/tests/semantic_test.rs",
+    "crates/tldr-cli/src/commands/semantic.rs",
+    "crates/tldr-cli/src/commands/embed.rs",
+    "crates/tldr-cli/tests/semantic_lang_flag_test.rs (NEW)",
+    "continuum/autonomous/issue-1-bug-fixes/contract.json",
+    "continuum/autonomous/issue-1-bug-fixes/reports/m9-ship-semantic.json (NEW)"
+  ],
+
+  "files_deliberately_NOT_modified": [
+    ".github/workflows/release.yml (CI/packaging story is VAL-010 scope, not VAL-009)",
+    "crates/tldr-core/tests/gate2_corpus_scan.rs (pre-existing broken test; references ENABLE_GUARD_NARROWING that does not exist at HEAD)",
+    "crates/tldr-core/tests/gate3_octagon_ab_comparison.rs (pre-existing broken test; references ENABLE_OCTAGON_DOMAIN that does not exist at HEAD)",
+    "crates/tldr-cli/src/commands/references.rs (separate `pub lang: Option<String>` — different type, different subcommand; no reported panic; not in VAL-009 scope)"
+  ],
+
+  "constraints_observed": {
+    "no_github_push": "Local commit only. User decides release tagging separately.",
+    "no_release_workflow_changes": ".github/workflows/release.yml untouched. linux-aarch64 or any other platform concerns are a separate VAL-010.",
+    "no_allow_attributes": "No `#[allow(...)]` suppressions added anywhere.",
+    "no_weakened_assertions": "Regression test asserts on panic-free exit AND absence of TypeId mismatch in stderr — both load-bearing.",
+    "no_git_stash": "Used `git show HEAD:<path>` to confirm pre-existing state of gate2/gate3 broken tests without touching working tree.",
+    "explicit_git_add": "Commit staged via explicit `git add <path>` for each of the 9 files. ~90 files of stale cargo-fmt drift in the working tree were NOT captured."
+  },
+
+  "discoveries": [
+    "The `embed` subcommand had the identical `pub lang: Option<Vec<String>>` shape as `semantic` — same TypeId-mismatch bug. The task spec named only `semantic.rs`, but fixing only semantic would leave embed panicking once semantic shipped by default. Both commands ship in the same default release, so both needed to be fixed atomically.",
+    "A second test file `crates/tldr-core/tests/semantic_test.rs` (singular) exists alongside the plural `semantic_tests.rs` and has the identical unconditional `use tldr_core::semantic::...` imports. The task spec named only the plural form, but gating only one would leave the other failing to compile when the feature is off. Both gated.",
+    "The pre-VAL-009 doc comment on `SemanticArgs.lang` promised `e.g., rust, python` but the implementation (index.rs:222) calls `crate::Language::from_extension(s)` which rejects full language names. The renamed `langs` field got an accurate docstring plus a working `value_delimiter = ','` for the documented comma-separated syntax.",
+    "`cargo test -p tldr-core --lib` jumped from 4675 (VAL-008 baseline) to 4737 with the feature flipped on — the +62 tests come from the semantic module's own #[test]-annotated lib tests which previously got gated out by `default = []`. Those tests are now part of the default lib test suite."
+  ],
+
+  "remaining_work_and_followups": {
+    "val_010_candidate": "The repo's .github/workflows/release.yml assumes a no-semantic build target. With defaults flipped, CI release builds now need to cross-compile fastembed + ort for all target triples. This is not a VAL-009 concern — it's a release-engineering concern the user asked to defer.",
+    "gate2_gate3_broken_tests": "Two tldr-core integration tests reference constants (`ENABLE_GUARD_NARROWING`, `ENABLE_OCTAGON_DOMAIN`) that are not defined in `crates/tldr-core/src/dataflow/abstract_interp.rs`. These were broken at the Initial release commit. Not addressed in VAL-009 per spec scope.",
+    "ci_model_download": "First-run semantic tests download ~110MB from HF hub. A separate follow-up may want to pin model artifacts into CI cache, mock the fastembed layer in tests, or mark network-dependent tests `#[ignore]` so they only run in targeted e2e pipelines."
+  }
+}

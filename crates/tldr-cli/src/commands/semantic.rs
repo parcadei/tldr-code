@@ -36,9 +36,19 @@ pub struct SemanticArgs {
     #[arg(short, long, default_value = "arctic-m")]
     pub model: String,
 
-    /// Filter by language (e.g., rust, python)
-    #[arg(long)]
-    pub lang: Option<Vec<String>>,
+    /// Filter by language via file extensions (comma-separated, e.g., `--langs rs,py`).
+    ///
+    /// Values are parsed by `Language::from_extension`, which accepts file
+    /// extensions such as `rs`, `py`, `ts`, `go`, `java`, `rb`, `kt`, `cpp`.
+    /// Language names (`rust`, `python`) are NOT accepted here; use the
+    /// global `--lang <LANG>` flag above for name-based single-language
+    /// selection. Passing an unknown extension silently drops that entry
+    /// from the filter.
+    ///
+    /// Renamed from `--lang` (pre-VAL-009) to avoid a clap TypeId collision
+    /// with the global `--lang` arg which is `Option<Language>`.
+    #[arg(long = "langs", value_delimiter = ',')]
+    pub langs: Option<Vec<String>>,
 
     /// Disable embedding cache
     #[arg(long)]
@@ -63,7 +73,7 @@ impl SemanticArgs {
         let build_opts = BuildOptions {
             model,
             granularity: ChunkGranularity::Function,
-            languages: self.lang.clone(),
+            languages: self.langs.clone(),
             show_progress: !quiet,
             use_cache: !self.no_cache,
         };

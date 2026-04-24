@@ -99,7 +99,7 @@ md5 = { workspace = true }
 fs2 = { workspace = true }
 
 [features]
-default = []
+default = ["semantic"]
 semantic = ["dep:fastembed"]
 # Experimental V2 call graph builder with parallel processing (Phase 14)
 experimental_callgraph = []

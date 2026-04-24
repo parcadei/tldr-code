@@ -1,3 +1,4 @@
+#![cfg(feature = "semantic")]
 //! Tests for Semantic Search Module (Session 16)
 //!
 //! Commands tested: semantic, embed, similar

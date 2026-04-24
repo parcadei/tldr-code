@@ -1,3 +1,4 @@
+#![cfg(feature = "semantic")]
 //! Integration tests for the semantic module
 //!
 //! Tests cover:
