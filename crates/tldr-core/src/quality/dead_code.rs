@@ -32,7 +32,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::walker::{walk_project, ProjectWalker};
+use crate::walker::walk_project;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
@@ -207,10 +207,25 @@ pub fn analyze_dead_code(
     language: Option<Language>,
     entry_points: &[&str],
 ) -> TldrResult<DeadCodeReport> {
-    // Detect language if not specified
+    // Detect language if not specified (delegates to the canonical
+    // `Language::from_path` / `Language::from_directory` detectors — VAL-002).
     let lang = match language {
         Some(l) => l,
-        None => detect_language(path)?,
+        None => {
+            if path.is_file() {
+                Language::from_path(path).ok_or_else(|| {
+                    TldrError::UnsupportedLanguage(
+                        path.extension()
+                            .and_then(|e| e.to_str())
+                            .unwrap_or("unknown")
+                            .to_string(),
+                    )
+                })?
+            } else {
+                Language::from_directory(path)
+                    .ok_or_else(|| TldrError::NoSupportedFiles(path.to_path_buf()))?
+            }
+        }
     };
 
     // Collect module infos for function enumeration
@@ -498,35 +513,6 @@ fn collect_function_lines(
     }
 
     lines
-}
-
-/// Detect language from path
-fn detect_language(path: &Path) -> TldrResult<Language> {
-    if path.is_file() {
-        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            return Language::from_extension(ext)
-                .ok_or_else(|| TldrError::UnsupportedLanguage(ext.to_string()));
-        }
-    }
-
-    // For directories, scan for common file types
-    let mut counts: HashMap<Language, usize> = HashMap::new();
-
-    for entry in ProjectWalker::new(path).max_depth(3).iter() {
-        if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
-            if let Some(ext) = entry.path().extension().and_then(|e| e.to_str()) {
-                if let Some(lang) = Language::from_extension(ext) {
-                    *counts.entry(lang).or_default() += 1;
-                }
-            }
-        }
-    }
-
-    counts
-        .into_iter()
-        .max_by_key(|(_, count)| *count)
-        .map(|(lang, _)| lang)
-        .ok_or_else(|| TldrError::NoSupportedFiles(path.to_path_buf()))
 }
 
 #[cfg(test)]

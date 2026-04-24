@@ -1,0 +1,67 @@
+{
+  "task": "VAL-002 directory language detector consolidation",
+  "assertion": "VAL-002",
+  "result": "success",
+  "implemented": "Rewrote Language::from_directory in crates/tldr-core/src/types.rs to apply manifest priority BEFORE extension majority. New algorithm: (1) Scan root, each immediate subdir, and each grandchild (depth <= 2 — covers apps/*/ and packages/*/ monorepo layouts) for a build manifest, skipping hidden dirs and the walker's DEFAULT_EXCLUDE_DIRS (node_modules, target, dist, build, .next, __pycache__, vendor, .git). Among all manifests found, the one with the highest precedence wins; ties at same precedence break on shallowest depth. Precedence order: tsconfig.json > package.json > Cargo.toml > go.mod > pyproject.toml/setup.py/requirements.txt > pom.xml > build.gradle.kts/build.gradle > Gemfile > composer.json > mix.exs > Package.swift. package.json returns TypeScript when a `\"typescript\": ...` dep is declared (cheap substring+colon heuristic, no JSON parser dep), else JavaScript. build.gradle.kts tie-breaks Kotlin vs Java by counting .kt/.kts vs .java across the walk. (2) If no manifest found, fall back to extension majority via walk_project (which already skips node_modules, honors .gitignore, does not follow symlinks). Deleted duplicates: crates/tldr-core/src/surface/mod.rs lost fn detect_lang_from_directory and fn detect_lang_from_directory_recursive (58 lines). crates/tldr-core/src/quality/{dead_code,health,martin}.rs each lost fn detect_language (~28 lines each). Each deletion site now inlines `if path.is_file() { Language::from_path(path).ok_or_else(...) } else { Language::from_directory(path).ok_or_else(...) }`. surface::detect_lang_from_path now delegates to Language::from_directory via as_str(). Rationale for precedence-beats-depth: in pnpm monorepos the root package.json holds tooling only (turbo, prettier, eslint) while real TS lives in packages/ui/tsconfig.json — a depth-first rule would return JavaScript (wrong), tsconfig-beats-package-json returns TypeScript (correct, matches dub acceptance).",
+  "remaining": "",
+  "tests": {
+    "added": [
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_manifest_tsconfig_wins_over_python_files", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_cargo_toml_wins", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_go_mod_wins", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_pyproject_toml_wins", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_extension_fallback_when_no_manifest", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_skips_node_modules", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_package_json_without_ts_dep_is_javascript", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_package_json_with_typescript_dep_is_typescript", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_manifest_in_subdirectory", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_manifest_at_root_beats_subdirectory", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_gradle_kts_with_more_kotlin_than_java_is_kotlin", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_gradle_kts_with_more_java_than_kotlin_is_java", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_pom_xml_is_java", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_gemfile_is_ruby", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_composer_json_is_php", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_mix_exs_is_elixir", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_package_swift_is_swift", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_setup_py_is_python", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_requirements_txt_is_python", "verifies": "VAL-002"},
+      {"file": "crates/tldr-core/src/types.rs", "name": "test_from_directory_pnpm_monorepo_with_bare_root_package_json", "verifies": "VAL-002"}
+    ],
+    "command": "cargo test -p tldr-core --lib test_from_directory",
+    "exit_code": 0,
+    "result": "20 passed; 0 failed",
+    "tldr_core_lib_total": "4616 passed; 0 failed; 340 ignored (+20 new tests vs m1 baseline of 4596)"
+  },
+  "checks": [
+    {"command": "cargo build --release", "exit_code": 0, "observed": "clean release build"},
+    {"command": "cargo clippy --workspace -- -D warnings", "exit_code": 0, "observed": "no warnings"},
+    {"command": "cargo fmt --check on modified files (types.rs, surface/mod.rs, quality/{dead_code,health,martin}.rs)", "observed": "clean"},
+    {"command": "cargo test -p tldr-core --lib", "exit_code": 0, "observed": "4616 passed, 0 failed, 340 ignored"},
+    {"command": "cargo test -p tldr-cli --lib", "exit_code": 1, "observed": "1359 passed, 1 failed (pre-existing bugbot::text_format::test_text_format_generic_evidence_shows_numbers — unrelated, documented in m1 report)"},
+    {"command": "cargo test -p tldr-cli --test walker_consolidation_tests", "exit_code": 0, "observed": "4 passed, 0 failed"},
+    {"command": "cargo test -p tldr-cli --test secure_sweep_tests", "exit_code": 0, "observed": "22 passed, 0 failed"},
+    {"command": "tldr structure /tmp/tldr-real/dub --format json --quiet", "observed": "language: typescript (was python before VAL-002)"},
+    {"command": "tldr impact getHighestSeverity /tmp/tldr-real/dub", "observed": "Building call graph for . (TypeScript)..."},
+    {"command": "grep -rn 'fn from_directory|fn detect_lang_from_directory|fn detect_lang_from_directory_recursive' crates/tldr-core/src crates/tldr-cli/src --include=*.rs | grep -v tests/", "observed": "EXACTLY ONE MATCH: crates/tldr-core/src/types.rs:193 pub fn from_directory(...). Zero detect_lang_from_directory* matches."},
+    {"command": "grep -rn 'fn detect_language' crates/tldr-core/src/quality --include=*.rs", "observed": "empty (zero duplicates remain)"},
+    {"command": "tldr structure . --format json --quiet (on tldr-code itself, Rust project)", "observed": "language: rust (correctly detected via Cargo.toml manifest)"}
+  ],
+  "blocks_used": [],
+  "corrections": [
+    "Initial design scanned only depth 0 (root) + depth 1 (immediate subdirs) per literal reading of task spec — but the spec also said 'monorepos often have manifests in packages/*/' which is depth 2. Depth-1-only would have returned JavaScript for dub (root package.json has no typescript dep, apps/ and packages/ at depth 1 have no manifests, tsconfig.json lives at depth 2 in apps/web/ and packages/ui/). Extended scanning depth to <= 2 to cover this case.",
+    "Initial design: shallowest-path-wins + precedence-for-ties. This made a root package.json (no TS dep) return JavaScript even when nested tsconfig.json files exist. Changed to: precedence-wins + shallowest-for-ties. Now tsconfig.json at depth 2 beats package.json at depth 0 → TypeScript wins for dub. Added test_from_directory_pnpm_monorepo_with_bare_root_package_json to pin this behavior.",
+    "clippy flagged a `for m in present { match { return Some(...) } ... }` loop as never-looping (all arms return unconditionally). Refactored to `let m = *present.first()?; let lang = match m { ... }; Some(lang)` — cleaner and matches actual semantics (the first element is always the winner since present is pre-sorted by precedence)."
+  ],
+  "discoveries": [
+    {"lib": "tldr-code", "finding": "dub root package.json has NO `typescript` dep — only turbo/prettier/eslint tooling. Real TypeScript lives in apps/web/tsconfig.json and packages/ui/tsconfig.json (both depth 2). A depth-1-only manifest scan would have returned JavaScript — the fix was to extend to depth 2 AND use precedence-beats-depth so tsconfig.json anywhere beats package.json anywhere."},
+    {"lib": "tldr-code", "finding": "cargo fmt -- <path> does NOT format only those paths; on this workspace it formatted 90+ files (all with pre-existing fmt drift). Staged only the 5 files I actually edited so the commit stays focused; the pre-existing workspace fmt drift is outside VAL-002 scope (m1 report already flagged this)."},
+    {"lib": "tldr-code", "finding": "ProjectWalker was imported but unused in quality/dead_code.rs and quality/martin.rs after detect_language deletion (only walk_project still used). Dropped the ProjectWalker from both imports to keep clippy clean without a suppress."},
+    {"lib": "tldr-code", "finding": "HashMap was imported in quality/health.rs solely for the deleted detect_language's local count map. Other functions in health.rs use IndexMap, not HashMap. Dropped the `use std::collections::HashMap;` line to silence the unused_imports warning without suppressing it."}
+  ],
+  "issues": [],
+  "conventions": [
+    "Directory-level language detection has exactly ONE entry point: Language::from_directory at crates/tldr-core/src/types.rs. Do NOT add `fn detect_lang_from_directory` or a local `fn detect_language(path: &Path) -> TldrResult<Language>` in any new command — inline `Language::from_path(path).ok_or_else(...)` for files and `Language::from_directory(path).ok_or_else(...)` for directories.",
+    "Manifest priority in from_directory is strict precedence: lower precedence index wins regardless of depth. Add new manifest kinds to MANIFEST_PRECEDENCE in the correct slot (higher-confidence manifests earlier) and extend language_from_manifest_set with the new arm.",
+    "package.json is probed via a cheap substring heuristic (check for `\"typescript\"` key with colon) to avoid pulling serde_json into the hot detection path. If a future manifest rule needs richer JSON reads, factor out and share a single read — don't add another ad-hoc parser."
+  ]
+}

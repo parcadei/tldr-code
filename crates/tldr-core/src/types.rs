@@ -142,19 +142,63 @@ impl Language {
             .and_then(|ext| Self::from_extension(&format!(".{}", ext)))
     }
 
-    /// Detect dominant language from files in a directory
+    /// Detect dominant language from files in a directory.
     ///
-    /// Uses the shared project walker to find source files at any depth,
-    /// skipping `node_modules`/`target`/hidden/.gitignored paths. This is
-    /// important for projects with deep directory structures like
-    /// Java (src/main/java/...) or C# (src/...).
+    /// # Detection strategy (VAL-002)
+    ///
+    /// This is a two-stage detector designed to survive pnpm / npm / yarn
+    /// monorepos whose `node_modules/.pnpm/**` trees ship thousands of
+    /// `.py` files from `node-gyp` (which would otherwise win a naive
+    /// extension vote even on a clearly TypeScript project).
+    ///
+    /// 1. **Manifest priority (preferred).** Scan the root, each immediate
+    ///    subdirectory, and each grandchild (depth ≤ 2 — covers
+    ///    `apps/*/` and `packages/*/` monorepo layouts) for a build
+    ///    manifest. Among all manifests found, the one with the highest
+    ///    precedence wins; ties at the same precedence are broken by
+    ///    shallowest path.
+    ///
+    ///    | Precedence | Manifest(s)                                 | Language                      |
+    ///    |-----------:|---------------------------------------------|-------------------------------|
+    ///    |          1 | `tsconfig.json`                             | TypeScript                    |
+    ///    |          2 | `package.json`                              | TypeScript (with TS dep) or JS |
+    ///    |          3 | `Cargo.toml`                                | Rust                          |
+    ///    |          4 | `go.mod`                                    | Go                            |
+    ///    |        5–7 | `pyproject.toml`, `setup.py`, `requirements.txt` | Python                   |
+    ///    |          8 | `pom.xml`                                   | Java                          |
+    ///    |       9–10 | `build.gradle.kts`, `build.gradle`          | Kotlin or Java (tie-break below) |
+    ///    |         11 | `Gemfile`                                   | Ruby                          |
+    ///    |         12 | `composer.json`                             | PHP                           |
+    ///    |         13 | `mix.exs`                                   | Elixir                        |
+    ///    |         14 | `Package.swift`                             | Swift                         |
+    ///
+    ///    Gradle tie-break: when `build.gradle.kts` is the winning
+    ///    manifest, count `.kt` vs `.java` files across the walk; pick
+    ///    Kotlin when `.kt` > `.java`, else Java.
+    ///
+    ///    *Why precedence beats depth.* In a pnpm monorepo the root
+    ///    `package.json` usually holds tooling (turbo, prettier, eslint)
+    ///    with no `typescript` dep, while the real language lives in
+    ///    `packages/ui/tsconfig.json` and `apps/web/tsconfig.json`. A
+    ///    depth-first rule would return JavaScript (wrong). Letting
+    ///    `tsconfig.json` at depth 2 beat a plain `package.json` at
+    ///    depth 0 returns TypeScript (correct).
+    ///
+    /// 2. **Extension-majority fallback.** If no manifest matched, walk
+    ///    the directory via [`crate::walker::walk_project`] (skipping
+    ///    `node_modules`/`target`/hidden/.gitignored paths, not following
+    ///    symlinks), count file extensions, and return the majority
+    ///    language. Returns `None` when the directory has no recognised
+    ///    source files.
     pub fn from_directory(path: &std::path::Path) -> Option<Self> {
+        // --- Stage 1: manifest priority ------------------------------------
+        if let Some(lang) = detect_from_manifests(path) {
+            return Some(lang);
+        }
+
+        // --- Stage 2: extension-majority fallback --------------------------
         use std::collections::HashMap;
-
         let mut counts: HashMap<Language, usize> = HashMap::new();
-
-        // Recursively walk the directory via the shared walker (skips
-        // hidden, node_modules, target, etc., does not follow symlinks).
         for entry in crate::walker::walk_project(path) {
             let p = entry.path();
             if p.is_file() {
@@ -229,6 +273,256 @@ impl Language {
             Language::Elixir,
             Language::Ocaml,
         ]
+    }
+}
+
+// =============================================================================
+// Manifest-based language detection (VAL-002)
+//
+// `Language::from_directory` uses these helpers as its first stage before
+// falling back to extension majority. The goal is to beat false positives on
+// pnpm/npm monorepos where `node_modules/.pnpm/**` ships thousands of `.py`
+// files from node-gyp and wins a naive extension vote on TypeScript projects.
+// =============================================================================
+
+/// Manifest-file precedence when multiple candidates exist at the same depth.
+///
+/// Ordered from highest to lowest precedence. Earlier entries win ties in
+/// `detect_from_manifests`; see `Language::from_directory` docs for the full
+/// rationale.
+const MANIFEST_PRECEDENCE: &[ManifestKind] = &[
+    ManifestKind::TsConfig,
+    ManifestKind::PackageJson,
+    ManifestKind::CargoToml,
+    ManifestKind::GoMod,
+    ManifestKind::PyProject,
+    ManifestKind::SetupPy,
+    ManifestKind::RequirementsTxt,
+    ManifestKind::PomXml,
+    ManifestKind::BuildGradleKts,
+    ManifestKind::BuildGradle,
+    ManifestKind::Gemfile,
+    ManifestKind::ComposerJson,
+    ManifestKind::MixExs,
+    ManifestKind::PackageSwift,
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ManifestKind {
+    TsConfig,
+    PackageJson,
+    CargoToml,
+    GoMod,
+    PyProject,
+    SetupPy,
+    RequirementsTxt,
+    PomXml,
+    BuildGradle,
+    BuildGradleKts,
+    Gemfile,
+    ComposerJson,
+    MixExs,
+    PackageSwift,
+}
+
+impl ManifestKind {
+    fn file_name(self) -> &'static str {
+        match self {
+            ManifestKind::TsConfig => "tsconfig.json",
+            ManifestKind::PackageJson => "package.json",
+            ManifestKind::CargoToml => "Cargo.toml",
+            ManifestKind::GoMod => "go.mod",
+            ManifestKind::PyProject => "pyproject.toml",
+            ManifestKind::SetupPy => "setup.py",
+            ManifestKind::RequirementsTxt => "requirements.txt",
+            ManifestKind::PomXml => "pom.xml",
+            ManifestKind::BuildGradle => "build.gradle",
+            ManifestKind::BuildGradleKts => "build.gradle.kts",
+            ManifestKind::Gemfile => "Gemfile",
+            ManifestKind::ComposerJson => "composer.json",
+            ManifestKind::MixExs => "mix.exs",
+            ManifestKind::PackageSwift => "Package.swift",
+        }
+    }
+}
+
+/// Collect the immediate-child directories of `parent`, skipping hidden
+/// directories and the well-known vendor list so monorepo sub-manifests
+/// buried in `node_modules` / `target` can't mask the real project.
+fn collect_child_dirs(parent: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if !p.is_dir() {
+            continue;
+        }
+        if let Some(name) = p.file_name().and_then(|n| n.to_str()) {
+            if name.starts_with('.') || crate::walker::DEFAULT_EXCLUDE_DIRS.contains(&name) {
+                continue;
+            }
+        }
+        out.push(p);
+    }
+    out
+}
+
+/// Look for a project manifest at `root` and at immediate subdirectories
+/// (depth <= 2 to cover pnpm/Yarn/Turbo monorepos that keep manifests in
+/// `packages/*/` and `apps/*/`).
+///
+/// Returns `None` when no manifest is found; callers fall back to
+/// extension-majority detection. Precedence works as follows (VAL-002):
+///
+/// 1. Collect every manifest at every scanned depth.
+/// 2. Pick the one with the highest slot in [`MANIFEST_PRECEDENCE`]
+///    (TsConfig > PackageJson > CargoToml > ...). This means a
+///    `tsconfig.json` nested in `packages/ui/` beats a bare
+///    `package.json` at the root — the correct outcome for monorepos
+///    where the root package.json holds only tooling (prettier, turbo,
+///    eslint) and the language lives in subpackages.
+/// 3. If multiple manifests share the top precedence, pick the shallowest
+///    path. (Purely cosmetic — the same manifest at any depth resolves
+///    to the same language.)
+fn detect_from_manifests(root: &std::path::Path) -> Option<Language> {
+    // Collect candidate directories at depth 0 (root), depth 1 (immediate
+    // subdirs), and depth 2 (grandchildren — needed for `packages/*/`).
+    let mut dirs: Vec<(usize, std::path::PathBuf)> = Vec::new();
+    dirs.push((0, root.to_path_buf()));
+
+    let depth1 = collect_child_dirs(root);
+    for d1 in &depth1 {
+        dirs.push((1, d1.clone()));
+    }
+    for d1 in &depth1 {
+        for d2 in collect_child_dirs(d1) {
+            dirs.push((2, d2));
+        }
+    }
+
+    // Collect every (precedence_index, depth, dir, manifest) tuple, then
+    // pick the entry with the smallest precedence_index, breaking ties by
+    // shallowest depth.
+    let mut best: Option<(usize, usize, std::path::PathBuf, ManifestKind)> = None;
+    for (depth, dir) in &dirs {
+        for (idx, m) in MANIFEST_PRECEDENCE.iter().copied().enumerate() {
+            if dir.join(m.file_name()).is_file() {
+                let candidate = (idx, *depth, dir.clone(), m);
+                best = match best {
+                    None => Some(candidate),
+                    Some(ref existing) => {
+                        // Pick the lower precedence index, then shallower depth.
+                        if candidate.0 < existing.0
+                            || (candidate.0 == existing.0 && candidate.1 < existing.1)
+                        {
+                            Some(candidate)
+                        } else {
+                            Some(existing.clone())
+                        }
+                    }
+                };
+            }
+        }
+    }
+
+    best.and_then(|(_, _, dir, m)| language_from_manifest_set(&dir, &[m], root))
+}
+
+/// Convert a sorted-by-precedence set of manifests (all at the same depth)
+/// into a [`Language`], applying the per-manifest heuristics.
+///
+/// The `project_root` is the original path passed to `from_directory` and is
+/// used to count `.kt` vs `.java` files when resolving Gradle ambiguity.
+///
+/// `present` is assumed non-empty; the first manifest wins since it has
+/// highest precedence per [`MANIFEST_PRECEDENCE`].
+fn language_from_manifest_set(
+    dir: &std::path::Path,
+    present: &[ManifestKind],
+    project_root: &std::path::Path,
+) -> Option<Language> {
+    let m = *present.first()?;
+    let lang = match m {
+        ManifestKind::TsConfig => Language::TypeScript,
+        ManifestKind::PackageJson => {
+            // TypeScript when a typescript dep is declared, else JavaScript.
+            // If we can't read the file, assume JavaScript.
+            let p = dir.join(m.file_name());
+            match std::fs::read_to_string(&p) {
+                Ok(contents) if package_json_has_typescript_dep(&contents) => Language::TypeScript,
+                _ => Language::JavaScript,
+            }
+        }
+        ManifestKind::CargoToml => Language::Rust,
+        ManifestKind::GoMod => Language::Go,
+        ManifestKind::PyProject | ManifestKind::SetupPy | ManifestKind::RequirementsTxt => {
+            Language::Python
+        }
+        ManifestKind::PomXml => Language::Java,
+        ManifestKind::BuildGradleKts => {
+            // Kotlin DSL Gradle file; could be either Kotlin or Java.
+            // Tie-break by counting .kt vs .java across the project.
+            gradle_kotlin_vs_java(project_root)
+        }
+        ManifestKind::BuildGradle => Language::Java,
+        ManifestKind::Gemfile => Language::Ruby,
+        ManifestKind::ComposerJson => Language::Php,
+        ManifestKind::MixExs => Language::Elixir,
+        ManifestKind::PackageSwift => Language::Swift,
+    };
+    Some(lang)
+}
+
+/// Lightweight check for "typescript" as a dep / devDep / peerDep in a
+/// `package.json`. We avoid pulling in a JSON parser for this — a substring
+/// check inside the dependency-section braces is enough to separate the
+/// common TS project case from a pure-JS project.
+fn package_json_has_typescript_dep(contents: &str) -> bool {
+    // Fast reject: the word "typescript" must appear somewhere.
+    if !contents.contains("typescript") {
+        return false;
+    }
+    // Simple heuristic: look for `"typescript"` as a JSON key (followed by
+    // a colon with optional whitespace). Matches:
+    //   "typescript": "5.0.0"
+    //   "typescript" : "^5"
+    // Won't match a dep whose *value* contains the word (e.g. a package
+    // called "my-typescript-helper" would only trip the fast-reject, not
+    // this check).
+    let mut rest = contents;
+    while let Some(idx) = rest.find("\"typescript\"") {
+        let after = &rest[idx + "\"typescript\"".len()..];
+        let trimmed = after.trim_start();
+        if trimmed.starts_with(':') {
+            return true;
+        }
+        rest = after;
+    }
+    false
+}
+
+/// Resolve Gradle ambiguity: return Kotlin when `.kt` file count across the
+/// project walk exceeds `.java`, otherwise Java.
+fn gradle_kotlin_vs_java(root: &std::path::Path) -> Language {
+    let mut kt = 0usize;
+    let mut java = 0usize;
+    for entry in crate::walker::walk_project(root) {
+        let p = entry.path();
+        if !p.is_file() {
+            continue;
+        }
+        match p.extension().and_then(|e| e.to_str()) {
+            Some("kt") | Some("kts") => kt += 1,
+            Some("java") => java += 1,
+            _ => {}
+        }
+    }
+    if kt > java {
+        Language::Kotlin
+    } else {
+        Language::Java
     }
 }
 
@@ -1911,12 +2205,16 @@ mod tests {
 
     #[test]
     fn test_language_from_directory_detects_majority() {
+        // Tests the *extension majority* fallback when no manifest file is
+        // present. If any manifest file (tsconfig.json, Cargo.toml, etc.)
+        // were present at the root or immediate subdirs, manifest priority
+        // would override extension counts.
         use std::fs;
         let tmp = std::env::temp_dir().join("tldr_test_from_dir_majority");
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(&tmp).unwrap();
 
-        // Create 3 TypeScript files and 1 Python file
+        // Create 3 TypeScript files and 1 Python file (no manifests)
         fs::write(tmp.join("a.ts"), "").unwrap();
         fs::write(tmp.join("b.ts"), "").unwrap();
         fs::write(tmp.join("c.tsx"), "").unwrap();
@@ -1948,7 +2246,7 @@ mod tests {
         let _ = fs::remove_dir_all(&tmp);
         fs::create_dir_all(tmp.join("src")).unwrap();
 
-        // No files at top level, only in subdirectory
+        // No files at top level, only in subdirectory (no manifests)
         fs::write(tmp.join("src/main.go"), "").unwrap();
         fs::write(tmp.join("src/util.go"), "").unwrap();
 
@@ -1963,5 +2261,325 @@ mod tests {
         let path = std::path::Path::new("/tmp/tldr_nonexistent_dir_xyz");
         let detected = Language::from_directory(path);
         assert_eq!(detected, None);
+    }
+
+    // =========================================================================
+    // VAL-002: Manifest-priority tests for Language::from_directory
+    //
+    // The directory-level language detector must prefer manifest files
+    // (tsconfig.json, Cargo.toml, go.mod, pyproject.toml, etc.) over
+    // extension majority. This fixes the pnpm-monorepo bug where
+    // `tldr structure /tmp/tldr-real/dub` reported Python because
+    // node_modules/.pnpm/** ships thousands of .py files from node-gyp.
+    // =========================================================================
+
+    #[test]
+    fn test_from_directory_manifest_tsconfig_wins_over_python_files() {
+        // tsconfig.json is a TypeScript manifest; even if there's a bait
+        // node_modules/fake.py, the manifest must win. The walker also
+        // skips node_modules so it should be counted-zero anyway.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("tsconfig.json"), "{}").unwrap();
+        std::fs::write(dir.path().join("index.ts"), "").unwrap();
+        std::fs::create_dir_all(dir.path().join("node_modules")).unwrap();
+        std::fs::write(dir.path().join("node_modules/fake.py"), "").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(
+            detected,
+            Some(Language::TypeScript),
+            "tsconfig.json manifest must win over Python bait and the walker must skip node_modules"
+        );
+    }
+
+    #[test]
+    fn test_from_directory_cargo_toml_wins() {
+        // Cargo.toml manifest must win over .py files scattered around.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("Cargo.toml"), "[package]\nname=\"x\"\n").unwrap();
+        std::fs::create_dir_all(dir.path().join("src")).unwrap();
+        std::fs::write(dir.path().join("src/main.rs"), "fn main() {}").unwrap();
+        std::fs::write(dir.path().join("extra.py"), "").unwrap();
+        std::fs::create_dir_all(dir.path().join("scripts")).unwrap();
+        std::fs::write(dir.path().join("scripts/helper.py"), "").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::Rust));
+    }
+
+    #[test]
+    fn test_from_directory_go_mod_wins() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("go.mod"), "module example.com/x\n").unwrap();
+        std::fs::write(dir.path().join("main.go"), "package main").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::Go));
+    }
+
+    #[test]
+    fn test_from_directory_pyproject_toml_wins() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("pyproject.toml"), "[project]\nname=\"x\"\n").unwrap();
+        std::fs::create_dir_all(dir.path().join("src")).unwrap();
+        std::fs::write(dir.path().join("src/a.py"), "def x(): pass").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::Python));
+    }
+
+    #[test]
+    fn test_from_directory_extension_fallback_when_no_manifest() {
+        // No manifests at all -> fall back to extension majority.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.rs"), "").unwrap();
+        std::fs::write(dir.path().join("b.rs"), "").unwrap();
+        std::fs::write(dir.path().join("c.rs"), "").unwrap();
+        std::fs::write(dir.path().join("d.rs"), "").unwrap();
+        std::fs::write(dir.path().join("e.rs"), "").unwrap();
+        std::fs::write(dir.path().join("x.py"), "").unwrap();
+        std::fs::write(dir.path().join("y.py"), "").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(
+            detected,
+            Some(Language::Rust),
+            "extension majority must still work when no manifest is present"
+        );
+    }
+
+    #[test]
+    fn test_from_directory_skips_node_modules() {
+        // No manifest. Root has 2 .rs files. node_modules/stuff.py x 10.
+        // The walker must skip node_modules so the count is 2 Rust vs 0 Python.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.rs"), "").unwrap();
+        std::fs::write(dir.path().join("b.rs"), "").unwrap();
+
+        let nm = dir.path().join("node_modules");
+        std::fs::create_dir_all(&nm).unwrap();
+        for i in 0..10 {
+            std::fs::write(nm.join(format!("bait_{}.py", i)), "").unwrap();
+        }
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(
+            detected,
+            Some(Language::Rust),
+            "walker must skip node_modules even without manifest priority"
+        );
+    }
+
+    #[test]
+    fn test_from_directory_package_json_without_ts_dep_is_javascript() {
+        // package.json present WITHOUT a typescript dep + .js files -> JavaScript.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("package.json"),
+            r#"{"name":"x","dependencies":{"express":"1.0.0"}}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("index.js"), "module.exports = {}").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::JavaScript));
+    }
+
+    #[test]
+    fn test_from_directory_package_json_with_typescript_dep_is_typescript() {
+        // package.json with "typescript" devDep should pick TypeScript even
+        // when tsconfig.json is absent.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("package.json"),
+            r#"{"name":"x","devDependencies":{"typescript":"5.0.0"}}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("index.ts"), "").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::TypeScript));
+    }
+
+    #[test]
+    fn test_from_directory_manifest_in_subdirectory() {
+        // Monorepo: Cargo.toml lives in packages/core/ (one level deep).
+        // The root has no manifest but the detector should still see it.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("packages/core")).unwrap();
+        std::fs::write(
+            dir.path().join("packages/core/Cargo.toml"),
+            "[package]\nname=\"core\"\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("packages/core/lib.rs"), "").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::Rust));
+    }
+
+    #[test]
+    fn test_from_directory_manifest_at_root_beats_subdirectory() {
+        // tsconfig.json at root should beat a Cargo.toml one level deep
+        // (shallower path wins as tiebreak).
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("tsconfig.json"), "{}").unwrap();
+        std::fs::create_dir_all(dir.path().join("rust_subproject")).unwrap();
+        std::fs::write(
+            dir.path().join("rust_subproject/Cargo.toml"),
+            "[package]\nname=\"nested\"\n",
+        )
+        .unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(
+            detected,
+            Some(Language::TypeScript),
+            "manifest at root must win over manifest in subdirectory"
+        );
+    }
+
+    #[test]
+    fn test_from_directory_gradle_kts_with_more_kotlin_than_java_is_kotlin() {
+        // build.gradle.kts present. If there are more .kt files than .java,
+        // we pick Kotlin; otherwise Java.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("build.gradle.kts"), "").unwrap();
+        std::fs::write(dir.path().join("A.kt"), "").unwrap();
+        std::fs::write(dir.path().join("B.kt"), "").unwrap();
+        std::fs::write(dir.path().join("C.java"), "").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::Kotlin));
+    }
+
+    #[test]
+    fn test_from_directory_gradle_kts_with_more_java_than_kotlin_is_java() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("build.gradle.kts"), "").unwrap();
+        std::fs::write(dir.path().join("A.java"), "").unwrap();
+        std::fs::write(dir.path().join("B.java"), "").unwrap();
+        std::fs::write(dir.path().join("C.kt"), "").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::Java));
+    }
+
+    #[test]
+    fn test_from_directory_pom_xml_is_java() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("pom.xml"), "<project/>").unwrap();
+        std::fs::write(dir.path().join("App.java"), "").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::Java));
+    }
+
+    #[test]
+    fn test_from_directory_gemfile_is_ruby() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("Gemfile"), "source 'x'").unwrap();
+        std::fs::write(dir.path().join("app.rb"), "").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::Ruby));
+    }
+
+    #[test]
+    fn test_from_directory_composer_json_is_php() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("composer.json"), "{}").unwrap();
+        std::fs::write(dir.path().join("index.php"), "").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::Php));
+    }
+
+    #[test]
+    fn test_from_directory_mix_exs_is_elixir() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("mix.exs"), "defmodule X do\nend").unwrap();
+        std::fs::write(dir.path().join("lib.ex"), "").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::Elixir));
+    }
+
+    #[test]
+    fn test_from_directory_package_swift_is_swift() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("Package.swift"), "// swift-tools-version:5").unwrap();
+        std::fs::write(dir.path().join("App.swift"), "").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::Swift));
+    }
+
+    #[test]
+    fn test_from_directory_setup_py_is_python() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("setup.py"), "from setuptools import setup").unwrap();
+        std::fs::write(dir.path().join("a.py"), "").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::Python));
+    }
+
+    #[test]
+    fn test_from_directory_requirements_txt_is_python() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("requirements.txt"), "requests==2.0").unwrap();
+        std::fs::write(dir.path().join("a.py"), "").unwrap();
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(detected, Some(Language::Python));
+    }
+
+    #[test]
+    fn test_from_directory_pnpm_monorepo_with_bare_root_package_json() {
+        // Simulates a dub-style pnpm monorepo:
+        //   - root package.json has no typescript dep (it holds turbo/prettier)
+        //   - apps/web/tsconfig.json exists (depth 2)
+        //   - packages/ui/tsconfig.json exists (depth 2)
+        //   - node_modules has Python bait
+        // The tsconfig.json at depth 2 must beat the root package.json that
+        // would otherwise return JavaScript.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("package.json"),
+            r#"{"name":"monorepo","devDependencies":{"turbo":"^1"}}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("prettier.config.js"), "module.exports = {}").unwrap();
+
+        std::fs::create_dir_all(dir.path().join("apps/web")).unwrap();
+        std::fs::write(dir.path().join("apps/web/tsconfig.json"), "{}").unwrap();
+        std::fs::write(
+            dir.path().join("apps/web/page.tsx"),
+            "export default () => null",
+        )
+        .unwrap();
+
+        std::fs::create_dir_all(dir.path().join("packages/ui")).unwrap();
+        std::fs::write(dir.path().join("packages/ui/tsconfig.json"), "{}").unwrap();
+        std::fs::write(dir.path().join("packages/ui/index.ts"), "").unwrap();
+
+        // Python bait inside node_modules (as node-gyp ships)
+        std::fs::create_dir_all(dir.path().join("node_modules/.pnpm/fake/lib")).unwrap();
+        for i in 0..100 {
+            std::fs::write(
+                dir.path()
+                    .join(format!("node_modules/.pnpm/fake/lib/{}.py", i)),
+                "",
+            )
+            .unwrap();
+        }
+
+        let detected = Language::from_directory(dir.path());
+        assert_eq!(
+            detected,
+            Some(Language::TypeScript),
+            "pnpm monorepo with tsconfig.json in packages/*/ must detect TypeScript, not JS (from root package.json without TS dep) and not Python (from node_modules bait)"
+        );
     }
 }

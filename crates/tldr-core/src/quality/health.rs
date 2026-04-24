@@ -25,7 +25,6 @@
 //! println!("Hotspots: {}", report.summary.hotspot_count);
 //! ```
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -675,10 +674,26 @@ pub fn run_health(
         return Err(TldrError::PathNotFound(path.to_path_buf()));
     }
 
-    // Step 2: Detect language if not specified (T3 mitigation)
+    // Step 2: Detect language if not specified (T3 mitigation; delegates to
+    // the canonical `Language::from_path` / `Language::from_directory`
+    // detectors — VAL-002).
     let detected_language = match language {
         Some(l) => l,
-        None => detect_language(path)?,
+        None => {
+            if path.is_file() {
+                Language::from_path(path).ok_or_else(|| {
+                    TldrError::UnsupportedLanguage(
+                        path.extension()
+                            .and_then(|e| e.to_str())
+                            .unwrap_or("unknown")
+                            .to_string(),
+                    )
+                })?
+            } else {
+                Language::from_directory(path)
+                    .ok_or_else(|| TldrError::NoSupportedFiles(path.to_path_buf()))?
+            }
+        }
     };
 
     // Create the report
@@ -876,37 +891,6 @@ impl AnalysisMetrics for CouplingReport {
     fn findings_count(&self) -> usize {
         self.tight_coupling_count
     }
-}
-
-/// Detect the dominant language in a path.
-fn detect_language(path: &Path) -> TldrResult<Language> {
-    if path.is_file() {
-        return Language::from_path(path).ok_or_else(|| {
-            TldrError::UnsupportedLanguage(
-                path.extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("unknown")
-                    .to_string(),
-            )
-        });
-    }
-
-    // For directories, scan for common file types
-    let mut counts: HashMap<Language, usize> = HashMap::new();
-
-    for entry in ProjectWalker::new(path).max_depth(5).iter() {
-        if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
-            if let Some(lang) = Language::from_path(entry.path()) {
-                *counts.entry(lang).or_default() += 1;
-            }
-        }
-    }
-
-    counts
-        .into_iter()
-        .max_by_key(|(_, count)| *count)
-        .map(|(lang, _)| lang)
-        .ok_or_else(|| TldrError::NoSupportedFiles(path.to_path_buf()))
 }
 
 /// Collect module infos for dead code analysis.

@@ -165,8 +165,10 @@ fn api_location_line(api: &ApiEntry) -> usize {
 /// Detect language from a file path or directory.
 ///
 /// For file paths, returns `Some(lang)` when the target has a recognisable
-/// extension. For directories, scans the immediate contents and returns the
-/// language of the most common recognised extension.
+/// extension. For directories, delegates to [`crate::types::Language::from_directory`]
+/// — the single canonical directory-level detector (see VAL-002) which applies
+/// manifest priority (`tsconfig.json`, `Cargo.toml`, `go.mod`, ...) before
+/// falling back to extension majority.
 ///
 /// Returns `None` for bare package names (no `/` or `.`) so callers can fall
 /// back to their own default. Also returns `None` for empty directories or
@@ -174,9 +176,10 @@ fn api_location_line(api: &ApiEntry) -> usize {
 fn detect_lang_from_path(target: &str) -> Option<&'static str> {
     let path = std::path::Path::new(target);
 
-    // If the target is a directory on disk, scan its contents.
+    // If the target is a directory on disk, delegate to the canonical
+    // directory-level detector in `crate::types::Language::from_directory`.
     if path.is_dir() {
-        return detect_lang_from_directory(path);
+        return crate::types::Language::from_directory(path).map(|l| l.as_str());
     }
 
     // Only attempt extension-based detection when the target looks like a file
@@ -218,61 +221,6 @@ fn detect_lang_from_filename(target: &str) -> Option<&'static str> {
         "rb" => Some("ruby"),
         "ex" | "exs" => Some("elixir"),
         _ => None,
-    }
-}
-
-/// Scan a directory's immediate children and detect the dominant language.
-///
-/// Counts files by recognised language and returns the one with the most files.
-/// Handles compound extensions like `.d.ts` by checking file names before
-/// falling back to `std::path::Path::extension()`.
-fn detect_lang_from_directory(dir: &std::path::Path) -> Option<&'static str> {
-    let mut counts: std::collections::HashMap<&'static str, usize> =
-        std::collections::HashMap::new();
-
-    detect_lang_from_directory_recursive(dir, &mut counts, 0);
-
-    counts
-        .into_iter()
-        .max_by_key(|&(_, count)| count)
-        .map(|(lang, _)| lang)
-}
-
-/// Recursively scan up to 3 levels deep to find source files for language detection.
-fn detect_lang_from_directory_recursive(
-    dir: &std::path::Path,
-    counts: &mut std::collections::HashMap<&'static str, usize>,
-    depth: usize,
-) {
-    const MAX_DEPTH: usize = 3;
-    if depth > MAX_DEPTH {
-        return;
-    }
-
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_file() {
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if let Some(lang) = detect_lang_from_filename(name) {
-                    *counts.entry(lang).or_insert(0) += 1;
-                }
-            }
-        } else if path.is_dir() {
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if !name.starts_with('.')
-                    && !matches!(
-                        name,
-                        "node_modules" | "target" | "vendor" | "__pycache__" | ".git"
-                    )
-                {
-                    detect_lang_from_directory_recursive(&path, counts, depth + 1);
-                }
-            }
-        }
     }
 }
 
