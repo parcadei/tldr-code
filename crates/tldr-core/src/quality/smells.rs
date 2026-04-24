@@ -629,10 +629,14 @@ fn collect_tier1_ast_smells(
     suggest: bool,
     smells: &mut Vec<SmellFinding>,
 ) {
+    // Thread the path into every Tier 1 detector so TS/JS files get the
+    // right grammar dialect (VAL-004). Without this, JSX produces an
+    // error-laden AST and the message-chain detector goes exponential.
+    let p = Some(path);
     if should_analyze_smell(smell_filter, SmellType::DeepNesting) {
         append_ast_findings(
             smells,
-            detect_deep_nesting(source, lang_str),
+            detect_deep_nesting_with_path(source, lang_str, p),
             path,
             suggest,
             "Reduce nesting by extracting inner blocks into helper functions or using early returns",
@@ -641,7 +645,7 @@ fn collect_tier1_ast_smells(
     if should_analyze_smell(smell_filter, SmellType::DataClass) {
         append_ast_findings(
             smells,
-            detect_data_classes(source, lang_str),
+            detect_data_classes_with_path(source, lang_str, p),
             path,
             suggest,
             "Consider adding behavior methods or converting to a plain data structure (dataclass, struct, record)",
@@ -650,7 +654,7 @@ fn collect_tier1_ast_smells(
     if should_analyze_smell(smell_filter, SmellType::LazyElement) {
         append_ast_findings(
             smells,
-            detect_lazy_elements(source, lang_str),
+            detect_lazy_elements_with_path(source, lang_str, p),
             path,
             suggest,
             "Consider inlining this class into its caller or merging with a related class",
@@ -659,7 +663,7 @@ fn collect_tier1_ast_smells(
     if should_analyze_smell(smell_filter, SmellType::MessageChain) {
         append_ast_findings(
             smells,
-            detect_message_chains(source, lang_str),
+            detect_message_chains_with_path(source, lang_str, p),
             path,
             suggest,
             "Apply the Law of Demeter: hide the chain behind a single method call",
@@ -668,7 +672,7 @@ fn collect_tier1_ast_smells(
     if should_analyze_smell(smell_filter, SmellType::PrimitiveObsession) {
         append_ast_findings(
             smells,
-            detect_primitive_obsession(source, lang_str),
+            detect_primitive_obsession_with_path(source, lang_str, p),
             path,
             suggest,
             "Introduce domain types (value objects) instead of passing raw primitives",
@@ -1025,10 +1029,21 @@ fn resolve_language(lang_str: &str) -> Option<Language> {
 }
 
 /// Parse source code into a tree-sitter tree, returning None on failure.
-fn parse_source(source: &str, lang_str: &str) -> Option<(tree_sitter::Tree, Language)> {
+///
+/// When `path` is `Some` the parser uses the file extension to pick the
+/// right TS/JS grammar dialect. This is critical for `.tsx` / `.jsx`
+/// files — without it the TS grammar produces hundreds of ERROR nodes
+/// and the downstream smell detectors go pathological (VAL-004).
+fn parse_source(
+    source: &str,
+    lang_str: &str,
+    path: Option<&Path>,
+) -> Option<(tree_sitter::Tree, Language)> {
     let lang = resolve_language(lang_str)?;
     let pool = ParserPool::new();
-    pool.parse(source, lang).ok().map(|tree| (tree, lang))
+    pool.parse_with_path(source, lang, path)
+        .ok()
+        .map(|tree| (tree, lang))
 }
 
 /// Check if a tree-sitter node kind represents a control flow construct that increases nesting.
@@ -1070,7 +1085,18 @@ fn is_nesting_node(kind: &str) -> bool {
 /// # Returns
 /// A vector of `SmellFinding` for each function with deep nesting.
 pub fn detect_deep_nesting(source: &str, language: &str) -> Vec<SmellFinding> {
-    let (tree, _lang) = match parse_source(source, language) {
+    detect_deep_nesting_with_path(source, language, None)
+}
+
+/// Path-aware variant of [`detect_deep_nesting`]. When `path` is `Some`
+/// and the file extension indicates a TS/JS dialect, the TSX grammar is
+/// used — preventing JSX files from entering error-recovery mode.
+pub fn detect_deep_nesting_with_path(
+    source: &str,
+    language: &str,
+    path: Option<&Path>,
+) -> Vec<SmellFinding> {
+    let (tree, _lang) = match parse_source(source, language, path) {
         Some(v) => v,
         None => return Vec::new(),
     };
@@ -1191,7 +1217,16 @@ fn extract_function_name(node: tree_sitter::Node, source: &str) -> Option<String
 /// # Returns
 /// A vector of `SmellFinding` for each data class detected.
 pub fn detect_data_classes(source: &str, language: &str) -> Vec<SmellFinding> {
-    let (tree, _lang) = match parse_source(source, language) {
+    detect_data_classes_with_path(source, language, None)
+}
+
+/// Path-aware variant of [`detect_data_classes`].
+pub fn detect_data_classes_with_path(
+    source: &str,
+    language: &str,
+    path: Option<&Path>,
+) -> Vec<SmellFinding> {
+    let (tree, _lang) = match parse_source(source, language, path) {
         Some(v) => v,
         None => return Vec::new(),
     };
@@ -1352,7 +1387,16 @@ fn count_self_assignments(node: tree_sitter::Node, source: &str) -> usize {
 /// # Returns
 /// A vector of `SmellFinding` for each lazy element detected.
 pub fn detect_lazy_elements(source: &str, language: &str) -> Vec<SmellFinding> {
-    let (tree, _lang) = match parse_source(source, language) {
+    detect_lazy_elements_with_path(source, language, None)
+}
+
+/// Path-aware variant of [`detect_lazy_elements`].
+pub fn detect_lazy_elements_with_path(
+    source: &str,
+    language: &str,
+    path: Option<&Path>,
+) -> Vec<SmellFinding> {
+    let (tree, _lang) = match parse_source(source, language, path) {
         Some(v) => v,
         None => return Vec::new(),
     };
@@ -1418,7 +1462,21 @@ fn find_classes_and_check_lazy(
 /// # Returns
 /// A vector of `SmellFinding` for each message chain detected.
 pub fn detect_message_chains(source: &str, language: &str) -> Vec<SmellFinding> {
-    let (tree, _lang) = match parse_source(source, language) {
+    detect_message_chains_with_path(source, language, None)
+}
+
+/// Path-aware variant of [`detect_message_chains`].
+///
+/// This is the critical path for VAL-004: on JSX files the TS grammar
+/// produces an error-laden AST that sends [`find_message_chains`] into
+/// pathological, near-exponential traversal. Threading the path through
+/// so the TSX grammar is picked keeps the detector linear.
+pub fn detect_message_chains_with_path(
+    source: &str,
+    language: &str,
+    path: Option<&Path>,
+) -> Vec<SmellFinding> {
+    let (tree, _lang) = match parse_source(source, language, path) {
         Some(v) => v,
         None => return Vec::new(),
     };
@@ -1557,7 +1615,16 @@ fn is_primitive_type(type_str: &str) -> bool {
 /// # Returns
 /// A vector of `SmellFinding` for each function with primitive obsession.
 pub fn detect_primitive_obsession(source: &str, language: &str) -> Vec<SmellFinding> {
-    let (tree, _lang) = match parse_source(source, language) {
+    detect_primitive_obsession_with_path(source, language, None)
+}
+
+/// Path-aware variant of [`detect_primitive_obsession`].
+pub fn detect_primitive_obsession_with_path(
+    source: &str,
+    language: &str,
+    path: Option<&Path>,
+) -> Vec<SmellFinding> {
+    let (tree, _lang) = match parse_source(source, language, path) {
         Some(v) => v,
         None => return Vec::new(),
     };
@@ -7001,5 +7068,137 @@ class BigDataBag:
             "C# method using 'this' for own + 4 foreign should trigger feature envy"
         );
         assert_eq!(findings[0].smell_type, SmellType::FeatureEnvy);
+    }
+
+    // ---------------------------------------------------------------------
+    // VAL-004 regression: message-chain detector must stay linear on JSX.
+    //
+    // Before the fix, the end-to-end `detect_smells` path (analyze_file ->
+    // detect_message_chains -> parse_source -> ParserPool::parse) fed JSX
+    // through the TypeScript grammar. The resulting ERROR-laden AST sent
+    // `find_message_chains` into pathological traversal, turning dub's
+    // 1584-line screenshot.tsx into a 30s+ timeout.
+    //
+    // This test synthesises an SVG-in-JSX fixture that mirrors the
+    // structure of screenshot.tsx (heavy <path> elements with string
+    // attributes, template-literal `clipPath`, self-closing tags). The
+    // assertion combines two signals:
+    //   1. Budget-based: the full targeted smells scan must complete in
+    //      well under 5 seconds — catches any future exponential
+    //      regression regardless of cause.
+    //   2. No-panic: detect_smells must return Ok.
+    //
+    // The timing bound is loose so the test is not flaky on slow CI.
+    // ---------------------------------------------------------------------
+    #[test]
+    fn test_smells_on_tsx_completes_quickly() {
+        use std::time::Instant;
+
+        let dir = tempfile::tempdir().unwrap();
+        let tsx_path = dir.path().join("heavy.tsx");
+
+        // Header: React + useId pattern borrowed from dub screenshot.tsx.
+        let mut src = String::from(
+            r#"import { ProgramProps } from "@/lib/types";
+import { cn, truncate } from "@dub/utils";
+import { SVGProps, useId } from "react";
+
+export function Screenshot({
+  program,
+  ...rest
+}: { program: Pick<ProgramProps, "name" | "logo"> } & SVGProps<SVGSVGElement>) {
+  const id = useId();
+  return (
+    <svg
+      width="1200"
+      height="631"
+      fill="none"
+      viewBox="0 0 1200 631"
+      {...rest}
+      className={cn("select-none text-[var(--brand)]", rest.className)}
+    >
+      <g clipPath={`url(#${id}-a)`}>
+"#,
+        );
+
+        // Body: ~200 repetitions of a `<path>` element with a string-literal
+        // `d` attribute and sibling path + fillRule nodes. This is the exact
+        // pattern that breaks the TS grammar (SVG attribute values look like
+        // stray expressions to TS's parser) and balloons the node tree with
+        // ERROR nodes when the wrong grammar is picked.
+        //
+        // Template braces in the JSX source must be written literally as
+        // `{...}`; inside `format!` they are escaped as `{{...}}`. The `{i}`
+        // placeholder is interpolated.
+        for i in 0..200 {
+            src.push_str(&format!(
+                "        <path\n          fill=\"#e5e5e5\"\n          d=\"M{i}.636 22.714h1.755v11.209h-1.755v-.74a4.05 4.05 0 0 1-2.339.74c-2.261 0-4.094-1.849-4.094-4.13\"\n        />\n        <path\n          fill=\"#171717\"\n          fillRule=\"evenodd\"\n          d=\"M{i}.918 22.714h1.754v3.69a4.05 4.05 0 0 1 2.34-.74c2.26 0 4.094 1.849 4.094 4.13\"\n          clipRule=\"evenodd\"\n        />\n        <g clipPath={{`url(#${{id}}-{i}-b)`}}>\n          <text className={{`label label-${{i}}`}}>{{`row-${{i}}`}}</text>\n        </g>\n",
+                i = i
+            ));
+        }
+        src.push_str(
+            r#"      </g>
+    </svg>
+  );
+}
+"#,
+        );
+
+        assert!(
+            src.lines().count() >= 500,
+            "synthetic fixture should be >=500 lines (got {})",
+            src.lines().count()
+        );
+        std::fs::write(&tsx_path, &src).unwrap();
+
+        let start = Instant::now();
+        let report = detect_smells(
+            dir.path(),
+            ThresholdPreset::Default,
+            Some(SmellType::MessageChain),
+            true,
+        )
+        .expect("detect_smells should succeed");
+        let elapsed = start.elapsed();
+
+        // Before the fix this test would not return within 5 seconds on
+        // machines where the real dub screenshot.tsx timed out at 30s+.
+        assert!(
+            elapsed.as_secs() < 5,
+            "message-chain detection on synthetic .tsx took {:?} (>5s); \
+             the parser likely picked the wrong grammar and produced an \
+             error-laden AST that sent the detector exponential",
+            elapsed
+        );
+        // Smoke-check: the scan actually ran over the file.
+        assert!(
+            report.files_scanned >= 1,
+            "scan should have covered the .tsx file (files_scanned={})",
+            report.files_scanned
+        );
+
+        // Direct assertion on the grammar fix: routing the file through
+        // `ParserPool::parse_file` (the path-aware entry) must produce a
+        // tree with zero ERROR nodes. Before the fix this was dozens.
+        fn count_err(n: tree_sitter::Node) -> usize {
+            let mut c = if n.is_error() { 1 } else { 0 };
+            let mut cur = n.walk();
+            for ch in n.children(&mut cur) {
+                c += count_err(ch);
+            }
+            c
+        }
+        let pool = crate::ast::parser::ParserPool::new();
+        let (tree, _src, _lang) = pool
+            .parse_file(&tsx_path)
+            .expect("parse_file should succeed");
+        let err_count = count_err(tree.root_node());
+        assert_eq!(
+            err_count, 0,
+            "ParserPool::parse_file picked the wrong grammar for .tsx: \
+             found {} ERROR nodes in the tree. This is the root cause of \
+             the smells exponential blow-up.",
+            err_count
+        );
     }
 }
