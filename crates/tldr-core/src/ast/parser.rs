@@ -535,4 +535,70 @@ mod tests {
              must be audited"
         );
     }
+
+    // ---------------------------------------------------------------------
+    // VAL-008: parser health audit for all 18 supported languages.
+    //
+    // Each of tldr's 18 supported languages must have a tree-sitter grammar
+    // capable of parsing a minimal valid source file with zero ERROR and
+    // zero MISSING nodes. This test codifies the baseline so that grammar
+    // regressions (e.g. an incompatible ABI bump) get caught immediately.
+    // ---------------------------------------------------------------------
+    #[test]
+    fn test_all_18_parsers_accept_minimal_valid_snippet() {
+        let snippets: &[(TldrLanguage, &str)] = &[
+            (TldrLanguage::Python, "def x(): pass"),
+            (TldrLanguage::TypeScript, "export const x: number = 1;"),
+            (TldrLanguage::JavaScript, "export const x = 1;"),
+            (TldrLanguage::Go, "package main\nfunc main() {}"),
+            (TldrLanguage::Rust, "pub fn x() {}"),
+            (
+                TldrLanguage::Java,
+                "class X { public static void main(String[] a){} }",
+            ),
+            (TldrLanguage::C, "int main(){return 0;}"),
+            (TldrLanguage::Cpp, "int main(){return 0;}"),
+            (TldrLanguage::Ruby, "def x; end"),
+            (TldrLanguage::Kotlin, "fun x(){}"),
+            (TldrLanguage::Swift, "func x(){}"),
+            (TldrLanguage::CSharp, "class X { static void Main(){} }"),
+            (
+                TldrLanguage::Scala,
+                "object X { def main(args: Array[String]): Unit = {} }",
+            ),
+            (TldrLanguage::Php, "<?php function x(){}"),
+            (TldrLanguage::Lua, "function x() end"),
+            (TldrLanguage::Luau, "function x() end"),
+            (
+                TldrLanguage::Elixir,
+                "defmodule X do\ndef y(), do: :ok\nend",
+            ),
+            (TldrLanguage::Ocaml, "let x () = ()"),
+        ];
+
+        let pool = ParserPool::new();
+        let mut failures: Vec<String> = Vec::new();
+        for (lang, src) in snippets {
+            match pool.parse(src, *lang) {
+                Ok(tree) => {
+                    let errs = count_error_nodes(tree.root_node());
+                    if errs != 0 {
+                        failures.push(format!(
+                            "{:?}: {} ERROR node(s) on valid snippet: {:?}",
+                            lang, errs, src
+                        ));
+                    }
+                }
+                Err(e) => {
+                    failures.push(format!("{:?}: parse failed: {:?} on {:?}", lang, e, src));
+                }
+            }
+        }
+
+        assert!(
+            failures.is_empty(),
+            "Parser audit failures (VAL-008): {}",
+            failures.join(" | ")
+        );
+    }
 }

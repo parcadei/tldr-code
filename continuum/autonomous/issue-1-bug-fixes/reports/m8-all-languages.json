@@ -1,0 +1,316 @@
+{
+  "milestone": "M8 / VAL-008 — all-languages-coverage",
+  "date": "2026-04-24",
+  "worker": "kraken",
+  "status": "passed",
+  "summary": "Extended manifest-based detection in Language::from_directory to cover all 18 supported languages. Added 15 new ManifestKind variants (7 langs × ~2 families each) using a new ManifestMatcher enum that supports fixed filenames, file-extension globs (*.csproj, *.opam, *.rockspec), and nested fixed paths (project/build.properties). Resolved .h ambiguity between C and C++ via a source-file tie-break that counts cpp-family extensions (.cpp/.cc/.cxx/.hpp/.hh/.hxx) vs the strictly-C .c extension. Added 38 unit tests + 18 integration tests + 1 parser health audit. All 18 languages now detect correctly under bait conditions; all 18 parsers parse their minimal valid snippet with zero ERROR nodes.",
+
+  "parser_audit": {
+    "method": "ParserPool::parse on a minimal valid snippet for each language, counting ERROR nodes in the resulting tree.",
+    "test": "crates/tldr-core/src/ast/parser.rs::tests::test_all_18_parsers_accept_minimal_valid_snippet",
+    "result": "all 18 parsers return 0 ERROR nodes on a minimal snippet",
+    "snippets_used": {
+      "Python": "def x(): pass",
+      "TypeScript": "export const x: number = 1;",
+      "JavaScript": "export const x = 1;",
+      "Go": "package main\\nfunc main() {}",
+      "Rust": "pub fn x() {}",
+      "Java": "class X { public static void main(String[] a){} }",
+      "C": "int main(){return 0;}",
+      "Cpp": "int main(){return 0;}",
+      "Ruby": "def x; end",
+      "Kotlin": "fun x(){}",
+      "Swift": "func x(){}",
+      "CSharp": "class X { static void Main(){} }",
+      "Scala": "object X { def main(args: Array[String]): Unit = {} }",
+      "Php": "<?php function x(){}",
+      "Lua": "function x() end",
+      "Luau": "function x() end",
+      "Elixir": "defmodule X do\\ndef y(), do: :ok\\nend",
+      "Ocaml": "let x () = ()"
+    }
+  },
+
+  "per_language_status": [
+    {
+      "language": "Python",
+      "manifest_coverage": "pre-VAL-008 (pyproject.toml, setup.py, requirements.txt)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_python",
+      "integration_test": "test_tldr_structure_autodetects_python"
+    },
+    {
+      "language": "TypeScript",
+      "manifest_coverage": "pre-VAL-008 (tsconfig.json, package.json w/ typescript dep)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_typescript",
+      "integration_test": "test_tldr_structure_autodetects_typescript"
+    },
+    {
+      "language": "JavaScript",
+      "manifest_coverage": "pre-VAL-008 (package.json w/o typescript dep)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_javascript",
+      "integration_test": "test_tldr_structure_autodetects_javascript"
+    },
+    {
+      "language": "Go",
+      "manifest_coverage": "pre-VAL-008 (go.mod)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_go",
+      "integration_test": "test_tldr_structure_autodetects_go"
+    },
+    {
+      "language": "Rust",
+      "manifest_coverage": "pre-VAL-008 (Cargo.toml)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_rust",
+      "integration_test": "test_tldr_structure_autodetects_rust"
+    },
+    {
+      "language": "Java",
+      "manifest_coverage": "pre-VAL-008 (pom.xml, build.gradle)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_java",
+      "integration_test": "test_tldr_structure_autodetects_java"
+    },
+    {
+      "language": "Kotlin",
+      "manifest_coverage": "pre-VAL-008 (build.gradle.kts via gradle_kotlin_vs_java tie-break)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_kotlin",
+      "integration_test": "test_tldr_structure_autodetects_kotlin"
+    },
+    {
+      "language": "Ruby",
+      "manifest_coverage": "pre-VAL-008 (Gemfile)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_ruby",
+      "integration_test": "test_tldr_structure_autodetects_ruby"
+    },
+    {
+      "language": "Php",
+      "manifest_coverage": "pre-VAL-008 (composer.json)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_php",
+      "integration_test": "test_tldr_structure_autodetects_php"
+    },
+    {
+      "language": "Elixir",
+      "manifest_coverage": "pre-VAL-008 (mix.exs)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_elixir",
+      "integration_test": "test_tldr_structure_autodetects_elixir"
+    },
+    {
+      "language": "Swift",
+      "manifest_coverage": "pre-VAL-008 (Package.swift)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_swift",
+      "integration_test": "test_tldr_structure_autodetects_swift"
+    },
+    {
+      "language": "C",
+      "manifest_coverage": "VAL-008 NEW (CMakeLists.txt, meson.build, configure.ac/configure.in, Makefile.am/Makefile.in — all via c_vs_cpp_tie_break)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_c_with_cmake (+ meson, configure_ac, makefile_am variants)",
+      "integration_test": "test_tldr_structure_autodetects_c",
+      "tie_break_coverage": "test_from_directory_c_with_cmakelists_ties_break_to_c, test_from_directory_c_project_pure_extensions"
+    },
+    {
+      "language": "Cpp",
+      "manifest_coverage": "VAL-008 NEW (shares manifests with C; disambiguated by c_vs_cpp_tie_break over .cpp/.cc/.cxx/.hpp/.hh/.hxx vs .c — .h NOT counted as it is ambiguous)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_cpp_with_cmake",
+      "integration_test": "test_tldr_structure_autodetects_cpp",
+      "tie_break_coverage": "test_from_directory_cpp_with_cmakelists_ties_break_to_cpp, test_from_directory_cpp_project_pure_extensions, test_from_directory_cpp_with_h_headers_not_misdetected_as_c"
+    },
+    {
+      "language": "CSharp",
+      "manifest_coverage": "VAL-008 NEW (*.csproj extension, *.sln extension, global.json with sdk key)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_csharp (+ csharp_sln, csharp_global_json_with_sdk, global_json_without_sdk_is_not_csharp)",
+      "integration_test": "test_tldr_structure_autodetects_csharp"
+    },
+    {
+      "language": "Scala",
+      "manifest_coverage": "VAL-008 NEW (build.sbt, nested project/build.properties)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_scala (+ scala_project_build_properties for the nested variant)",
+      "integration_test": "test_tldr_structure_autodetects_scala"
+    },
+    {
+      "language": "Lua",
+      "manifest_coverage": "VAL-008 NEW (*.rockspec extension, .luarc.json fixed)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_lua (+ lua_luarc)",
+      "integration_test": "test_tldr_structure_autodetects_lua"
+    },
+    {
+      "language": "Luau",
+      "manifest_coverage": "VAL-008 NEW (default.project.json — Rojo; .luaurc fixed)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_luau (+ luau_luaurc)",
+      "integration_test": "test_tldr_structure_autodetects_luau",
+      "notes": "Luau manifests are weak signals — many Luau projects ship without any. When no manifest is present the extension-majority fallback handles .luau files directly."
+    },
+    {
+      "language": "Ocaml",
+      "manifest_coverage": "VAL-008 NEW (dune-project fixed, *.opam extension)",
+      "detects": true,
+      "integration": true,
+      "parser_healthy": true,
+      "unit_test": "test_from_directory_detects_ocaml (+ ocaml_opam)",
+      "integration_test": "test_tldr_structure_autodetects_ocaml"
+    }
+  ],
+
+  "manifest_additions": {
+    "new_variants_count": 15,
+    "new_variants": [
+      "CmakeLists",
+      "MesonBuild",
+      "ConfigureAc",
+      "MakefileAm",
+      "CsProj",
+      "SlnFile",
+      "GlobalJson",
+      "BuildSbt",
+      "ScalaBuildProperties",
+      "DuneProject",
+      "OpamFile",
+      "Rockspec",
+      "Luarc",
+      "RojoProject",
+      "LuauRc"
+    ],
+    "precedence_list_size_before": 14,
+    "precedence_list_size_after": 29,
+    "matcher_enum_introduced": {
+      "name": "ManifestMatcher",
+      "variants": {
+        "Exact(&str)": "fixed filename match (e.g. Cargo.toml)",
+        "Extension(&str)": "matches any file with a given extension (e.g. csproj for *.csproj)",
+        "Nested(&str)": "relative subpath (e.g. project/build.properties)"
+      }
+    },
+    "special_cases": {
+      "ConfigureAc": "matches either configure.ac or configure.in (two-filename disjunction)",
+      "MakefileAm": "matches either Makefile.am or Makefile.in (two-filename disjunction)",
+      "GlobalJson": "only counts when the parsed JSON object contains top-level key `\"sdk\"` — avoids false positives on unrelated global.json files shipped by other tools"
+    }
+  },
+
+  "tie_break_design": {
+    "function": "c_vs_cpp_tie_break(root: &Path) -> Language",
+    "location": "crates/tldr-core/src/types.rs",
+    "counts": {
+      "cpp_family": [".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx"],
+      "c_family": [".c"]
+    },
+    "h_header_policy": "not counted (ambiguous between C and C++). A C++ project with .h headers is correctly identified as long as its .cpp-family count > 0.",
+    "decision": "Cpp if cpp_family > c_family, else C (default; simpler older language wins on ties and empty counts).",
+    "walker_integration": "uses crate::walker::walk_project, so node_modules/target/vendor etc. are transparently skipped."
+  },
+
+  "tests_added": {
+    "unit_tests_file": "crates/tldr-core/src/types.rs",
+    "unit_test_count": 38,
+    "unit_tests_categorized": {
+      "per_language_11_preexisting": 11,
+      "per_language_7_new": 14,
+      "c_cpp_tie_break_scenarios": 6,
+      "csharp_global_json_sdk_gating_negative": 1,
+      "lua_luarc_alternate_manifest": 1,
+      "luau_luaurc_alternate_manifest": 1,
+      "ocaml_opam_alternate_manifest": 1,
+      "scala_project_build_properties_alternate": 1,
+      "csharp_sln_alternate": 1,
+      "csharp_global_json_alternate": 1
+    },
+    "integration_tests_file": "crates/tldr-cli/tests/language_autodetect_tests.rs",
+    "integration_test_count": 18,
+    "integration_test_pattern": "tldr structure <tempdir> --format json --quiet — parse JSON, assert language field",
+    "parser_audit_test": "crates/tldr-core/src/ast/parser.rs::tests::test_all_18_parsers_accept_minimal_valid_snippet"
+  },
+
+  "verification": {
+    "cargo_build_release": "success",
+    "cargo_test_tldr_core_lib": "4675 passed / 0 failed / 340 ignored (VAL-002 baseline 4616 + VAL-007 20 + VAL-008 39 = 4675)",
+    "cargo_test_language_autodetect_integration": "18 passed / 0 failed",
+    "cargo_clippy_workspace_D_warnings": "clean",
+    "cargo_fmt_check_my_files": "clean",
+    "installed_binary_smoke_test": "tldr structure <csproj-fixture> --format json --quiet → language=csharp",
+    "preexisting_failures_NOT_addressed": [
+      "tldr-cli commands::bugbot::text_format::tests::test_text_format_generic_evidence_shows_numbers (pre-existing, noted in contract constraints as out-of-scope)",
+      "tldr-cli p2_multilang_tests (bounds/gvn subcommands removed pre-session — part of the 40-ish CLI tests referencing removed subcommands)"
+    ]
+  },
+
+  "docstring_update": {
+    "location": "crates/tldr-core/src/types.rs Language::from_directory docs",
+    "table_rows_before": 14,
+    "table_rows_after": 29,
+    "tie_break_rows_added": [
+      "CMake/Meson/Autotools → C or C++ (via c_vs_cpp_tie_break)",
+      "pre-existing: build.gradle.kts → Kotlin or Java (via gradle_kotlin_vs_java)"
+    ]
+  },
+
+  "files_modified": [
+    "crates/tldr-core/src/types.rs",
+    "crates/tldr-core/src/ast/parser.rs",
+    "crates/tldr-cli/tests/language_autodetect_tests.rs (NEW)",
+    "continuum/autonomous/issue-1-bug-fixes/contract.json",
+    "continuum/autonomous/issue-1-bug-fixes/reports/m8-all-languages.json (NEW)"
+  ],
+
+  "remaining_work_and_followups": {
+    "followups": [
+      "Build.mill manifest (Scala's Mill build tool) was mentioned in the contract text but deferred — Mill project adoption is low enough that build.sbt + project/build.properties cover the vast majority of real-world Scala projects. Can be added in a follow-up if demand surfaces.",
+      "`.luau` files outside Roblox projects are rare enough that the extension-majority fallback remains the primary detection path for Luau projects without a manifest. The two manifests we did add (default.project.json and .luaurc) cover the two dominant Luau ecosystems (Rojo tooling, and luau-lsp/Luau LSP projects)."
+    ],
+    "known_good_parsers_baseline": "All 18 tree-sitter grammars parse their minimal valid snippet with zero ERROR nodes as of this commit. The test_all_18_parsers_accept_minimal_valid_snippet unit test enforces this as a regression gate for future tree-sitter/ABI upgrades."
+  },
+
+  "discoveries": [
+    "The pre-VAL-008 detector used `m.file_name() -> &'static str` which assumed every manifest was a fixed filename. Adding pattern-matched manifests required a new ManifestMatcher enum and a matches_in(dir) method that dispatches by matcher kind.",
+    "global.json is ambiguous — it's shipped by .NET SDKs AND by unrelated tools (expo-cli, firebase-tools). Requiring the JSON to contain an `\"sdk\"` top-level key eliminates both false positives and flaky behaviour on broken JSON (which now returns false via the read-and-parse chain).",
+    "serde_json was already a tldr-core workspace dep, so the `\"sdk\"`-key validation path did not require new dependencies.",
+    "`.h` header ambiguity is a real-world issue (C/C++ projects frequently ship headers that outnumber source files). The tie-break policy of counting only .c vs .cpp-family (excluding .h entirely) correctly disambiguates projects such as `test_from_directory_cpp_with_h_headers_not_misdetected_as_c` (2×.cpp + 4×.h → Cpp, not C)."
+  ]
+}

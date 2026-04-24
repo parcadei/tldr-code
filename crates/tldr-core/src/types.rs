@@ -158,23 +158,35 @@ impl Language {
     ///    precedence wins; ties at the same precedence are broken by
     ///    shallowest path.
     ///
-    ///    | Precedence | Manifest(s)                                 | Language                      |
-    ///    |-----------:|---------------------------------------------|-------------------------------|
-    ///    |          1 | `tsconfig.json`                             | TypeScript                    |
-    ///    |          2 | `package.json`                              | TypeScript (with TS dep) or JS |
-    ///    |          3 | `Cargo.toml`                                | Rust                          |
-    ///    |          4 | `go.mod`                                    | Go                            |
-    ///    |        5–7 | `pyproject.toml`, `setup.py`, `requirements.txt` | Python                   |
-    ///    |          8 | `pom.xml`                                   | Java                          |
-    ///    |       9–10 | `build.gradle.kts`, `build.gradle`          | Kotlin or Java (tie-break below) |
-    ///    |         11 | `Gemfile`                                   | Ruby                          |
-    ///    |         12 | `composer.json`                             | PHP                           |
-    ///    |         13 | `mix.exs`                                   | Elixir                        |
-    ///    |         14 | `Package.swift`                             | Swift                         |
+    ///    | Precedence | Manifest(s)                                      | Language                          |
+    ///    |-----------:|--------------------------------------------------|-----------------------------------|
+    ///    |          1 | `tsconfig.json`                                  | TypeScript                        |
+    ///    |          2 | `package.json`                                   | TypeScript (with TS dep) or JS    |
+    ///    |          3 | `Cargo.toml`                                     | Rust                              |
+    ///    |          4 | `go.mod`                                         | Go                                |
+    ///    |        5–7 | `pyproject.toml`, `setup.py`, `requirements.txt` | Python                            |
+    ///    |          8 | `pom.xml`                                        | Java                              |
+    ///    |       9–10 | `build.gradle.kts`, `build.gradle`               | Kotlin or Java (tie-break below)  |
+    ///    |      11–14 | `CMakeLists.txt`, `meson.build`, `configure.ac`/`configure.in`, `Makefile.am`/`Makefile.in` | C or C++ (tie-break below) |
+    ///    |      15–17 | `*.csproj`, `*.sln`, `global.json` (with `sdk`)  | C#                                |
+    ///    |      18–19 | `build.sbt`, `project/build.properties`          | Scala                             |
+    ///    |      20–21 | `dune-project`, `*.opam`                         | OCaml                             |
+    ///    |         22 | `Gemfile`                                        | Ruby                              |
+    ///    |         23 | `composer.json`                                  | PHP                               |
+    ///    |         24 | `mix.exs`                                        | Elixir                            |
+    ///    |         25 | `Package.swift`                                  | Swift                             |
+    ///    |      26–27 | `*.rockspec`, `.luarc.json`                      | Lua                               |
+    ///    |      28–29 | `default.project.json` (Rojo), `.luaurc`         | Luau                              |
     ///
     ///    Gradle tie-break: when `build.gradle.kts` is the winning
     ///    manifest, count `.kt` vs `.java` files across the walk; pick
     ///    Kotlin when `.kt` > `.java`, else Java.
+    ///
+    ///    C/C++ tie-break: when one of the shared build-system manifests
+    ///    (CMake, Meson, Autotools) wins, count `.cpp`/`.cc`/`.cxx`/`.hpp`/
+    ///    `.hh`/`.hxx` vs `.c` files across the walk (`.h` is NOT counted —
+    ///    it's ambiguous between C and C++). Pick C++ when the cpp-family
+    ///    strictly exceeds the c-family; otherwise default to C.
     ///
     ///    *Why precedence beats depth.* In a pnpm monorepo the root
     ///    `package.json` usually holds tooling (turbo, prettier, eslint)
@@ -290,25 +302,74 @@ impl Language {
 /// Ordered from highest to lowest precedence. Earlier entries win ties in
 /// `detect_from_manifests`; see `Language::from_directory` docs for the full
 /// rationale.
+///
+/// VAL-008 expanded this list from 14 to 29 entries, adding manifest support
+/// for the 7 previously extension-only languages (C, Cpp, CSharp, Scala,
+/// OCaml, Lua, Luau). C and C++ share the same manifest families (CMake,
+/// Meson, Autotools) and are disambiguated via a source-file-count tie-break
+/// in `language_from_manifest_set`.
 const MANIFEST_PRECEDENCE: &[ManifestKind] = &[
+    // --- TS/JS (highest: most specific signal for the largest lang family)
     ManifestKind::TsConfig,
     ManifestKind::PackageJson,
+    // --- Rust, Go
     ManifestKind::CargoToml,
     ManifestKind::GoMod,
+    // --- Python
     ManifestKind::PyProject,
     ManifestKind::SetupPy,
     ManifestKind::RequirementsTxt,
+    // --- JVM (Java/Kotlin)
     ManifestKind::PomXml,
     ManifestKind::BuildGradleKts,
     ManifestKind::BuildGradle,
+    // --- C / C++ build systems (shared manifests, tie-break by file count).
+    // Placed high because CMake/Meson/Autotools are unambiguous C-family signals.
+    ManifestKind::CmakeLists,
+    ManifestKind::MesonBuild,
+    ManifestKind::ConfigureAc,
+    ManifestKind::MakefileAm,
+    // --- CSharp (high-signal, specific)
+    ManifestKind::CsProj,
+    ManifestKind::SlnFile,
+    ManifestKind::GlobalJson,
+    // --- Scala
+    ManifestKind::BuildSbt,
+    ManifestKind::ScalaBuildProperties,
+    // --- OCaml
+    ManifestKind::DuneProject,
+    ManifestKind::OpamFile,
+    // --- Ruby, PHP, Elixir, Swift (pre-VAL-008 order, preserved)
     ManifestKind::Gemfile,
     ManifestKind::ComposerJson,
     ManifestKind::MixExs,
     ManifestKind::PackageSwift,
+    // --- Lua / Luau (weakest signals — lua projects often lack formal manifests)
+    ManifestKind::Rockspec,
+    ManifestKind::Luarc,
+    ManifestKind::RojoProject,
+    ManifestKind::LuauRc,
 ];
+
+/// How a `ManifestKind` matches a directory entry.
+///
+/// Most manifests are identified by a fixed filename (`Cargo.toml`, `go.mod`);
+/// a few are identified by extension (`*.csproj`, `*.opam`, `*.rockspec`); and
+/// one — `ScalaBuildProperties` — is a nested fixed filename.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ManifestMatcher {
+    /// Exact filename match at the directory root (e.g. `Cargo.toml`).
+    Exact(&'static str),
+    /// File extension match, e.g. `"csproj"` matches `MyApp.csproj`.
+    /// Matching is case-insensitive.
+    Extension(&'static str),
+    /// Nested fixed path under the directory (e.g. `project/build.properties`).
+    Nested(&'static str),
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ManifestKind {
+    // Pre-VAL-008 (14 entries)
     TsConfig,
     PackageJson,
     CargoToml,
@@ -323,26 +384,182 @@ enum ManifestKind {
     ComposerJson,
     MixExs,
     PackageSwift,
+    // VAL-008: C / C++ (shared; language chosen by extension tie-break)
+    CmakeLists,
+    MesonBuild,
+    ConfigureAc, // matches both `configure.ac` and `configure.in`
+    MakefileAm,  // matches both `Makefile.am` and `Makefile.in`
+    // VAL-008: CSharp
+    CsProj,     // *.csproj (extension match)
+    SlnFile,    // *.sln (extension match)
+    GlobalJson, // global.json — only counts when `"sdk"` key is present
+    // VAL-008: Scala
+    BuildSbt,
+    ScalaBuildProperties, // nested: project/build.properties
+    // VAL-008: OCaml
+    DuneProject,
+    OpamFile, // *.opam (extension match)
+    // VAL-008: Lua
+    Rockspec, // *.rockspec (extension match)
+    Luarc,    // .luarc.json
+    // VAL-008: Luau
+    RojoProject, // default.project.json
+    LuauRc,      // .luaurc
 }
 
 impl ManifestKind {
-    fn file_name(self) -> &'static str {
+    /// The matcher used to locate this manifest in a directory.
+    fn matcher(self) -> ManifestMatcher {
         match self {
-            ManifestKind::TsConfig => "tsconfig.json",
-            ManifestKind::PackageJson => "package.json",
-            ManifestKind::CargoToml => "Cargo.toml",
-            ManifestKind::GoMod => "go.mod",
-            ManifestKind::PyProject => "pyproject.toml",
-            ManifestKind::SetupPy => "setup.py",
-            ManifestKind::RequirementsTxt => "requirements.txt",
-            ManifestKind::PomXml => "pom.xml",
-            ManifestKind::BuildGradle => "build.gradle",
-            ManifestKind::BuildGradleKts => "build.gradle.kts",
-            ManifestKind::Gemfile => "Gemfile",
-            ManifestKind::ComposerJson => "composer.json",
-            ManifestKind::MixExs => "mix.exs",
-            ManifestKind::PackageSwift => "Package.swift",
+            // Fixed-filename manifests (pre-VAL-008)
+            ManifestKind::TsConfig => ManifestMatcher::Exact("tsconfig.json"),
+            ManifestKind::PackageJson => ManifestMatcher::Exact("package.json"),
+            ManifestKind::CargoToml => ManifestMatcher::Exact("Cargo.toml"),
+            ManifestKind::GoMod => ManifestMatcher::Exact("go.mod"),
+            ManifestKind::PyProject => ManifestMatcher::Exact("pyproject.toml"),
+            ManifestKind::SetupPy => ManifestMatcher::Exact("setup.py"),
+            ManifestKind::RequirementsTxt => ManifestMatcher::Exact("requirements.txt"),
+            ManifestKind::PomXml => ManifestMatcher::Exact("pom.xml"),
+            ManifestKind::BuildGradle => ManifestMatcher::Exact("build.gradle"),
+            ManifestKind::BuildGradleKts => ManifestMatcher::Exact("build.gradle.kts"),
+            ManifestKind::Gemfile => ManifestMatcher::Exact("Gemfile"),
+            ManifestKind::ComposerJson => ManifestMatcher::Exact("composer.json"),
+            ManifestKind::MixExs => ManifestMatcher::Exact("mix.exs"),
+            ManifestKind::PackageSwift => ManifestMatcher::Exact("Package.swift"),
+            // VAL-008: C / C++ build systems
+            ManifestKind::CmakeLists => ManifestMatcher::Exact("CMakeLists.txt"),
+            ManifestKind::MesonBuild => ManifestMatcher::Exact("meson.build"),
+            // configure.ac / configure.in: handled as a special case in
+            // `matches_in` because it's a two-filename disjunction, not a
+            // true extension match.
+            ManifestKind::ConfigureAc => ManifestMatcher::Exact("configure.ac"),
+            ManifestKind::MakefileAm => ManifestMatcher::Exact("Makefile.am"),
+            // VAL-008: CSharp
+            ManifestKind::CsProj => ManifestMatcher::Extension("csproj"),
+            ManifestKind::SlnFile => ManifestMatcher::Extension("sln"),
+            ManifestKind::GlobalJson => ManifestMatcher::Exact("global.json"),
+            // VAL-008: Scala
+            ManifestKind::BuildSbt => ManifestMatcher::Exact("build.sbt"),
+            ManifestKind::ScalaBuildProperties => {
+                ManifestMatcher::Nested("project/build.properties")
+            }
+            // VAL-008: OCaml
+            ManifestKind::DuneProject => ManifestMatcher::Exact("dune-project"),
+            ManifestKind::OpamFile => ManifestMatcher::Extension("opam"),
+            // VAL-008: Lua
+            ManifestKind::Rockspec => ManifestMatcher::Extension("rockspec"),
+            ManifestKind::Luarc => ManifestMatcher::Exact(".luarc.json"),
+            // VAL-008: Luau
+            ManifestKind::RojoProject => ManifestMatcher::Exact("default.project.json"),
+            ManifestKind::LuauRc => ManifestMatcher::Exact(".luaurc"),
         }
+    }
+
+    /// True when a directory contains a file matching this manifest kind.
+    ///
+    /// Handles the three matcher flavours:
+    /// - `Exact`: single `path.join(name).is_file()` check.
+    /// - `Extension`: scan `read_dir` entries for any file with that extension.
+    /// - `Nested`: single `path.join(rel).is_file()` check.
+    ///
+    /// Also handles the special-case disjunctions:
+    /// - `ConfigureAc` matches either `configure.ac` or `configure.in`.
+    /// - `MakefileAm` matches either `Makefile.am` or `Makefile.in`.
+    /// - `GlobalJson` additionally requires `"sdk"` to appear as a JSON key,
+    ///   to avoid false-positives on unrelated `global.json` files shipped
+    ///   by tools like `expo-cli` or `firebase-tools`.
+    fn matches_in(self, dir: &std::path::Path) -> bool {
+        match self {
+            ManifestKind::ConfigureAc => {
+                dir.join("configure.ac").is_file() || dir.join("configure.in").is_file()
+            }
+            ManifestKind::MakefileAm => {
+                dir.join("Makefile.am").is_file() || dir.join("Makefile.in").is_file()
+            }
+            ManifestKind::GlobalJson => {
+                let p = dir.join("global.json");
+                if !p.is_file() {
+                    return false;
+                }
+                // Require an "sdk" key: that's the unambiguous .NET marker.
+                // Readers that fail for any reason fall through to false so
+                // we don't mis-tag unrelated global.json files as CSharp.
+                match std::fs::read_to_string(&p) {
+                    Ok(contents) => global_json_has_sdk_key(&contents),
+                    Err(_) => false,
+                }
+            }
+            _ => match self.matcher() {
+                ManifestMatcher::Exact(name) => dir.join(name).is_file(),
+                ManifestMatcher::Nested(rel) => dir.join(rel).is_file(),
+                ManifestMatcher::Extension(ext) => dir_has_file_with_extension(dir, ext),
+            },
+        }
+    }
+}
+
+/// Scan `dir` (non-recursive) for any file whose extension matches `ext`
+/// (case-insensitive, without a leading dot). Used by extension-matching
+/// manifests such as `*.csproj`, `*.opam`, `*.rockspec`.
+fn dir_has_file_with_extension(dir: &std::path::Path, ext: &str) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    let target = ext.to_ascii_lowercase();
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if !p.is_file() {
+            continue;
+        }
+        if let Some(e) = p.extension().and_then(|e| e.to_str()) {
+            if e.to_ascii_lowercase() == target {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Check whether a `global.json` contents string has an `"sdk"` key. The
+/// test is conservative: the file must parse as a JSON object AND that
+/// object must contain `sdk` as a top-level key. This avoids false positives
+/// on unrelated `global.json` files shipped by other tooling.
+fn global_json_has_sdk_key(contents: &str) -> bool {
+    match serde_json::from_str::<serde_json::Value>(contents) {
+        Ok(serde_json::Value::Object(map)) => map.contains_key("sdk"),
+        _ => false,
+    }
+}
+
+/// Decide C vs. C++ for a project whose winning manifest is one of the
+/// shared C/C++ families (CMake, Meson, Autotools).
+///
+/// Strategy: count source files in the project walk by family.
+/// - C++ family: `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hh`, `.hxx`.
+/// - C family:   `.c` (NOT `.h` — ambiguous with C++).
+///
+/// If the C++ count strictly exceeds the C count, return `Cpp`; otherwise
+/// default to `C` (the older, simpler language wins on ties or empty counts).
+fn c_vs_cpp_tie_break(root: &std::path::Path) -> Language {
+    let mut c_family = 0usize;
+    let mut cpp_family = 0usize;
+    for entry in crate::walker::walk_project(root) {
+        let p = entry.path();
+        if !p.is_file() {
+            continue;
+        }
+        match p.extension().and_then(|e| e.to_str()) {
+            Some("cpp") | Some("cc") | Some("cxx") | Some("hpp") | Some("hh") | Some("hxx") => {
+                cpp_family += 1
+            }
+            Some("c") => c_family += 1,
+            _ => {}
+        }
+    }
+    if cpp_family > c_family {
+        Language::Cpp
+    } else {
+        Language::C
     }
 }
 
@@ -408,7 +625,7 @@ fn detect_from_manifests(root: &std::path::Path) -> Option<Language> {
     let mut best: Option<(usize, usize, std::path::PathBuf, ManifestKind)> = None;
     for (depth, dir) in &dirs {
         for (idx, m) in MANIFEST_PRECEDENCE.iter().copied().enumerate() {
-            if dir.join(m.file_name()).is_file() {
+            if m.matches_in(dir) {
                 let candidate = (idx, *depth, dir.clone(), m);
                 best = match best {
                     None => Some(candidate),
@@ -449,7 +666,7 @@ fn language_from_manifest_set(
         ManifestKind::PackageJson => {
             // TypeScript when a typescript dep is declared, else JavaScript.
             // If we can't read the file, assume JavaScript.
-            let p = dir.join(m.file_name());
+            let p = dir.join("package.json");
             match std::fs::read_to_string(&p) {
                 Ok(contents) if package_json_has_typescript_dep(&contents) => Language::TypeScript,
                 _ => Language::JavaScript,
@@ -471,6 +688,23 @@ fn language_from_manifest_set(
         ManifestKind::ComposerJson => Language::Php,
         ManifestKind::MixExs => Language::Elixir,
         ManifestKind::PackageSwift => Language::Swift,
+        // VAL-008: C / C++ shared build-system manifests. Dispatch via
+        // file-count tie-break (`.cpp`/`.cc`/`.cxx`/`.hpp`/`.hh`/`.hxx` vs
+        // `.c`). On ties or empty counts we fall back to C.
+        ManifestKind::CmakeLists
+        | ManifestKind::MesonBuild
+        | ManifestKind::ConfigureAc
+        | ManifestKind::MakefileAm => c_vs_cpp_tie_break(project_root),
+        // VAL-008: CSharp
+        ManifestKind::CsProj | ManifestKind::SlnFile | ManifestKind::GlobalJson => Language::CSharp,
+        // VAL-008: Scala
+        ManifestKind::BuildSbt | ManifestKind::ScalaBuildProperties => Language::Scala,
+        // VAL-008: OCaml
+        ManifestKind::DuneProject | ManifestKind::OpamFile => Language::Ocaml,
+        // VAL-008: Lua
+        ManifestKind::Rockspec | ManifestKind::Luarc => Language::Lua,
+        // VAL-008: Luau
+        ManifestKind::RojoProject | ManifestKind::LuauRc => Language::Luau,
     };
     Some(lang)
 }
@@ -2988,6 +3222,494 @@ mod tests {
             Some(Language::TypeScript),
             "pnpm monorepo with tsconfig.json in packages/*/ must detect TypeScript, not JS (from root package.json without TS dep) and not Python (from node_modules bait)"
         );
+    }
+
+    // =========================================================================
+    // VAL-008: All-18-languages detection
+    //
+    // Every supported language must be detectable by `Language::from_directory`.
+    // Prior to VAL-008, 11 of 18 were manifest-covered; the 7 extension-only
+    // languages (C, Cpp, CSharp, Scala, Lua, Luau, Ocaml) relied on extension
+    // majority alone and could not be distinguished from one another in the
+    // presence of ambiguous headers (`.h`).
+    //
+    // Each per-language test uses a canonical fixture: a manifest file (when
+    // one exists) plus at least one representative source file. The C/C++
+    // tie-break is exercised separately.
+    // =========================================================================
+
+    // ---- 11 already-covered languages (verify coverage didn't regress) ------
+
+    #[test]
+    fn test_from_directory_detects_python() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("pyproject.toml"), "[project]\nname=\"x\"\n").unwrap();
+        std::fs::write(dir.path().join("main.py"), "def x(): pass\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Python));
+    }
+
+    #[test]
+    fn test_from_directory_detects_typescript() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("tsconfig.json"), "{}").unwrap();
+        std::fs::write(dir.path().join("index.ts"), "export const x: number = 1;\n").unwrap();
+        assert_eq!(
+            Language::from_directory(dir.path()),
+            Some(Language::TypeScript)
+        );
+    }
+
+    #[test]
+    fn test_from_directory_detects_javascript() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("package.json"),
+            r#"{"name":"x","dependencies":{"express":"1.0.0"}}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("index.js"), "export const x = 1;\n").unwrap();
+        assert_eq!(
+            Language::from_directory(dir.path()),
+            Some(Language::JavaScript)
+        );
+    }
+
+    #[test]
+    fn test_from_directory_detects_go() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("go.mod"), "module example.com/x\ngo 1.21\n").unwrap();
+        std::fs::write(dir.path().join("main.go"), "package main\nfunc main() {}\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Go));
+    }
+
+    #[test]
+    fn test_from_directory_detects_rust() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("Cargo.toml"),
+            "[package]\nname = \"x\"\nversion = \"0.1\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(dir.path().join("src")).unwrap();
+        std::fs::write(dir.path().join("src/main.rs"), "pub fn x() {}\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Rust));
+    }
+
+    #[test]
+    fn test_from_directory_detects_java() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("pom.xml"), "<project/>").unwrap();
+        std::fs::write(
+            dir.path().join("App.java"),
+            "class App { public static void main(String[] a){} }\n",
+        )
+        .unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Java));
+    }
+
+    #[test]
+    fn test_from_directory_detects_kotlin() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("build.gradle.kts"), "").unwrap();
+        std::fs::write(dir.path().join("App.kt"), "fun main() {}\n").unwrap();
+        std::fs::write(dir.path().join("Util.kt"), "fun util() {}\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Kotlin));
+    }
+
+    #[test]
+    fn test_from_directory_detects_ruby() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("Gemfile"),
+            "source 'https://rubygems.org'\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("app.rb"), "def x; end\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Ruby));
+    }
+
+    #[test]
+    fn test_from_directory_detects_php() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("composer.json"), r#"{"name":"x/y"}"#).unwrap();
+        std::fs::write(dir.path().join("index.php"), "<?php function x(){}\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Php));
+    }
+
+    #[test]
+    fn test_from_directory_detects_elixir() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("mix.exs"),
+            "defmodule X.MixProject do\nend\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("lib.ex"),
+            "defmodule X do\ndef y(), do: :ok\nend\n",
+        )
+        .unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Elixir));
+    }
+
+    #[test]
+    fn test_from_directory_detects_swift() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("Package.swift"),
+            "// swift-tools-version:5.5\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("App.swift"), "func x(){}\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Swift));
+    }
+
+    // ---- 7 newly covered languages (VAL-008) --------------------------------
+
+    #[test]
+    fn test_from_directory_detects_csharp() {
+        // .csproj manifest wins over a larger pile of Python bait.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("App.csproj"),
+            "<Project Sdk=\"Microsoft.NET.Sdk\"/>",
+        )
+        .unwrap();
+        // Bait: many more .py files than .cs files. Manifest must win.
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        std::fs::write(
+            dir.path().join("Program.cs"),
+            "class X { static void Main(){} }\n",
+        )
+        .unwrap();
+        assert_eq!(
+            Language::from_directory(dir.path()),
+            Some(Language::CSharp),
+            ".csproj manifest must win over .py bait"
+        );
+    }
+
+    #[test]
+    fn test_from_directory_detects_csharp_sln() {
+        // Standalone .sln file detects CSharp over Python bait.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("App.sln"),
+            "Microsoft Visual Studio Solution\n",
+        )
+        .unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        std::fs::write(dir.path().join("Program.cs"), "class X {}\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::CSharp));
+    }
+
+    #[test]
+    fn test_from_directory_detects_csharp_global_json_with_sdk() {
+        // global.json with "sdk" key = .NET SDK pin = CSharp, wins over bait.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("global.json"),
+            r#"{"sdk":{"version":"8.0.100"}}"#,
+        )
+        .unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        std::fs::write(dir.path().join("Program.cs"), "class X {}\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::CSharp));
+    }
+
+    #[test]
+    fn test_from_directory_global_json_without_sdk_is_not_csharp() {
+        // global.json without "sdk" key is some other tool's config and
+        // must NOT be treated as a CSharp marker.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("global.json"),
+            r#"{"name":"something-else"}"#,
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("a.py"), "def x(): pass\n").unwrap();
+        assert_eq!(
+            Language::from_directory(dir.path()),
+            Some(Language::Python),
+            "unrelated global.json must not make this CSharp"
+        );
+    }
+
+    #[test]
+    fn test_from_directory_detects_scala() {
+        // build.sbt wins over Python bait.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("build.sbt"),
+            "name := \"x\"\nscalaVersion := \"3.3.0\"\n",
+        )
+        .unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        std::fs::write(
+            dir.path().join("Main.scala"),
+            "object X { def main(args: Array[String]): Unit = {} }\n",
+        )
+        .unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Scala));
+    }
+
+    #[test]
+    fn test_from_directory_detects_scala_project_build_properties() {
+        // project/build.properties is nested — exercise the sub-check.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("project")).unwrap();
+        std::fs::write(
+            dir.path().join("project/build.properties"),
+            "sbt.version=1.9.0\n",
+        )
+        .unwrap();
+        // Bait: more .py at root than .scala.
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        std::fs::write(
+            dir.path().join("Main.scala"),
+            "object X { def main(args: Array[String]): Unit = {} }\n",
+        )
+        .unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Scala));
+    }
+
+    #[test]
+    fn test_from_directory_detects_ocaml() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("dune-project"), "(lang dune 3.0)\n").unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        std::fs::write(dir.path().join("lib.ml"), "let x () = ()\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Ocaml));
+    }
+
+    #[test]
+    fn test_from_directory_detects_ocaml_opam() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("my-proj.opam"), "opam-version: \"2.0\"\n").unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        std::fs::write(dir.path().join("lib.ml"), "let x () = ()\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Ocaml));
+    }
+
+    #[test]
+    fn test_from_directory_detects_lua() {
+        // *.rockspec wins over Python bait.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("x-1.0-1.rockspec"),
+            "package = \"x\"\nversion = \"1.0-1\"\n",
+        )
+        .unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        std::fs::write(dir.path().join("init.lua"), "function x() end\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Lua));
+    }
+
+    #[test]
+    fn test_from_directory_detects_lua_luarc() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".luarc.json"), "{}").unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        std::fs::write(dir.path().join("init.lua"), "function x() end\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Lua));
+    }
+
+    #[test]
+    fn test_from_directory_detects_luau() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("default.project.json"),
+            r#"{"name":"x","tree":{"$className":"DataModel"}}"#,
+        )
+        .unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        std::fs::write(dir.path().join("init.luau"), "function x() end\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Luau));
+    }
+
+    #[test]
+    fn test_from_directory_detects_luau_luaurc() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".luaurc"), "{}").unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        std::fs::write(dir.path().join("init.luau"), "function x() end\n").unwrap();
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Luau));
+    }
+
+    // ---- C / C++ tie-break --------------------------------------------------
+
+    #[test]
+    fn test_from_directory_detects_c_with_cmake() {
+        // CMakeLists.txt + .c files + Python bait → C.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("CMakeLists.txt"),
+            "cmake_minimum_required(VERSION 3.10)\nproject(x C)\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("main.c"), "int main(){return 0;}\n").unwrap();
+        std::fs::write(dir.path().join("util.c"), "int util(){return 0;}\n").unwrap();
+        std::fs::write(dir.path().join("main.h"), "int main(void);\n").unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::C));
+    }
+
+    #[test]
+    fn test_from_directory_detects_cpp_with_cmake() {
+        // CMakeLists.txt + .cpp files + Python bait → Cpp (tie-break).
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("CMakeLists.txt"),
+            "cmake_minimum_required(VERSION 3.10)\nproject(x CXX)\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("main.cpp"), "int main(){return 0;}\n").unwrap();
+        std::fs::write(dir.path().join("util.cpp"), "int util(){return 0;}\n").unwrap();
+        std::fs::write(dir.path().join("util.cc"), "int util2(){return 0;}\n").unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Cpp));
+    }
+
+    #[test]
+    fn test_from_directory_c_project_pure_extensions() {
+        // No manifest, only .c + .h → C (extension-majority fallback).
+        let dir = tempfile::tempdir().unwrap();
+        for name in &["a.c", "b.c", "c.c"] {
+            std::fs::write(dir.path().join(name), "int x(){return 0;}\n").unwrap();
+        }
+        for name in &["a.h", "b.h"] {
+            std::fs::write(dir.path().join(name), "int x(void);\n").unwrap();
+        }
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::C));
+    }
+
+    #[test]
+    fn test_from_directory_cpp_project_pure_extensions() {
+        // No manifest, only .cpp + .h → Cpp (extension-majority fallback).
+        // Note: .h → C per from_extension, but .cpp outnumbers .h (3 vs 2)
+        // so extension majority is Cpp.
+        let dir = tempfile::tempdir().unwrap();
+        for name in &["a.cpp", "b.cpp", "c.cpp"] {
+            std::fs::write(dir.path().join(name), "int x(){return 0;}\n").unwrap();
+        }
+        for name in &["a.h", "b.h"] {
+            std::fs::write(dir.path().join(name), "int x();\n").unwrap();
+        }
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Cpp));
+    }
+
+    #[test]
+    fn test_from_directory_cpp_with_cmakelists_ties_break_to_cpp() {
+        // CMakeLists.txt shared — tie-break by cpp-family count > c-family.
+        // Adding .py bait to prove the manifest (not extension majority) is
+        // responsible for picking Cpp.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("CMakeLists.txt"), "project(x)\n").unwrap();
+        for name in &["a.cpp", "b.cpp", "c.cpp"] {
+            std::fs::write(dir.path().join(name), "int x(){return 0;}\n").unwrap();
+        }
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::Cpp));
+    }
+
+    #[test]
+    fn test_from_directory_c_with_cmakelists_ties_break_to_c() {
+        // CMakeLists.txt shared — only .c files present, pick C.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("CMakeLists.txt"), "project(x)\n").unwrap();
+        for name in &["a.c", "b.c", "c.c"] {
+            std::fs::write(dir.path().join(name), "int x(){return 0;}\n").unwrap();
+        }
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::C));
+    }
+
+    #[test]
+    fn test_from_directory_cpp_with_h_headers_not_misdetected_as_c() {
+        // .h files outnumber .cpp sources, but the cpp-family count
+        // (.cpp alone = 2) still beats the c-family count (.c = 0),
+        // so this should remain Cpp — not be misdetected as C because
+        // of its headers. This is the ".h ambiguity" scenario from VAL-008.
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("CMakeLists.txt"), "project(x)\n").unwrap();
+        for name in &["a.cpp", "b.cpp"] {
+            std::fs::write(dir.path().join(name), "int x(){return 0;}\n").unwrap();
+        }
+        for name in &["a.h", "b.h", "c.h", "d.h"] {
+            std::fs::write(dir.path().join(name), "int x();\n").unwrap();
+        }
+        assert_eq!(
+            Language::from_directory(dir.path()),
+            Some(Language::Cpp),
+            ".h headers must not cause a Cpp project to misdetect as C"
+        );
+    }
+
+    #[test]
+    fn test_from_directory_detects_c_with_meson() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("meson.build"), "project('x', 'c')\n").unwrap();
+        std::fs::write(dir.path().join("main.c"), "int main(){return 0;}\n").unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::C));
+    }
+
+    #[test]
+    fn test_from_directory_detects_c_with_configure_ac() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("configure.ac"), "AC_INIT([x], [1.0])\n").unwrap();
+        std::fs::write(dir.path().join("main.c"), "int main(){return 0;}\n").unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::C));
+    }
+
+    #[test]
+    fn test_from_directory_detects_c_with_makefile_am() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("Makefile.am"),
+            "bin_PROGRAMS = x\nx_SOURCES = main.c\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("main.c"), "int main(){return 0;}\n").unwrap();
+        for i in 0..5 {
+            std::fs::write(dir.path().join(format!("bait_{}.py", i)), "").unwrap();
+        }
+        assert_eq!(Language::from_directory(dir.path()), Some(Language::C));
     }
 
     // =========================================================================

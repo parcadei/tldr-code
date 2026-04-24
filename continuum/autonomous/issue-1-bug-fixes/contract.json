@@ -20,12 +20,12 @@
     },
     {
       "name": "parser-dialect",
-      "status": "pending",
+      "status": "passed",
       "assertions": ["VAL-004"]
     },
     {
       "name": "change-impact-status",
-      "status": "pending",
+      "status": "passed",
       "assertions": ["VAL-005"]
     },
     {
@@ -35,8 +35,13 @@
     },
     {
       "name": "workspace-discovery",
-      "status": "pending",
+      "status": "passed",
       "assertions": ["VAL-007"]
+    },
+    {
+      "name": "all-languages-coverage",
+      "status": "passed",
+      "assertions": ["VAL-008"]
     }
   ],
   "assertions": [
@@ -108,10 +113,21 @@
       "type": "invariant",
       "text": "Call graph construction auto-discovers workspace roots from filesystem markers when no explicit `WorkspaceConfig` is passed; `impact_analysis_with_ast_fallback` emits an accurate note when its scope is limited. Root cause: `crates/tldr-core/src/callgraph/builder.rs:29-51` accepts `Option<&WorkspaceConfig>` but all 18 production callers pass `None` (verified this session: impact.rs:83, hubs.rs:111, dead.rs:123, daemon.rs:366/730/750/780/834, bugbot/first_run.rs:347, archived/arch.rs:132/340, tldr-mcp/src/tools/callgraph.rs:34, tldr-core/src/analysis/whatbreaks.rs, context/builder.rs). The `use_workspace_config: true` branch in `scanner.rs:175-228` and `builder_v2` is dead code in practice. Additionally `module_index.rs:1025-1059` (`detect_ts_base_url`, `detect_ts_paths`) scan only `<root>/tsconfig.json`, so pnpm monorepos with per-app tsconfigs get empty alias tables. Fix: (a) Add `impl WorkspaceConfig { pub fn discover(root: &Path) -> Option<WorkspaceConfig> }` in `crates/tldr-core/src/types.rs` (near the existing struct around line 920). Discovery checks, in order: `pnpm-workspace.yaml` (yaml with `packages:` glob list), root `package.json` with `\"workspaces\": [...]` (npm/yarn/pnpm style), root `Cargo.toml` with `[workspace] members = [...]`, `go.work` with `use` directives. Expand globs via `glob` crate (check if already a dep; if not, use `ignore` crate's overrides). Returns `Some(WorkspaceConfig { roots: [...] })` with absolute paths; `None` if no marker found (preserves current single-root behavior). (b) In `build_project_call_graph` at `builder.rs:29-51`, when `workspace_config` is `None`, call `WorkspaceConfig::discover(root)` and use the result if `Some`. (c) In `module_index.rs`, `detect_ts_paths` and `detect_ts_base_url` become multi-root when `config.use_workspace_config` is true: scan each workspace root's own tsconfig.json, merge alias tables with per-root scoping (e.g. alias `@/` from apps/web/tsconfig.json resolves only within apps/web/**). For simplicity v1 can merge all tsconfig path maps into a single table; improve scoping in a later pass if needed. (d) In `impact_analysis_with_ast_fallback` at `crates/tldr-core/src/analysis/impact.rs:145-164`, when returning a `CallerTree` with `caller_count: 0`, check whether the target function has `export`-visible declarations AND whether `WorkspaceConfig::discover` returned `None` or multiple roots. Refine the `note` text accordingly: (i) isolated private function → keep current `'Function found via AST but has no call edges in analyzed scope'`; (ii) exported function in a workspace monorepo → `'Function is exported but no callers found in workspace roots [/path/a, /path/b, ...]; if this is unexpected, ensure tsconfig.json path aliases resolve correctly or run from a specific package directory'`; (iii) exported function with no discovered workspace → `'Function is exported but no callers found in <root>; if this is a monorepo, the call graph currently scans only the given root — run from the workspace root or a specific package directory'`. Acceptance: (1) `tldr impact getHighestSeverity /tmp/tldr-real/dub --lang typescript` either (a) reports `caller_count >= 1` with the real caller in `apps/web/lib/api/fraud/get-partner-application-risks.ts`, OR (b) returns 0 callers but with the NEW honest note mentioning workspace/exports. Ideally (a). (2) `tldr whatbreaks getHighestSeverity /tmp/tldr-real/dub --lang typescript` same. (3) New unit tests: `WorkspaceConfig::discover` on a tempdir with `pnpm-workspace.yaml` returns workspace members; on `Cargo.toml` with `[workspace]` returns members; on bare dir returns None. (4) New integration test: a small synthetic pnpm-style workspace (apps/foo/tsconfig.json with `\"@/*\":[\"src/*\"]`) where `apps/foo/src/util.ts` exports `myUtil` and `apps/foo/src/app.ts` imports `@/util` and calls `myUtil()` — `tldr impact myUtil` from the workspace root reports >= 1 caller (currently 0). (5) `cargo test --workspace` passes, clippy clean. (6) Existing tests continue to pass — workspace discovery must not change behavior for single-root projects (no workspace markers present).",
       "milestone": "workspace-discovery",
-      "status": "pending",
+      "status": "passed",
       "depends": [],
-      "worker": null,
-      "evidence": null
+      "worker": "kraken (VAL-007, commit 94cc6f0)",
+      "evidence": "reports/m7-workspace-discovery.json, validation/m7-workspace-discovery.json"
+    },
+    {
+      "id": "VAL-008",
+      "type": "invariant",
+      "status_resolution": "PASSED 2026-04-24 — Added 15 new ManifestKind variants (CmakeLists, MesonBuild, ConfigureAc, MakefileAm, CsProj, SlnFile, GlobalJson, BuildSbt, ScalaBuildProperties, DuneProject, OpamFile, Rockspec, Luarc, RojoProject, LuauRc), expanding MANIFEST_PRECEDENCE from 14 to 29 entries. Introduced ManifestMatcher enum {Exact, Extension, Nested} so *.csproj / *.opam / *.rockspec patterns work alongside fixed filenames; added special-case disjunctions for configure.ac|configure.in and Makefile.am|Makefile.in; gated GlobalJson on `\"sdk\"` JSON key to avoid false positives. Added c_vs_cpp_tie_break(root) counting .cpp/.cc/.cxx/.hpp/.hh/.hxx vs .c (excluding .h as ambiguous) — Cpp wins if strictly greater, else C. 38 new unit tests in types.rs (18 per-language plus C/C++ tie-break + global.json negative case), 18 new integration tests in language_autodetect_tests.rs. Parser audit (new test_all_18_parsers_accept_minimal_valid_snippet): all 18 languages parse their minimal valid snippet with zero ERROR nodes. tldr-core lib: 4675 passed / 0 failed / 340 ignored (+59 tests from VAL-007 baseline 4616). CLI integration: 18 passed / 0 failed. Clippy workspace clean with -D warnings. Docstring table at Language::from_directory updated to reflect 29-entry precedence + both tie-breaks.",
+      "text": "Every language tldr supports (18 total: Python, TypeScript, JavaScript, Go, Rust, Java, C, Cpp, Ruby, Kotlin, Swift, CSharp, Scala, Php, Lua, Luau, Elixir, Ocaml) has coverage in `Language::from_directory` AND a verified end-to-end path through `tldr structure` / `tldr impact` autodetect. Currently 11/18 are manifest-covered; 7 fall through to extension-majority (C, Cpp, CSharp, Scala, Lua, Luau, Ocaml). Also: `.h` files map to C only, causing C++ projects with `.h` headers to misdetect as C. Fix: (a) Add manifest detection for the 7 missing languages — C: `CMakeLists.txt`, `meson.build`, `configure.ac`, `Makefile.am` (when extension vote is majority .c); Cpp: same C manifest families BUT tie-break by `.cpp+.cc+.cxx > .c` files → C++; CSharp: `*.csproj` or `*.sln` or `global.json`; Scala: `build.sbt` or `project/build.properties` or `build.mill`; Lua: `*.rockspec` or `.luarc.json`; Luau: `default.project.json` (Rojo) or `.luaurc`; OCaml: `dune-project` or `*.opam`. Insert these into `MANIFEST_PRECEDENCE` at `crates/tldr-core/src/types.rs:293`. Higher precedence than pure extension-majority but lower than the already-covered 11 (or at sensible positions — worker decides). (b) Fix C-vs-C++ extension disambiguation at `types.rs::from_extension` (line 122): `.h` alone is ambiguous. Keep `.h → C` for from_extension (file-level), but in `detect_from_manifests` C/C++ tie-break, count `.cpp+.cc+.cxx+.hpp+.hh+.hxx` vs `.c` and pick Cpp if the former wins. (c) Write per-language tests in `types.rs` — ONE test per language (18 tests) verifying `Language::from_directory` returns the expected language on a canonical fixture (minimal but realistic: a manifest file where applicable + one source file). (d) Write integration tests in `crates/tldr-cli/tests/` — one `tldr structure <tempdir>` invocation per language, assert the `language` field in JSON output matches. This confirms the CLI pipeline works end-to-end for each language, not just the detector. (e) For languages whose parser has known gaps (check tldr-core's parser at `ast/parser.rs:37-64` — should cover all 18; verify by parsing a minimal snippet), document any that produce ERROR-node-heavy ASTs. If a language parses with ERROR nodes on valid code, flag in the report's 'remaining' field — do NOT try to fix it in this milestone. Acceptance: (1) All 18 languages detected correctly by `Language::from_directory` against per-language fixture dirs (unit tests). (2) `tldr structure <fixture>` reports correct `language` field for each of the 18 languages (integration tests). (3) No ERROR nodes when parsing a minimal valid source file for each — or documented as known issue. (4) `cargo test --workspace` passes, clippy -D warnings clean. (5) Update docstring table at `types.rs:161-177` (the manifest precedence table in `from_directory` docs) to include the new manifests.",
+      "milestone": "all-languages-coverage",
+      "status": "passed",
+      "depends": ["VAL-002"],
+      "worker": "kraken (VAL-008)",
+      "evidence": "reports/m8-all-languages.json"
     }
   ]
 }
