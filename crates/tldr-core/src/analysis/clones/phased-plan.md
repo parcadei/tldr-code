@@ -284,7 +284,7 @@ Tree-sitter queries per language (RISK-5, RISK-11 addressed):
 | Language | Query | Notes |
 |----------|-------|-------|
 | Python | `(function_definition) @fn` | Top-level only; skip nested via depth check |
-| TypeScript/JS | `(function_declaration) @fn`, `(method_definition) @method`, `(arrow_function) @fn` | Skip if parent is another function |
+| TypeScript/JS | `(function_declaration) @fn`, `(method_definition) @method`, `(method_signature) @method`, `(abstract_method_signature) @method`, `(arrow_function) @fn` | Skip if parent is another function |
 | Go | `(function_declaration) @fn`, `(method_declaration) @method` | Both free functions and methods |
 | Rust | `(function_item) @fn` | Extract methods INSIDE impl blocks as individual fns, NOT the impl itself |
 | Java | `(method_declaration) @method`, `(constructor_declaration) @ctor` | Skip class-level extraction |
