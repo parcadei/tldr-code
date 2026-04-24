@@ -108,7 +108,26 @@ struct TsPathMapping {
 impl ModuleIndex {
     /// Creates a new empty ModuleIndex.
     pub fn new(project_root: PathBuf, language: &str) -> Self {
-        let metadata = ModuleIndexMetadata::detect(&project_root, language);
+        Self::new_with_workspace_roots(project_root, language, &[])
+    }
+
+    /// Creates a new empty ModuleIndex, optionally using additional workspace
+    /// roots for build-metadata detection (VAL-007).
+    ///
+    /// `extra_workspace_roots` is a list of directories in addition to
+    /// `project_root` whose manifest files (`tsconfig.json`, `package.json`,
+    /// ...) should contribute to the metadata. The root itself is implied and
+    /// must NOT be duplicated here.
+    pub fn new_with_workspace_roots(
+        project_root: PathBuf,
+        language: &str,
+        extra_workspace_roots: &[PathBuf],
+    ) -> Self {
+        let metadata = ModuleIndexMetadata::detect_with_workspace_roots(
+            &project_root,
+            language,
+            extra_workspace_roots,
+        );
         Self {
             project_root,
             module_to_file: HashMap::new(),
@@ -152,10 +171,34 @@ impl ModuleIndex {
         language: &str,
         respect_ignore: bool,
     ) -> Result<Self, ModuleIndexError> {
+        Self::build_with_workspace_roots(root, language, respect_ignore, &[])
+    }
+
+    /// Build index, optionally reading build metadata (tsconfig paths, etc.)
+    /// from additional workspace roots in addition to the primary `root`
+    /// (VAL-007).
+    ///
+    /// When called with an empty `extra_workspace_roots` slice, behaves
+    /// identically to [`Self::build_with_ignore`].
+    ///
+    /// # Arguments
+    ///
+    /// * `root` - Project root directory to scan
+    /// * `language` - Programming language
+    /// * `respect_ignore` - Whether to respect `.gitignore` patterns
+    /// * `extra_workspace_roots` - Additional directories (e.g. pnpm package
+    ///   dirs) whose `tsconfig.json` / `package.json` should also be read
+    pub fn build_with_workspace_roots(
+        root: &Path,
+        language: &str,
+        respect_ignore: bool,
+        extra_workspace_roots: &[PathBuf],
+    ) -> Result<Self, ModuleIndexError> {
         // Resolve to canonical path for symlink handling
         let canonical_root = resolve_path(root, root)?;
 
-        let mut index = Self::new(canonical_root.clone(), language);
+        let mut index =
+            Self::new_with_workspace_roots(canonical_root.clone(), language, extra_workspace_roots);
 
         // Track directories that contain Python files (for namespace package detection)
         let mut dirs_with_py_files: HashSet<PathBuf> = HashSet::new();
@@ -915,7 +958,19 @@ fn normalize_module_key(key: &str) -> String {
 }
 
 impl ModuleIndexMetadata {
+    #[allow(dead_code)] // public API retained for callers that don't need multi-root
     fn detect(root: &Path, language: &str) -> Self {
+        Self::detect_with_workspace_roots(root, language, &[])
+    }
+
+    /// Detect build metadata, optionally also consulting additional workspace
+    /// roots' manifests (VAL-007).
+    ///
+    /// For TypeScript/JavaScript, this reads `tsconfig.json` from the primary
+    /// `root` PLUS each entry in `extra_roots` and merges their path aliases.
+    /// Duplicate alias patterns resolve with last-wins semantics (documented
+    /// limitation; per-root scoped resolution is future work).
+    fn detect_with_workspace_roots(root: &Path, language: &str, extra_roots: &[PathBuf]) -> Self {
         let lang = language.to_lowercase();
         let mut meta = ModuleIndexMetadata::default();
 
@@ -924,8 +979,8 @@ impl ModuleIndexMetadata {
         }
 
         if lang == "typescript" || lang == "javascript" {
-            meta.ts_base_url = detect_ts_base_url(root);
-            meta.ts_paths = detect_ts_paths(root);
+            meta.ts_base_url = detect_ts_base_url_multi(root, extra_roots);
+            meta.ts_paths = detect_ts_paths_multi(root, extra_roots);
             meta.js_package_name = detect_js_package_name(root);
         }
 
@@ -1022,7 +1077,27 @@ fn detect_js_package_name(root: &Path) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+#[allow(dead_code)] // retained for callers not using multi-root discovery
 fn detect_ts_base_url(root: &Path) -> Option<PathBuf> {
+    detect_ts_base_url_multi(root, &[])
+}
+
+/// Detect the `baseUrl` at the primary `root`'s `tsconfig.json` (VAL-007).
+///
+/// We intentionally do NOT fall back to a sub-package's `baseUrl` when the
+/// root has none: a sub-package's baseUrl (e.g. `apps/web/.`) is specific
+/// to that package's compilation context, and promoting it to the whole
+/// workspace would cause `ts_alias_for_pattern` to incorrectly prefix
+/// every target pattern with `apps/web/` a second time (since target
+/// patterns are already rewritten project-relative by
+/// `detect_ts_paths_multi`). Per-package scoped baseUrl resolution is
+/// documented as future work.
+#[allow(clippy::ptr_arg)]
+fn detect_ts_base_url_multi(root: &Path, _extra_roots: &[PathBuf]) -> Option<PathBuf> {
+    detect_ts_base_url_from_root(root)
+}
+
+fn detect_ts_base_url_from_root(root: &Path) -> Option<PathBuf> {
     let configs = load_tsconfig_chain(root.join("tsconfig.json"));
     for config in configs.iter().rev() {
         let compiler = config.json.get("compilerOptions")?;
@@ -1037,16 +1112,33 @@ fn detect_ts_base_url(root: &Path) -> Option<PathBuf> {
     None
 }
 
+#[allow(dead_code)] // retained for callers not using multi-root discovery
 fn detect_ts_paths(root: &Path) -> Vec<TsPathMapping> {
-    let configs = load_tsconfig_chain(root.join("tsconfig.json"));
+    detect_ts_paths_multi(root, &[])
+}
+
+/// Merge `tsconfig.json` path mappings from `root` and every entry in
+/// `extra_roots` (VAL-007). Duplicate alias patterns across roots resolve
+/// with last-wins semantics: per-root scoped resolution (so `@/` from
+/// `apps/web/tsconfig.json` only resolves for imports rooted under
+/// `apps/web/**`) is future work.
+fn detect_ts_paths_multi(root: &Path, extra_roots: &[PathBuf]) -> Vec<TsPathMapping> {
     let mut merged: HashMap<String, Vec<String>> = HashMap::new();
-    for config in configs {
-        if let Some(compiler) = config.json.get("compilerOptions") {
-            if let Some(paths) = compiler.get("paths") {
-                extract_ts_paths(paths, &mut merged);
-            }
+
+    // Primary root first. Its tsconfig (if any) declares paths at the top
+    // level, so no prefix rewriting is needed.
+    collect_ts_paths_from_root(root, root, &mut merged);
+    // Each extra root's tsconfig needs its target patterns rewritten to be
+    // relative to the PRIMARY project root, so `ts_alias_for_pattern`
+    // (which operates in project-relative space) can match them against
+    // scanned files.
+    for extra in extra_roots {
+        if extra == root {
+            continue;
         }
+        collect_ts_paths_from_root(extra, root, &mut merged);
     }
+
     let mut mappings: Vec<TsPathMapping> = merged
         .into_iter()
         .map(|(alias, targets)| TsPathMapping {
@@ -1056,6 +1148,40 @@ fn detect_ts_paths(root: &Path) -> Vec<TsPathMapping> {
         .collect();
     mappings.sort_by(|a, b| a.alias_pattern.cmp(&b.alias_pattern));
     mappings
+}
+
+/// Populate `merged` with path aliases from the tsconfig chain rooted at
+/// `package_root/tsconfig.json`, rewriting target patterns into the space
+/// of `primary_root` (VAL-007).
+///
+/// If `package_root == primary_root`, patterns are stored as-written.
+/// Otherwise, each relative target is prefixed with the subdirectory
+/// (e.g. `src/*` from `apps/web/tsconfig.json` becomes `apps/web/src/*`)
+/// so `ts_alias_for_pattern` — which matches against project-relative
+/// file paths — can resolve imports to the right file.
+fn collect_ts_paths_from_root(
+    package_root: &Path,
+    primary_root: &Path,
+    merged: &mut HashMap<String, Vec<String>>,
+) {
+    let configs = load_tsconfig_chain(package_root.join("tsconfig.json"));
+    for config in configs {
+        let config_dir = config.path.parent().unwrap_or(package_root).to_path_buf();
+        // Compute the offset from the primary project root so targets
+        // can be rewritten into that space. If the tsconfig lives AT
+        // `primary_root` (or outside it), the offset is empty and
+        // targets stay as-written.
+        let prefix = config_dir
+            .strip_prefix(primary_root)
+            .ok()
+            .map(|r| r.to_path_buf())
+            .filter(|p| !p.as_os_str().is_empty());
+        if let Some(compiler) = config.json.get("compilerOptions") {
+            if let Some(paths) = compiler.get("paths") {
+                extract_ts_paths_with_prefix(paths, prefix.as_deref(), merged);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1120,7 +1246,25 @@ fn resolve_tsconfig_extends(base: &Path, extends: &str) -> Option<PathBuf> {
     Some(path)
 }
 
+#[allow(dead_code)] // retained for single-root callers; see extract_ts_paths_with_prefix
 fn extract_ts_paths(value: &JsonValue, out: &mut HashMap<String, Vec<String>>) {
+    extract_ts_paths_with_prefix(value, None, out);
+}
+
+/// Parse a tsconfig `paths` object and insert each alias -> target mapping
+/// into `out`. When `subdir_prefix` is provided (e.g. `apps/web`), relative
+/// target patterns are rewritten to be relative to the primary project
+/// root — so `@/*` -> `src/*` declared in `apps/web/tsconfig.json`
+/// becomes `@/* -> apps/web/src/*` in the merged table (VAL-007).
+///
+/// Patterns that are absolute OR start with `../` are left unchanged
+/// (the former are user-authored absolute paths, the latter would escape
+/// the workspace — both cases are out of scope for v1).
+fn extract_ts_paths_with_prefix(
+    value: &JsonValue,
+    subdir_prefix: Option<&Path>,
+    out: &mut HashMap<String, Vec<String>>,
+) {
     let map = match value.as_object() {
         Some(m) => m,
         None => return,
@@ -1128,17 +1272,43 @@ fn extract_ts_paths(value: &JsonValue, out: &mut HashMap<String, Vec<String>>) {
     for (alias, targets) in map {
         let mut patterns = Vec::new();
         if let Some(path) = targets.as_str() {
-            patterns.push(path.to_string());
+            patterns.push(rewrite_ts_path_target(path, subdir_prefix));
         } else if let Some(list) = targets.as_array() {
             for item in list {
                 if let Some(path) = item.as_str() {
-                    patterns.push(path.to_string());
+                    patterns.push(rewrite_ts_path_target(path, subdir_prefix));
                 }
             }
         }
         if !patterns.is_empty() {
             out.insert(alias.to_string(), patterns);
         }
+    }
+}
+
+/// Rewrite a tsconfig target pattern so it is relative to the primary
+/// project root (instead of the tsconfig's own directory). Absolute
+/// patterns and escaping `../` patterns are returned unchanged.
+fn rewrite_ts_path_target(target: &str, subdir_prefix: Option<&Path>) -> String {
+    let trimmed = target.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if Path::new(trimmed).is_absolute() {
+        return trimmed.to_string();
+    }
+    // Strip leading `./` so we don't build `apps/web/./src/*`.
+    let stripped = trimmed.strip_prefix("./").unwrap_or(trimmed);
+    if stripped.starts_with("../") {
+        // Out of scope: parent-dir references from a per-package tsconfig.
+        return stripped.to_string();
+    }
+    match subdir_prefix {
+        Some(prefix) if !prefix.as_os_str().is_empty() => {
+            let joined = prefix.join(stripped);
+            normalize_relative_str(&joined)
+        }
+        _ => stripped.to_string(),
     }
 }
 

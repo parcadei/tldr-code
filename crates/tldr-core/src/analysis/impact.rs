@@ -22,7 +22,7 @@ use crate::ast::extractor::{extract_functions, extract_methods};
 use crate::ast::parser::parse_file;
 use crate::error::TldrError;
 use crate::fs::tree::{collect_files, get_file_tree};
-use crate::types::{CallerTree, ImpactReport, ProjectCallGraph};
+use crate::types::{CallerTree, ImpactReport, ProjectCallGraph, WorkspaceConfig};
 use crate::{Language, TldrResult};
 
 /// Analyze impact of changing a function.
@@ -142,10 +142,33 @@ pub fn impact_analysis_with_ast_fallback(
             // Call graph lookup failed -- try AST-based discovery
             match find_function_in_ast(project_root, target_func, target_file, language) {
                 Some(locations) => {
+                    // VAL-007: classify the "no callers" note based on whether
+                    // we are operating inside a multi-root workspace (pnpm /
+                    // npm / Cargo / go). When we are, AND the function is
+                    // syntactically exported/public, the most common cause is
+                    // unresolved tsconfig path aliases or an incomplete
+                    // module graph — say so, rather than mis-claiming the
+                    // function truly has no callers.
+                    let ws = WorkspaceConfig::discover(project_root);
+                    let multi_root = ws.as_ref().map(|c| c.roots.len() > 1).unwrap_or(false);
+                    let workspace_paths: Vec<String> = ws
+                        .as_ref()
+                        .map(|c| c.roots.iter().map(|p| p.display().to_string()).collect())
+                        .unwrap_or_default();
+
                     // Function exists in AST but has no call edges
                     let mut targets = HashMap::new();
                     for (func_name, func_file) in &locations {
                         let key = format!("{}:{}", func_file.display(), func_name);
+                        let is_exported = function_is_exported(func_file, target_func, language);
+
+                        let note = build_ast_fallback_note(
+                            is_exported,
+                            multi_root,
+                            &workspace_paths,
+                            project_root,
+                        );
+
                         targets.insert(
                             key,
                             CallerTree {
@@ -154,10 +177,7 @@ pub fn impact_analysis_with_ast_fallback(
                                 caller_count: 0,
                                 callers: vec![],
                                 truncated: false,
-                                note: Some(
-                                    "Function found via AST but has no call edges in analyzed scope"
-                                        .to_string(),
-                                ),
+                                note: Some(note),
                                 confidence: None,
                                 receiver_type: None,
                             },
@@ -241,6 +261,144 @@ fn find_function_in_ast(
     } else {
         Some(found)
     }
+}
+
+/// Build the human-readable note emitted by the AST-fallback path when a
+/// function is found in source but has no edges in the call graph (VAL-007).
+///
+/// The three branches map to user-visible realities:
+/// - Exported + multi-root workspace: the most likely cause is unresolved
+///   `tsconfig.json` path aliases. Callers exist, we just didn't see them.
+/// - Exported + no workspace detected: the user may be running from a
+///   single-package subdirectory of a monorepo. Tell them how to widen scope.
+/// - Private / not-detectable visibility: retain the conservative wording;
+///   a truly isolated private function with zero callers IS a real result.
+fn build_ast_fallback_note(
+    is_exported: bool,
+    multi_root: bool,
+    workspace_paths: &[String],
+    project_root: &Path,
+) -> String {
+    if multi_root {
+        if is_exported {
+            let shown: Vec<&str> = workspace_paths.iter().take(3).map(String::as_str).collect();
+            let ellipsis = if workspace_paths.len() > 3 {
+                format!(", ... ({} more)", workspace_paths.len() - 3)
+            } else {
+                String::new()
+            };
+            format!(
+                "Function is exported but no callers found across workspace roots [{}{}]. \
+                 If this is unexpected, tsconfig.json path aliases may not be resolving correctly \
+                 (per-package configs not yet fully supported).",
+                shown.join(", "),
+                ellipsis,
+            )
+        } else {
+            format!(
+                "Function found via AST but has no call edges across {} workspace roots. \
+                 It may be an entry point or truly isolated.",
+                workspace_paths.len(),
+            )
+        }
+    } else if is_exported {
+        format!(
+            "Function is exported but no callers found in {}. \
+             If this is a monorepo, run from the workspace root or pass --workspace-root <path>.",
+            project_root.display(),
+        )
+    } else {
+        "Function found via AST but has no call edges in analyzed scope.".to_string()
+    }
+}
+
+/// Best-effort check for whether `target_func` is declared with export /
+/// public visibility in `file`. We look for the declaration site rather
+/// than the call site. This is intentionally textual (not AST-based) to
+/// keep the cost bounded on the fallback path — the AST has already been
+/// consulted to confirm the function exists at all.
+///
+/// Returns `true` only when evidence is positive; defaults to `false` on
+/// read errors or unrecognized languages, which preserves the conservative
+/// "unknown visibility" note.
+fn function_is_exported(file: &Path, target_func: &str, language: Language) -> bool {
+    let source = match std::fs::read_to_string(file) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    // Strip a leading `Class.` prefix from method names so we look for the
+    // bare identifier in source.
+    let name = match target_func.rsplit_once('.') {
+        Some((_, tail)) => tail,
+        None => target_func,
+    };
+
+    // Build language-appropriate export/public markers.
+    let patterns: &[&str] = match language {
+        Language::TypeScript | Language::JavaScript => &[
+            "export function",
+            "export async function",
+            "export default function",
+            "export default async function",
+            "export const",
+            "export let",
+            "export var",
+            "export class",
+        ],
+        Language::Python => &["def "], // Python: any top-level def is importable
+        Language::Rust => &["pub fn", "pub async fn", "pub(crate) fn", "pub(super) fn"],
+        Language::Go => &[], // Go: case-based, handled below
+        Language::Java | Language::CSharp | Language::Kotlin | Language::Scala => &["public "],
+        _ => &[],
+    };
+
+    // Go: exported iff the first letter is uppercase.
+    if language == Language::Go {
+        if let Some(ch) = name.chars().next() {
+            return ch.is_ascii_uppercase();
+        }
+        return false;
+    }
+
+    for line in source.lines() {
+        let trimmed = line.trim_start();
+        for marker in patterns {
+            if trimmed.starts_with(marker)
+                && line.contains(name)
+                && looks_like_declaration_of(line, name)
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Cheap sanity check that `line` plausibly declares `name` (rather than
+/// just mentioning it in a string literal). We require `name` to appear
+/// followed by `(`, `=`, `:`, `<`, or whitespace.
+fn looks_like_declaration_of(line: &str, name: &str) -> bool {
+    let mut haystack = line;
+    while let Some(pos) = haystack.find(name) {
+        let after = &haystack[pos + name.len()..];
+        let before_ok = pos == 0
+            || haystack
+                .as_bytes()
+                .get(pos - 1)
+                .map(|b| !b.is_ascii_alphanumeric() && *b != b'_')
+                .unwrap_or(true);
+        let after_ok = after
+            .chars()
+            .next()
+            .map(|c| matches!(c, '(' | '=' | ':' | '<' | ' ' | '\t' | '\n'))
+            .unwrap_or(true);
+        if before_ok && after_ok {
+            return true;
+        }
+        haystack = &haystack[pos + name.len()..];
+    }
+    false
 }
 
 /// Key for the reverse graph: (file, function)
@@ -513,10 +671,15 @@ mod tests {
         let tree = report.targets.values().next().unwrap();
         assert_eq!(tree.function, "CreateIssue");
         assert_eq!(tree.caller_count, 0);
+        // VAL-007: the fallback note now adapts based on workspace + export
+        // visibility. CreateIssue is exported (Go: uppercase first letter)
+        // and the tempdir is not a workspace root, so we expect the
+        // "single-root + exported" variant which mentions workspace guidance.
+        let note = tree.note.as_ref().unwrap();
         assert!(
-            tree.note.as_ref().unwrap().contains("no call edges"),
-            "Note should mention no call edges, got: {:?}",
-            tree.note
+            note.contains("no callers") || note.contains("no call edges"),
+            "Note should mention missing callers, got: {:?}",
+            note
         );
 
         let _ = std::fs::remove_dir_all(&dir);

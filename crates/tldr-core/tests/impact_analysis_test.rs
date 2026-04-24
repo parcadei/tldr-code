@@ -365,3 +365,104 @@ fn test_impact_analysis_cyclic_call_detection() {
 
     println!("PASS: Cycle detection works correctly in impact analysis");
 }
+
+// =============================================================================
+// VAL-007: Multi-root workspace discovery + tsconfig path resolution
+// =============================================================================
+
+/// End-to-end acceptance test: in a pnpm-style monorepo, `impact` on an
+/// exported function should either (a) find its cross-package caller via
+/// resolved tsconfig path aliases, or (b) fall through to the AST-fallback
+/// path and emit the new multi-root-aware note. The "misleading note with
+/// zero callers" outcome that this milestone targets must NOT occur.
+#[test]
+fn test_impact_finds_callers_in_pnpm_monorepo() {
+    use tldr_core::analysis::impact_analysis_with_ast_fallback;
+    use tldr_core::callgraph::build_project_call_graph;
+    use tldr_core::Language;
+
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let root = tmp.path();
+
+    // Layout:
+    //   root/pnpm-workspace.yaml
+    //   root/apps/web/tsconfig.json    ({ paths: { "@/*": ["src/*"] } })
+    //   root/apps/web/src/util.ts      (export function myUtil() { ... })
+    //   root/apps/web/src/app.ts       (import { myUtil } from "@/util"; ...)
+    std::fs::write(
+        root.join("pnpm-workspace.yaml"),
+        "packages:\n  - 'apps/*'\n",
+    )
+    .unwrap();
+
+    let web = root.join("apps/web");
+    let web_src = web.join("src");
+    std::fs::create_dir_all(&web_src).unwrap();
+
+    std::fs::write(
+        web.join("tsconfig.json"),
+        r#"{"compilerOptions":{"baseUrl":".","paths":{"@/*":["src/*"]}}}"#,
+    )
+    .unwrap();
+
+    std::fs::write(
+        web_src.join("util.ts"),
+        "export function myUtil(): number { return 1; }\n",
+    )
+    .unwrap();
+
+    std::fs::write(
+        web_src.join("app.ts"),
+        "import { myUtil } from \"@/util\";\n\
+         export function main(): number { return myUtil(); }\n",
+    )
+    .unwrap();
+
+    // Sanity check: discovery sees the web package.
+    let ws = tldr_core::types::WorkspaceConfig::discover(root)
+        .expect("pnpm workspace should be discovered");
+    assert!(
+        ws.roots.len() >= 2,
+        "expected root + apps/web at minimum, got: {:?}",
+        ws.roots,
+    );
+
+    // Build graph with the auto-discovered workspace config.
+    let graph = build_project_call_graph(root, Language::TypeScript, None, true)
+        .expect("callgraph build should succeed in pnpm monorepo fixture");
+
+    let report =
+        impact_analysis_with_ast_fallback(&graph, "myUtil", 3, None, root, Language::TypeScript)
+            .expect("impact should succeed (either via edges or AST fallback)");
+
+    assert_eq!(
+        report.total_targets, 1,
+        "should resolve to exactly one target"
+    );
+    let tree = report.targets.values().next().unwrap();
+
+    // The ideal outcome (call edge resolution via per-package tsconfig)
+    // OR the acceptable outcome (honest multi-root note) both satisfy the
+    // VAL-007 contract: the tool must not silently lie about having
+    // no callers.
+    let note = tree.note.clone().unwrap_or_default();
+
+    let has_callers = tree.caller_count >= 1;
+    let has_honest_note = note.contains("workspace roots")
+        || note.contains("path aliases")
+        || note.contains("run from the workspace root");
+
+    assert!(
+        has_callers || has_honest_note,
+        "expected callers OR multi-root aware note; got caller_count={}, note={:?}",
+        tree.caller_count,
+        note,
+    );
+
+    // The OLD misleading note is banned.
+    assert!(
+        !note.contains("no call edges in analyzed scope"),
+        "VAL-007 regression: old misleading note resurfaced. note={:?}",
+        note,
+    );
+}

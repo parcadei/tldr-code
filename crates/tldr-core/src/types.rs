@@ -25,7 +25,7 @@ pub use patterns::*;
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // =============================================================================
 // Language Support
@@ -920,6 +920,413 @@ impl std::fmt::Display for FunctionRef {
 pub struct WorkspaceConfig {
     /// Root directories of the workspace
     pub roots: Vec<PathBuf>,
+}
+
+/// Upper bound on workspace members to guard against pathological configs
+/// (VAL-007). Matches the cost budget documented on `WorkspaceConfig::discover`.
+const MAX_WORKSPACE_MEMBERS: usize = 256;
+
+/// Directories we refuse to expand globs into during workspace discovery
+/// (VAL-007). Mirrors [`crate::walker::DEFAULT_EXCLUDE_DIRS`] but is kept
+/// duplicated here to avoid a circular module reference (`walker` depends
+/// on nothing from `types`, and we want to keep it that way).
+const WORKSPACE_EXPANSION_EXCLUDED_DIRS: &[&str] = &[
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".next",
+    ".nuxt",
+    "__pycache__",
+    "vendor",
+    ".git",
+    ".venv",
+    "venv",
+    ".tox",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+];
+
+impl WorkspaceConfig {
+    /// Discover workspace roots from common manifest files at or near `root`.
+    ///
+    /// Returns `Some(WorkspaceConfig { roots: [...] })` when a known workspace
+    /// manifest is found and enumerates at least one member; `None` otherwise
+    /// (so callers can preserve existing single-root behavior).
+    ///
+    /// Probed markers, in order:
+    /// - `pnpm-workspace.yaml` at `root` (parses `packages:` glob list)
+    /// - `package.json` at `root` with `"workspaces": [...]` (npm/yarn/pnpm)
+    /// - `Cargo.toml` at `root` with `[workspace] members = [...]`
+    /// - `go.work` at `root` with `use <path>` directives
+    ///
+    /// All returned roots are absolute paths (canonicalized when possible,
+    /// falling back to `root.join(member)` when canonicalization fails).
+    /// The returned list always contains `root` itself as the first entry,
+    /// followed by each discovered member directory.
+    ///
+    /// To prevent pathological configurations, the returned list is capped
+    /// at [`MAX_WORKSPACE_MEMBERS`] entries (including the root).
+    pub fn discover(root: &Path) -> Option<Self> {
+        // Deliberately do NOT canonicalize the root here. Downstream code
+        // (e.g. `callgraph::scanner::resolve_scan_roots`) verifies that
+        // every workspace root `starts_with(root)` using the path shape
+        // the caller provided — canonicalizing to `/private/var/...` on
+        // macOS when the caller passed `/var/...` would break that check.
+        // The paths we return are always `root.join(member)` in the same
+        // shape as the caller's root.
+        let probe_root = root;
+
+        // Probe markers in priority order.
+        let members = probe_pnpm_workspace(probe_root)
+            .or_else(|| probe_package_json_workspaces(probe_root))
+            .or_else(|| probe_cargo_workspace(probe_root))
+            .or_else(|| probe_go_work(probe_root))?;
+
+        let mut seen: HashSet<PathBuf> = HashSet::new();
+        let mut roots = Vec::with_capacity(members.len() + 1);
+
+        // Always include the root itself so siblings can be scanned together.
+        let root_key = root.to_path_buf();
+        seen.insert(root_key.clone());
+        roots.push(root_key);
+
+        let cap = MAX_WORKSPACE_MEMBERS;
+        let mut truncated = false;
+        for member in members {
+            if roots.len() >= cap {
+                truncated = true;
+                break;
+            }
+            if !member.exists() || !member.is_dir() {
+                continue;
+            }
+            // Keep paths in the same shape as the caller's root so
+            // downstream starts_with() checks pass (no canonicalization).
+            if seen.insert(member.clone()) {
+                roots.push(member);
+            }
+        }
+
+        if truncated {
+            eprintln!(
+                "[tldr] WorkspaceConfig::discover: workspace member count exceeded {} — truncating; some roots not scanned.",
+                cap
+            );
+        }
+
+        // If only the root itself made it into the list (no real members
+        // found), tell the caller there's no workspace.
+        if roots.len() <= 1 {
+            return None;
+        }
+
+        Some(Self { roots })
+    }
+}
+
+// =============================================================================
+// Workspace discovery probes (VAL-007)
+// =============================================================================
+
+/// Probe for a pnpm workspace at `root`. Returns discovered member directories
+/// (NOT including the root itself) on success.
+fn probe_pnpm_workspace(root: &Path) -> Option<Vec<PathBuf>> {
+    let path = root.join("pnpm-workspace.yaml");
+    let content = std::fs::read_to_string(&path).ok()?;
+
+    // Parse with serde_yaml first; fall back to a minimal regex extractor
+    // if the YAML is unparseable (pnpm sometimes accepts slightly sloppy
+    // YAML that real-world repos have on disk).
+    let packages: Vec<String> = serde_yaml::from_str::<serde_yaml::Value>(&content)
+        .ok()
+        .and_then(|v| {
+            v.get("packages").and_then(|p| p.as_sequence()).map(|seq| {
+                seq.iter()
+                    .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<_>>()
+            })
+        })
+        .unwrap_or_else(|| fallback_extract_yaml_list(&content, "packages"));
+
+    if packages.is_empty() {
+        return None;
+    }
+
+    Some(expand_workspace_patterns(root, &packages))
+}
+
+/// Probe for an npm/yarn `package.json` with a `workspaces` array.
+fn probe_package_json_workspaces(root: &Path) -> Option<Vec<PathBuf>> {
+    let path = root.join("package.json");
+    let content = std::fs::read_to_string(&path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let ws = json.get("workspaces")?;
+
+    // `workspaces` may be an array of strings OR an object with `packages`.
+    let patterns: Vec<String> = if let Some(arr) = ws.as_array() {
+        arr.iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect()
+    } else if let Some(obj) = ws.as_object() {
+        obj.get("packages")
+            .and_then(|p| p.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    } else {
+        return None;
+    };
+
+    if patterns.is_empty() {
+        return None;
+    }
+
+    Some(expand_workspace_patterns(root, &patterns))
+}
+
+/// Probe for a Cargo workspace at `root`. Parses the `[workspace]` section
+/// manually to avoid pulling in the `toml` crate (the codebase already
+/// reads Cargo.toml this way — see `detect_rust_crate_name` in
+/// `callgraph/module_index.rs`).
+fn probe_cargo_workspace(root: &Path) -> Option<Vec<PathBuf>> {
+    let path = root.join("Cargo.toml");
+    let content = std::fs::read_to_string(&path).ok()?;
+
+    let mut in_workspace = false;
+    let mut members_block: Option<String> = None;
+    let mut buffer = String::new();
+    let mut collecting = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            if collecting {
+                // A new section started before the array closed — bail.
+                break;
+            }
+            in_workspace = trimmed == "[workspace]";
+            continue;
+        }
+        if !in_workspace {
+            continue;
+        }
+
+        if !collecting {
+            // Look for `members = [...]` (possibly on a single line or multi-line).
+            if let Some(rest) = trimmed.strip_prefix("members") {
+                let after_eq = rest.trim_start().strip_prefix('=')?.trim_start();
+                if let Some(after_open) = after_eq.strip_prefix('[') {
+                    // Check if the array closes on the same line.
+                    if let Some(end) = after_open.find(']') {
+                        members_block = Some(after_open[..end].to_string());
+                        break;
+                    } else {
+                        buffer.push_str(after_open);
+                        buffer.push('\n');
+                        collecting = true;
+                    }
+                }
+            }
+        } else if let Some(end) = trimmed.find(']') {
+            buffer.push_str(&trimmed[..end]);
+            members_block = Some(std::mem::take(&mut buffer));
+            break;
+        } else {
+            buffer.push_str(trimmed);
+            buffer.push('\n');
+        }
+    }
+
+    let block = members_block?;
+    let patterns: Vec<String> = block
+        .split(',')
+        .map(|p| {
+            p.trim()
+                .trim_matches('"')
+                .trim_matches('\'')
+                .trim()
+                .to_string()
+        })
+        .filter(|p| !p.is_empty() && !p.starts_with('#'))
+        .collect();
+
+    if patterns.is_empty() {
+        return None;
+    }
+
+    Some(expand_workspace_patterns(root, &patterns))
+}
+
+/// Probe for a Go workspace at `root` (`go.work`).
+fn probe_go_work(root: &Path) -> Option<Vec<PathBuf>> {
+    let path = root.join("go.work");
+    let content = std::fs::read_to_string(&path).ok()?;
+
+    let mut patterns: Vec<String> = Vec::new();
+    let mut in_use_block = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("//") {
+            continue;
+        }
+
+        // Multi-line form: `use (\n\t./a\n\t./b\n)`
+        if in_use_block {
+            if trimmed == ")" {
+                in_use_block = false;
+                continue;
+            }
+            let p = trimmed.trim_matches('"').trim();
+            if !p.is_empty() {
+                patterns.push(p.to_string());
+            }
+            continue;
+        }
+
+        if let Some(rest) = trimmed.strip_prefix("use") {
+            let rest = rest.trim_start();
+            if rest == "(" || rest.is_empty() {
+                in_use_block = rest == "(";
+                continue;
+            }
+            // Single-line form: `use ./foo`
+            let p = rest.trim_matches('"').trim();
+            if !p.is_empty() {
+                patterns.push(p.to_string());
+            }
+        }
+    }
+
+    if patterns.is_empty() {
+        return None;
+    }
+
+    Some(expand_workspace_patterns(root, &patterns))
+}
+
+/// Expand a list of workspace patterns (possibly containing `*` globs or
+/// `**` recursive globs) relative to `root` into a concrete list of
+/// directory paths. Vendored / build directories are skipped.
+fn expand_workspace_patterns(root: &Path, patterns: &[String]) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+
+    for pat in patterns {
+        let cleaned = pat
+            .trim()
+            .trim_start_matches("./")
+            .trim_end_matches('/')
+            .to_string();
+        if cleaned.is_empty() {
+            continue;
+        }
+
+        if contains_glob_char(&cleaned) {
+            let full = root.join(&cleaned);
+            let full_str = full.to_string_lossy();
+            if let Ok(paths) = glob::glob(&full_str) {
+                for entry in paths.flatten() {
+                    if entry.is_dir() && !path_contains_excluded_dir(root, &entry) {
+                        out.push(entry);
+                    }
+                }
+            }
+        } else {
+            let full = root.join(&cleaned);
+            if full.is_dir() && !path_contains_excluded_dir(root, &full) {
+                out.push(full);
+            }
+        }
+    }
+
+    out
+}
+
+fn contains_glob_char(s: &str) -> bool {
+    s.contains('*') || s.contains('?') || s.contains('[')
+}
+
+/// Return true if any path component between `root` and `path`
+/// matches a vendored / build-output directory name. The root itself
+/// is NOT checked (the root can legitimately live under a dir named
+/// `vendor/` on disk).
+fn path_contains_excluded_dir(root: &Path, path: &Path) -> bool {
+    let rel = match path.strip_prefix(root) {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+    rel.components().any(|c| {
+        if let std::path::Component::Normal(name) = c {
+            if let Some(s) = name.to_str() {
+                return WORKSPACE_EXPANSION_EXCLUDED_DIRS.contains(&s);
+            }
+        }
+        false
+    })
+}
+
+/// Last-resort regex extractor for `key: [ "./a", "./b" ]` / block-style
+/// YAML lists when `serde_yaml` rejects the document. Matches only the
+/// shape real-world `pnpm-workspace.yaml` files take.
+fn fallback_extract_yaml_list(content: &str, key: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut in_block = false;
+    let prefix = format!("{}:", key);
+
+    for line in content.lines() {
+        let raw = line;
+        let trimmed = line.trim_start();
+
+        if !in_block {
+            if trimmed.starts_with(&prefix) {
+                // Flow-style single-line list: `packages: ["./a", "./b"]`
+                if let Some(rest) = trimmed.strip_prefix(&prefix) {
+                    let rest = rest.trim();
+                    if let Some(inner) = rest.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+                        for piece in inner.split(',') {
+                            let cleaned = piece
+                                .trim()
+                                .trim_matches('"')
+                                .trim_matches('\'')
+                                .to_string();
+                            if !cleaned.is_empty() {
+                                out.push(cleaned);
+                            }
+                        }
+                        return out;
+                    }
+                    if rest.is_empty() {
+                        in_block = true;
+                    }
+                }
+            }
+            continue;
+        }
+
+        // In the block: accept `  - "./foo"` until a less-indented line.
+        if raw.trim().is_empty() {
+            continue;
+        }
+        if !raw.starts_with(' ') && !raw.starts_with('\t') {
+            // Dedented past our key — block ended.
+            break;
+        }
+        let t = raw.trim();
+        if let Some(item) = t.strip_prefix("- ") {
+            let cleaned = item.trim().trim_matches('"').trim_matches('\'').to_string();
+            if !cleaned.is_empty() {
+                out.push(cleaned);
+            }
+        }
+    }
+
+    out
 }
 
 /// Project-wide call graph (spec Section 2.2.1)
@@ -2581,5 +2988,255 @@ mod tests {
             Some(Language::TypeScript),
             "pnpm monorepo with tsconfig.json in packages/*/ must detect TypeScript, not JS (from root package.json without TS dep) and not Python (from node_modules bait)"
         );
+    }
+
+    // =========================================================================
+    // VAL-007: WorkspaceConfig::discover
+    // =========================================================================
+
+    /// Canonical path comparison helper — tempdirs under `/var/folders` get
+    /// canonicalized to `/private/var/folders` on macOS, which breaks naive
+    /// PathBuf::contains checks.
+    fn canon(p: &std::path::Path) -> PathBuf {
+        dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
+    }
+
+    fn roots_contain(ws: &WorkspaceConfig, needle: &std::path::Path) -> bool {
+        let target = canon(needle);
+        ws.roots.iter().any(|r| canon(r) == target)
+    }
+
+    #[test]
+    fn test_discover_pnpm_workspace_yaml() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(
+            root.join("pnpm-workspace.yaml"),
+            "packages:\n  - 'apps/*'\n  - 'packages/*'\n",
+        )
+        .unwrap();
+
+        for sub in ["apps/foo", "apps/bar", "packages/util"] {
+            std::fs::create_dir_all(root.join(sub)).unwrap();
+        }
+
+        let ws = WorkspaceConfig::discover(root)
+            .expect("pnpm-workspace.yaml with real members should yield Some");
+
+        assert!(
+            roots_contain(&ws, root),
+            "root itself should be first entry"
+        );
+        for sub in ["apps/foo", "apps/bar", "packages/util"] {
+            assert!(
+                roots_contain(&ws, &root.join(sub)),
+                "expected {} among roots, got: {:?}",
+                sub,
+                ws.roots,
+            );
+        }
+    }
+
+    #[test]
+    fn test_discover_package_json_workspaces() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(
+            root.join("package.json"),
+            r#"{"name":"monorepo","workspaces":["apps/*"]}"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("apps/web")).unwrap();
+        std::fs::create_dir_all(root.join("apps/admin")).unwrap();
+
+        let ws = WorkspaceConfig::discover(root).expect("npm/yarn workspaces should yield Some");
+        assert!(roots_contain(&ws, root));
+        assert!(roots_contain(&ws, &root.join("apps/web")));
+        assert!(roots_contain(&ws, &root.join("apps/admin")));
+    }
+
+    #[test]
+    fn test_discover_package_json_workspaces_object_form() {
+        // yarn v2/berry form: `"workspaces": { "packages": [...] }`
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(
+            root.join("package.json"),
+            r#"{"name":"x","workspaces":{"packages":["pkg/*"]}}"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("pkg/a")).unwrap();
+
+        let ws = WorkspaceConfig::discover(root).expect("yarn berry workspaces form should work");
+        assert!(roots_contain(&ws, &root.join("pkg/a")));
+    }
+
+    #[test]
+    fn test_discover_cargo_workspace() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"a\", \"b\"]\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("a")).unwrap();
+        std::fs::create_dir_all(root.join("b")).unwrap();
+        std::fs::write(root.join("a/Cargo.toml"), "[package]\nname = \"a\"\n").unwrap();
+        std::fs::write(root.join("b/Cargo.toml"), "[package]\nname = \"b\"\n").unwrap();
+
+        let ws = WorkspaceConfig::discover(root).expect("Cargo [workspace] should yield Some");
+        assert!(roots_contain(&ws, root));
+        assert!(roots_contain(&ws, &root.join("a")));
+        assert!(roots_contain(&ws, &root.join("b")));
+    }
+
+    #[test]
+    fn test_discover_cargo_workspace_multiline_members() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\n    \"a\",\n    \"b\",\n]\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("a")).unwrap();
+        std::fs::create_dir_all(root.join("b")).unwrap();
+
+        let ws = WorkspaceConfig::discover(root).expect("multi-line members array should parse");
+        assert!(roots_contain(&ws, &root.join("a")));
+        assert!(roots_contain(&ws, &root.join("b")));
+    }
+
+    #[test]
+    fn test_discover_go_work() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(root.join("go.work"), "go 1.21\n\nuse ./foo\nuse ./bar\n").unwrap();
+        std::fs::create_dir_all(root.join("foo")).unwrap();
+        std::fs::create_dir_all(root.join("bar")).unwrap();
+
+        let ws = WorkspaceConfig::discover(root).expect("go.work should yield Some");
+        assert!(roots_contain(&ws, &root.join("foo")));
+        assert!(roots_contain(&ws, &root.join("bar")));
+    }
+
+    #[test]
+    fn test_discover_go_work_block_form() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(
+            root.join("go.work"),
+            "go 1.21\n\nuse (\n\t./foo\n\t./bar\n)\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("foo")).unwrap();
+        std::fs::create_dir_all(root.join("bar")).unwrap();
+
+        let ws = WorkspaceConfig::discover(root).expect("go.work block form should yield Some");
+        assert!(roots_contain(&ws, &root.join("foo")));
+        assert!(roots_contain(&ws, &root.join("bar")));
+    }
+
+    #[test]
+    fn test_discover_returns_none_on_bare_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        // No workspace manifest present at all.
+        assert!(WorkspaceConfig::discover(dir.path()).is_none());
+    }
+
+    #[test]
+    fn test_discover_returns_none_when_only_root_matches() {
+        // pnpm manifest exists but references nonexistent members -> None
+        // (we only return Some when at least one real member is found).
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(
+            root.join("pnpm-workspace.yaml"),
+            "packages:\n  - 'does-not-exist/*'\n",
+        )
+        .unwrap();
+
+        assert!(
+            WorkspaceConfig::discover(root).is_none(),
+            "empty expansion should behave like a bare dir"
+        );
+    }
+
+    #[test]
+    fn test_discover_ignores_non_existent_members() {
+        // pnpm manifest has a mix of real and missing members; only real
+        // members should appear in the output, and we should not crash.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(
+            root.join("pnpm-workspace.yaml"),
+            "packages:\n  - 'apps/*'\n  - 'gone/*'\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("apps/real")).unwrap();
+
+        let ws = WorkspaceConfig::discover(root).expect("one real member is enough to yield Some");
+        assert!(roots_contain(&ws, &root.join("apps/real")));
+        // Missing `gone/*` must not appear.
+        for r in &ws.roots {
+            assert!(
+                !r.to_string_lossy().contains("gone"),
+                "missing members should be skipped, got: {:?}",
+                r,
+            );
+        }
+    }
+
+    #[test]
+    fn test_discover_skips_node_modules_during_glob_expansion() {
+        // If a workspace glob would match into node_modules/, we should
+        // skip those matches. Prevents scanning 10k+ npm packages.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(root.join("pnpm-workspace.yaml"), "packages:\n  - '*'\n").unwrap();
+        std::fs::create_dir_all(root.join("real-pkg")).unwrap();
+        std::fs::create_dir_all(root.join("node_modules")).unwrap();
+
+        let ws = WorkspaceConfig::discover(root)
+            .expect("should find real-pkg even when node_modules exists");
+        assert!(roots_contain(&ws, &root.join("real-pkg")));
+        for r in &ws.roots {
+            assert!(
+                !r.to_string_lossy().contains("node_modules"),
+                "node_modules must not be expanded, got: {:?}",
+                r,
+            );
+        }
+    }
+
+    #[test]
+    fn test_discover_flow_style_yaml() {
+        // serde_yaml should handle flow-style lists; but confirm the
+        // fallback regex also handles them when present.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+
+        std::fs::write(
+            root.join("pnpm-workspace.yaml"),
+            "packages: ['./apps/a', './apps/b']\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("apps/a")).unwrap();
+        std::fs::create_dir_all(root.join("apps/b")).unwrap();
+
+        let ws = WorkspaceConfig::discover(root).expect("flow-style yaml should parse");
+        assert!(roots_contain(&ws, &root.join("apps/a")));
+        assert!(roots_contain(&ws, &root.join("apps/b")));
     }
 }

@@ -39,7 +39,22 @@ pub fn build_project_call_graph(
     };
     config.use_type_resolution = true;
 
-    if let Some(config_roots) = workspace_config {
+    // VAL-007: when the caller did not supply an explicit WorkspaceConfig,
+    // auto-discover one from filesystem markers (pnpm-workspace.yaml,
+    // package.json workspaces, Cargo.toml [workspace], go.work). This lets
+    // callers like `tldr impact <func>` resolve imports across a monorepo
+    // without having to hand-author a config.
+    //
+    // Note: passing `Some(&empty)` preserves the current behavior (no
+    // workspace expansion) — only `None` triggers discovery.
+    let discovered = if workspace_config.is_none() {
+        WorkspaceConfig::discover(root)
+    } else {
+        None
+    };
+    let effective_config = workspace_config.or(discovered.as_ref());
+
+    if let Some(config_roots) = effective_config {
         if !config_roots.roots.is_empty() {
             config.use_workspace_config = true;
             config.workspace_roots = config_roots.roots.clone();

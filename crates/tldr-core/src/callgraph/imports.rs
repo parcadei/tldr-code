@@ -14,6 +14,7 @@ use regex::Regex;
 use super::cross_file_types::{FileIR, ImportDef, ResolvedImport};
 use super::import_resolver::{ImportResolver, ReExportTracer, DEFAULT_MAX_DEPTH};
 use super::languages::base::{get_node_text, walk_tree};
+use super::module_index::ModuleIndex;
 use super::types::{parse_source, FuncIndex};
 
 // =============================================================================
@@ -78,6 +79,20 @@ pub type ModuleImports = HashMap<String, String>;
 /// // "import json" -> module_imports["json"] = "json"
 /// ```
 pub fn build_import_map(resolved_imports: &[ResolvedImport]) -> (ImportMap, ModuleImports) {
+    build_import_map_with_index(resolved_imports, None)
+}
+
+/// Extended `build_import_map` that also consults a `ModuleIndex` to
+/// rewrite aliased import paths (e.g. `@/util`) into the canonical
+/// path-based module key used by `func_index` (VAL-007).
+///
+/// Without this rewrite, `import_map["myUtil"] = ("@/util", "myUtil")`
+/// never connects to `func_index["./apps/web/src/util"]["myUtil"]` and
+/// the cross-file edge is silently dropped.
+pub fn build_import_map_with_index(
+    resolved_imports: &[ResolvedImport],
+    module_index: Option<&ModuleIndex>,
+) -> (ImportMap, ModuleImports) {
     let mut import_map = ImportMap::new();
     let mut module_imports = ModuleImports::new();
 
@@ -106,7 +121,7 @@ pub fn build_import_map(resolved_imports: &[ResolvedImport]) -> (ImportMap, Modu
         // TS ESM imports often use ".js" extension (e.g., `from "./errors.js"`)
         // but ModuleIndex stores paths without extension (e.g., "./errors").
         // This normalization ensures import_map keys match func_index keys.
-        let module_path = raw_module_path
+        let stripped_module_path = raw_module_path
             .strip_suffix(".js")
             .or_else(|| raw_module_path.strip_suffix(".jsx"))
             .or_else(|| raw_module_path.strip_suffix(".ts"))
@@ -115,6 +130,16 @@ pub fn build_import_map(resolved_imports: &[ResolvedImport]) -> (ImportMap, Modu
             .or_else(|| raw_module_path.strip_suffix(".cjs"))
             .unwrap_or(&raw_module_path)
             .to_string();
+
+        // VAL-007: when a resolved_file is available AND a ModuleIndex is
+        // provided, rewrite the module_path to the canonical path-based
+        // key used by `func_index`. This bridges the gap for TS path
+        // aliases (`@/*`), workspace packages (`@myorg/utils`), etc.
+        let module_path = rewrite_module_path_via_index(
+            &stripped_module_path,
+            resolved.resolved_file.as_deref(),
+            module_index,
+        );
 
         if original.is_from {
             // "from X import Y" or "from X import Y as Z"
@@ -166,6 +191,29 @@ pub fn build_import_map(resolved_imports: &[ResolvedImport]) -> (ImportMap, Modu
     }
 
     (import_map, module_imports)
+}
+
+/// Rewrite an import's module_path to the canonical key used by `func_index`
+/// when possible (VAL-007).
+///
+/// If both a `ModuleIndex` and the resolver's `resolved_file` are available,
+/// we `reverse_lookup` the file to obtain the computed module name (e.g.
+/// `./apps/web/src/util`) and use that in preference to the user-facing
+/// alias (`@/util`). Falling back to the original string preserves existing
+/// behavior when no index is passed.
+fn rewrite_module_path_via_index(
+    original: &str,
+    resolved_file: Option<&Path>,
+    module_index: Option<&ModuleIndex>,
+) -> String {
+    if let (Some(index), Some(file)) = (module_index, resolved_file) {
+        if let Some(canonical) = index.reverse_lookup(file) {
+            if canonical != original {
+                return canonical.to_string();
+            }
+        }
+    }
+    original.to_string()
 }
 
 // =============================================================================

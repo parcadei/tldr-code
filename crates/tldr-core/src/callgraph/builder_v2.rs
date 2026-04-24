@@ -40,8 +40,9 @@ use crate::types::Language;
 
 // --- Re-exports for backward compatibility (sub-modules are private) ---
 pub use super::imports::{
-    augment_go_module_imports, build_import_map, extract_python_imports, resolve_imports_for_file,
-    trace_reexport_with_cycle_detection, ImportMap, ModuleImports,
+    augment_go_module_imports, build_import_map, build_import_map_with_index,
+    extract_python_imports, resolve_imports_for_file, trace_reexport_with_cycle_detection,
+    ImportMap, ModuleImports,
 };
 pub use super::module_path::path_to_module;
 pub use super::resolution::{
@@ -631,9 +632,30 @@ pub fn build_project_call_graph_v2(
     // Phase 14d-14f: Import Resolution and Cross-File Edge Creation
     // Per M1.9: Build indices completely before resolution phase (done above)
     //
-    // Step 7: Build ModuleIndex for import resolution
-    let module_index = ModuleIndex::build(root, &config.language)
-        .map_err(|e| BuildError::Io(std::io::Error::other(e.to_string())))?;
+    // Step 7: Build ModuleIndex for import resolution.
+    //
+    // VAL-007: when a workspace config is active, read manifests
+    // (tsconfig.json, package.json, ...) from every workspace root so
+    // per-package path aliases such as `@/*` in `apps/web/tsconfig.json`
+    // resolve correctly. Without this, monorepo imports collapse to the
+    // AST-fallback path and emit misleading "no callers" reports.
+    let extra_roots: Vec<PathBuf> = if config.use_workspace_config {
+        config
+            .workspace_roots
+            .iter()
+            .filter(|p| p.as_path() != root)
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let module_index = ModuleIndex::build_with_workspace_roots(
+        root,
+        &config.language,
+        config.respect_ignore,
+        &extra_roots,
+    )
+    .map_err(|e| BuildError::Io(std::io::Error::other(e.to_string())))?;
 
     // Step 8: Create ImportResolver with LRU cache
     let mut import_resolver = ImportResolver::with_default_cache(&module_index);
@@ -835,8 +857,14 @@ pub fn build_project_call_graph_v2(
         // Step 10a: Resolve imports for this file
         let resolved_imports = resolve_imports_for_file(&file_ir, &mut import_resolver, root);
 
-        // Step 10b: Build import map from resolved imports
-        let (import_map, mut module_imports) = build_import_map(&resolved_imports);
+        // Step 10b: Build import map from resolved imports.
+        //
+        // VAL-007: pass the ModuleIndex so aliased imports (e.g. `@/util`)
+        // get rewritten to the canonical func_index key (e.g.
+        // `./apps/web/src/util`). Without this, cross-file edges through
+        // tsconfig path aliases are silently dropped.
+        let (import_map, mut module_imports) =
+            build_import_map_with_index(&resolved_imports, Some(&module_index));
 
         // Step 10b.1: Augment module_imports for Go cross-package function calls.
         // Go imports use full module paths that don't match func_index keys directly.
