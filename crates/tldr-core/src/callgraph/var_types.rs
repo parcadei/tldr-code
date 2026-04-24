@@ -677,10 +677,7 @@ pub(crate) fn extract_go_var_types(tree: &tree_sitter::Tree, source: &[u8]) -> V
                                             scope,
                                         ));
                                     }
-                                } else if base_name
-                                    .chars()
-                                    .next()
-                                    .is_some_and(|c| c.is_uppercase())
+                                } else if base_name.chars().next().is_some_and(|c| c.is_uppercase())
                                 {
                                     var_types.push(VarType::new_with_scope(
                                         var_name,

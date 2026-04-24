@@ -566,15 +566,13 @@ fn resolve_node_package_from_dir_inner(
     }
 
     if allow_workspace_scan {
-        if let Some(resolved) =
-            resolve_workspace_package_from_dir(
-                pkg_dir,
-                package_name,
-                language,
-                &workspace_patterns,
-                &pkg_json,
-            )?
-        {
+        if let Some(resolved) = resolve_workspace_package_from_dir(
+            pkg_dir,
+            package_name,
+            language,
+            &workspace_patterns,
+            &pkg_json,
+        )? {
             return Ok(resolved);
         }
     }
@@ -611,32 +609,30 @@ fn resolve_workspace_package_from_dir(
         return Ok(None);
     }
 
-    let mut candidates: Vec<(i32, PathBuf, ResolvedPackage)> = workspace_package_dirs(
-        pkg_dir,
-        workspace_patterns,
-    )
-        .into_iter()
-        .filter_map(|workspace_dir| {
-            let resolved = resolve_node_package_from_dir_inner(
-                &workspace_dir,
-                package_name,
-                language,
-                false,
-            )
-            .ok()?;
-            let relative_workspace_dir = workspace_dir.strip_prefix(pkg_dir).ok()?;
-            let relative_root = resolved.root_dir.strip_prefix(&workspace_dir).ok()?;
-            let score = workspace_candidate_score(
-                package_name,
-                language,
-                relative_workspace_dir,
-                &workspace_dir,
-                relative_root,
-            );
+    let mut candidates: Vec<(i32, PathBuf, ResolvedPackage)> =
+        workspace_package_dirs(pkg_dir, workspace_patterns)
+            .into_iter()
+            .filter_map(|workspace_dir| {
+                let resolved = resolve_node_package_from_dir_inner(
+                    &workspace_dir,
+                    package_name,
+                    language,
+                    false,
+                )
+                .ok()?;
+                let relative_workspace_dir = workspace_dir.strip_prefix(pkg_dir).ok()?;
+                let relative_root = resolved.root_dir.strip_prefix(&workspace_dir).ok()?;
+                let score = workspace_candidate_score(
+                    package_name,
+                    language,
+                    relative_workspace_dir,
+                    &workspace_dir,
+                    relative_root,
+                );
 
-            Some((score, workspace_dir, resolved))
-        })
-        .collect();
+                Some((score, workspace_dir, resolved))
+            })
+            .collect();
 
     candidates.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
 
@@ -953,7 +949,11 @@ fn package_identity_score(
     let requested_tokens = package_tokens(requested);
     let mut score = 0;
 
-    for candidate in [manifest_name, manifest_name.and_then(scope_basename), directory_name] {
+    for candidate in [
+        manifest_name,
+        manifest_name.and_then(scope_basename),
+        directory_name,
+    ] {
         let Some(candidate) = candidate else {
             continue;
         };
@@ -966,7 +966,8 @@ fn package_identity_score(
 
         if !requested_norm.is_empty()
             && (!candidate_norm.is_empty())
-            && (requested_norm.contains(&candidate_norm) || candidate_norm.contains(&requested_norm))
+            && (requested_norm.contains(&candidate_norm)
+                || candidate_norm.contains(&requested_norm))
         {
             score += 120;
         }
@@ -1522,7 +1523,10 @@ def foo(): pass
         )
         .unwrap();
         std::fs::write(
-            repo_dir.join("packages").join("toolkit").join("package.json"),
+            repo_dir
+                .join("packages")
+                .join("toolkit")
+                .join("package.json"),
             r#"{
                 "name": "@reduxjs/toolkit"
             }"#,

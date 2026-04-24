@@ -314,18 +314,17 @@ fn strip_known_prefixes<'a>(path: &'a str, prefixes: &[&str]) -> &'a str {
     for prefix in prefixes {
         if let Some(pos) = path.find(prefix) {
             // Only match at start of path or after a '/' boundary
-            if (pos == 0 || path.as_bytes()[pos - 1] == b'/')
-                && prefix.len() > best_prefix_len {
-                    best_prefix_len = prefix.len();
-                    best_end = Some(pos + prefix.len());
+            if (pos == 0 || path.as_bytes()[pos - 1] == b'/') && prefix.len() > best_prefix_len {
+                best_prefix_len = prefix.len();
+                best_end = Some(pos + prefix.len());
+            }
         }
     }
-}
-if let Some(end) = best_end {
-    &path[end..]
-} else {
-    path
-}
+    if let Some(end) = best_end {
+        &path[end..]
+    } else {
+        path
+    }
 }
 
 fn strip_extension_any<'a>(path: &'a str, extensions: &[&str]) -> &'a str {
@@ -499,10 +498,9 @@ fn path_to_module_ocaml(path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    
-    
+
     use super::*;
-    
+
     use std::path::Path;
 
     // NOTE: Tests moved from builder_v2.rs (Phase 4 modularization).
@@ -761,11 +759,17 @@ fn process(map: &HashMap<String, String>) {
     #[test]
     fn test_path_to_module_java_nested() {
         assert_eq!(
-            path_to_module(Path::new("backend/src/main/java/com/example/service/UserService.java"), "java"),
+            path_to_module(
+                Path::new("backend/src/main/java/com/example/service/UserService.java"),
+                "java"
+            ),
             "com.example.service.UserService"
         );
         assert_eq!(
-            path_to_module(Path::new("modules/core/src/test/java/com/example/FooTest.java"), "java"),
+            path_to_module(
+                Path::new("modules/core/src/test/java/com/example/FooTest.java"),
+                "java"
+            ),
             "com.example.FooTest"
         );
     }
@@ -781,11 +785,17 @@ fn process(map: &HashMap<String, String>) {
     #[test]
     fn test_path_to_module_kotlin_nested() {
         assert_eq!(
-            path_to_module(Path::new("app/src/main/kotlin/com/example/ui/MainScreen.kt"), "kotlin"),
+            path_to_module(
+                Path::new("app/src/main/kotlin/com/example/ui/MainScreen.kt"),
+                "kotlin"
+            ),
             "com.example.ui.MainScreen"
         );
         assert_eq!(
-            path_to_module(Path::new("feature/auth/src/main/kotlin/com/example/auth/Login.kt"), "kotlin"),
+            path_to_module(
+                Path::new("feature/auth/src/main/kotlin/com/example/auth/Login.kt"),
+                "kotlin"
+            ),
             "com.example.auth.Login"
         );
     }
@@ -801,11 +811,17 @@ fn process(map: &HashMap<String, String>) {
     #[test]
     fn test_path_to_module_scala_nested() {
         assert_eq!(
-            path_to_module(Path::new("core/src/main/scala/com/example/domain/Model.scala"), "scala"),
+            path_to_module(
+                Path::new("core/src/main/scala/com/example/domain/Model.scala"),
+                "scala"
+            ),
             "com.example.domain.Model"
         );
         assert_eq!(
-            path_to_module(Path::new("project/sub/src/test/scala/com/example/SpecTest.scala"), "scala"),
+            path_to_module(
+                Path::new("project/sub/src/test/scala/com/example/SpecTest.scala"),
+                "scala"
+            ),
             "com.example.SpecTest"
         );
     }
@@ -825,7 +841,10 @@ fn process(map: &HashMap<String, String>) {
             "Models.User"
         );
         assert_eq!(
-            path_to_module(Path::new("backend/app/Controllers/HomeController.cs"), "csharp"),
+            path_to_module(
+                Path::new("backend/app/Controllers/HomeController.cs"),
+                "csharp"
+            ),
             "Controllers.HomeController"
         );
     }

@@ -56,10 +56,10 @@ pub fn get_cfg_context(
     language: Language,
 ) -> TldrResult<CfgInfo> {
     // Determine if input is a file path or source code
-        let (tree, source) = if Path::new(source_or_path).exists() {
-            // Read file content
-            let source = std::fs::read_to_string(Path::new(source_or_path))
-                .map_err(crate::TldrError::IoError)?;
+    let (tree, source) = if Path::new(source_or_path).exists() {
+        // Read file content
+        let source = std::fs::read_to_string(Path::new(source_or_path))
+            .map_err(crate::TldrError::IoError)?;
         // Parse with the provided language (not detected from extension)
         let tree = parse(&source, language)?;
         (tree, source)
@@ -321,9 +321,7 @@ impl<'a> CfgBuilder<'a> {
                 if cursor.goto_first_child() {
                     loop {
                         let child = cursor.node();
-                        if is_control_flow_node(child.kind())
-                            || child.kind() == "try_expression"
-                        {
+                        if is_control_flow_node(child.kind()) || child.kind() == "try_expression" {
                             self.process_statement(child, depth)?;
                             found_cf = true;
                             // Don't break — there may be multiple CF nodes
@@ -876,9 +874,7 @@ impl<'a> CfgBuilder<'a> {
         // Find the container of match arms/cases.
         // OCaml: match_case children are direct children of match_expression.
         // Rust: match_arm children are inside a match_block child (via "body" field).
-        let arms_parent = node
-            .child_by_field_name("body")
-            .unwrap_or(node);
+        let arms_parent = node.child_by_field_name("body").unwrap_or(node);
 
         // Process each match_case/match_arm child as a separate branch
         let mut cursor = arms_parent.walk();
@@ -1140,12 +1136,7 @@ impl<'a> CfgBuilder<'a> {
         let decision_points = self
             .blocks
             .iter()
-            .filter(|b| {
-                matches!(
-                    b.block_type,
-                    BlockType::Branch | BlockType::LoopHeader
-                )
-            })
+            .filter(|b| matches!(b.block_type, BlockType::Branch | BlockType::LoopHeader))
             .count() as u32;
         let cyclomatic = edge_formula.max(decision_points + 1);
 
@@ -1510,11 +1501,8 @@ fn check(val: Option<i32>) -> i32 {
 "#;
         let cfg = get_cfg_context(source, "check", Language::Rust).unwrap();
         // Verify branch block has condition info from the let_condition
-        let branch_edges_with_condition: Vec<_> = cfg
-            .edges
-            .iter()
-            .filter(|e| e.condition.is_some())
-            .collect();
+        let branch_edges_with_condition: Vec<_> =
+            cfg.edges.iter().filter(|e| e.condition.is_some()).collect();
         assert!(
             !branch_edges_with_condition.is_empty(),
             "if-let should have edges with condition info, edges: {:?}",
@@ -1546,10 +1534,7 @@ fn nested_match(x: i32) -> i32 {
             cfg.cyclomatic_complexity
         );
         // Should have return block from the inner `return 42`
-        let has_return = cfg
-            .blocks
-            .iter()
-            .any(|b| b.block_type == BlockType::Return);
+        let has_return = cfg.blocks.iter().any(|b| b.block_type == BlockType::Return);
         assert!(
             has_return,
             "nested return inside match arm should create Return block"

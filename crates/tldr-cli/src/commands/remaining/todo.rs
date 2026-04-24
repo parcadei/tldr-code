@@ -23,7 +23,7 @@ use std::time::Instant;
 use anyhow::Result;
 use clap::Args;
 use serde_json::Value;
-use walkdir::WalkDir;
+use tldr_core::walker::ProjectWalker;
 
 use super::ast_cache::AstCache;
 use super::error::{RemainingError, RemainingResult};
@@ -309,7 +309,7 @@ fn run_dead_analysis(path: &Path, language: Language) -> RemainingResult<(Vec<To
 
     // Single-pass: collect module infos and identifier reference counts together
     let (module_infos, merged_ref_counts) =
-        collect_module_infos_with_refcounts(project_root, language);
+        collect_module_infos_with_refcounts(project_root, language, false);
     let all_functions: Vec<FunctionRef> = collect_all_functions(&module_infos);
 
     // Run refcount-based analysis (rescues functions that are referenced by name)
@@ -475,11 +475,7 @@ fn detect_language(path: &Path) -> RemainingResult<Language> {
         }
     } else if path.is_dir() {
         // Check for common files to detect language
-        for entry in WalkDir::new(path)
-            .max_depth(2)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
+        for entry in ProjectWalker::new(path).max_depth(2).iter() {
             if let Some(ext) = entry.path().extension().and_then(|e| e.to_str()) {
                 match ext {
                     "py" => return Ok(Language::Python),

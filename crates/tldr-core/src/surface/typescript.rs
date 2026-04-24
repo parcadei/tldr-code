@@ -21,8 +21,8 @@ use crate::ast::parser::parse;
 use crate::types::{ClassInfo, Language};
 use crate::TldrResult;
 
-use super::resolve::public_entry_files_for_resolved_package;
 use super::language_profile::{is_noise_dir, is_noise_file, strip_layout_segments};
+use super::resolve::public_entry_files_for_resolved_package;
 use super::sort_apis_by_static_preference;
 use super::triggers::extract_triggers;
 use super::types::{ApiEntry, ApiKind, ApiSurface, Location, Param, ResolvedPackage, Signature};
@@ -57,8 +57,12 @@ pub fn extract_typescript_api_surface(
         apis.extend(file_apis);
     }
 
-    let mut alias_apis =
-        synthesize_ts_reexport_aliases(&apis, &ts_files, &resolved.root_dir, &resolved.package_name);
+    let mut alias_apis = synthesize_ts_reexport_aliases(
+        &apis,
+        &ts_files,
+        &resolved.root_dir,
+        &resolved.package_name,
+    );
     apis.append(&mut alias_apis);
 
     if !resolved.is_pure_source {
@@ -392,7 +396,8 @@ fn synthesize_ts_reexport_aliases(
     package_name: &str,
 ) -> Vec<ApiEntry> {
     let mut aliases = Vec::new();
-    let mut seen_names: HashSet<String> = apis.iter().map(|api| api.qualified_name.clone()).collect();
+    let mut seen_names: HashSet<String> =
+        apis.iter().map(|api| api.qualified_name.clone()).collect();
 
     for file_path in ts_files {
         if compute_ts_module_path(file_path, root_dir, package_name) != package_name {
@@ -554,16 +559,17 @@ fn resolve_ts_reexport_module(
 }
 
 fn normalize_ts_reexport_path(path: &Path) -> PathBuf {
-    path.components().fold(PathBuf::new(), |mut normalized, component| {
-        match component {
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                normalized.pop();
+    path.components()
+        .fold(PathBuf::new(), |mut normalized, component| {
+            match component {
+                std::path::Component::CurDir => {}
+                std::path::Component::ParentDir => {
+                    normalized.pop();
+                }
+                _ => normalized.push(component.as_os_str()),
             }
-            _ => normalized.push(component.as_os_str()),
-        }
-        normalized
-    })
+            normalized
+        })
 }
 
 fn resolve_existing_ts_reexport_path(base_dir: &Path, specifier: &str) -> Option<PathBuf> {
@@ -1431,7 +1437,10 @@ mod tests {
             surface
                 .apis
                 .iter()
-                .map(|api| (&api.qualified_name, api.location.as_ref().map(|loc| &loc.file)))
+                .map(|api| (
+                    &api.qualified_name,
+                    api.location.as_ref().map(|loc| &loc.file)
+                ))
                 .collect::<Vec<_>>()
         );
 
@@ -1446,7 +1455,10 @@ mod tests {
             full_surface
                 .apis
                 .iter()
-                .map(|api| (&api.qualified_name, api.location.as_ref().map(|loc| &loc.file)))
+                .map(|api| (
+                    &api.qualified_name,
+                    api.location.as_ref().map(|loc| &loc.file)
+                ))
                 .collect::<Vec<_>>()
         );
 
@@ -1551,7 +1563,11 @@ function internal(): void {}
         };
 
         let surface = extract_typescript_api_surface(&resolved, false, None).unwrap();
-        let names: Vec<&str> = surface.apis.iter().map(|api| api.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|api| api.qualified_name.as_str())
+            .collect();
 
         assert!(
             names.contains(&"pkg.Foo"),
@@ -1593,7 +1609,11 @@ function internal(): void {}
         };
 
         let surface = extract_typescript_api_surface(&resolved, false, None).unwrap();
-        let names: Vec<&str> = surface.apis.iter().map(|api| api.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|api| api.qualified_name.as_str())
+            .collect();
 
         assert!(
             names.contains(&"pkg.greet"),
@@ -1644,9 +1664,17 @@ function internal(): void {}
         };
 
         let surface = extract_typescript_api_surface(&resolved, false, None).unwrap();
-        let names: Vec<&str> = surface.apis.iter().map(|api| api.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|api| api.qualified_name.as_str())
+            .collect();
 
-        assert!(names.contains(&"pkg.publicApi"), "missing public alias: {:?}", names);
+        assert!(
+            names.contains(&"pkg.publicApi"),
+            "missing public alias: {:?}",
+            names
+        );
         assert!(
             !names.iter().any(|name| name.contains("privateApi")),
             "non-entrypoint internal export should be pruned: {:?}",

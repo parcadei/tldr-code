@@ -32,8 +32,8 @@ pub mod javascript;
 pub mod patch;
 pub mod python;
 pub mod rust_lang;
-pub mod typescript;
 pub mod types;
+pub mod typescript;
 
 #[cfg(test)]
 mod benchmark_tests;
@@ -125,11 +125,7 @@ fn diagnose_typescript(
 }
 
 /// Internal: run the Go diagnostic pipeline.
-fn diagnose_go(
-    error: &ParsedError,
-    source: &str,
-    _api_surface: Option<&()>,
-) -> Option<Diagnosis> {
+fn diagnose_go(error: &ParsedError, source: &str, _api_surface: Option<&()>) -> Option<Diagnosis> {
     // Parse the source with tree-sitter
     let tree = parser::parse(source, crate::Language::Go).ok()?;
     go::diagnose_go(error, source, &tree, _api_surface)
@@ -260,7 +256,10 @@ UnboundLocalError: cannot access local variable 'counter'";
         let error_text = "./main.go:4:7: undefined: fmt";
         let source = "package main\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n";
         let diag = diagnose(error_text, source, Some("go"), None);
-        assert!(diag.is_some(), "Go undefined should diagnose via main dispatch");
+        assert!(
+            diag.is_some(),
+            "Go undefined should diagnose via main dispatch"
+        );
         let d = diag.unwrap();
         assert_eq!(d.error_code, "undefined");
         assert_eq!(d.language, "go");

@@ -1,0 +1,53 @@
+{
+  "task": "VAL-001 walker migration (walker module already existed, finalized integration tests + verification)",
+  "assertion": "VAL-001",
+  "result": "success",
+  "implemented": "30 files migrated from walkdir::WalkDir to crate::walker (ProjectWalker / walk_project): tldr-core: quality/{smells,cohesion,complexity,coupling,health,dead_code,maintainability,martin,similarity,debt}.rs, analysis/references.rs, analysis/clones/filter.rs, wrappers/todo.rs, types.rs; tldr-cli: commands/{dead,smells}.rs, commands/patterns/{cohesion,interface,temporal}.rs, commands/contracts/{invariants,specs,verify}.rs, commands/remaining/{vuln,secure,api_check,todo}.rs, commands/daemon/warm.rs, commands/bugbot/dead.rs (signature update for collect_module_infos_with_refcounts). Flags added: smells/dead/vuln/secure all gained --no-default-ignore; vuln/secure gained --lang. New API: SmellsWalkerOpts, detect_smells_with_walker_opts, analyze_smells_aggregated_with_walker_opts. vuln --lang gating: is_supported_source_file is now language-aware (TypeScript=ts/tsx, Rust=rs, Python=py, JavaScript=js/mjs/cjs/jsx, Go=go, Java=java; fallback py|rs when lang is None). 4 integration tests added in walker_consolidation_tests.rs. cargo fmt applied to all 30 modified files.",
+  "remaining": "None for VAL-001. Notes: (1) cargo test --workspace fails on a pre-existing broken test crates/tldr-core/tests/gate3_octagon_ab_comparison.rs (references nonexistent ENABLE_OCTAGON_DOMAIN const, unchanged from HEAD). (2) Pre-existing test failures in cli_graph_tests.rs (16), cli_remaining_tests.rs (19), cli_patterns_contracts_tests.rs (6), cli_quality_tests.rs (1), and 2 in tldr-cli lib (bugbot tests) — all reference nonexistent subcommands like cfg/dfg/ssa/alias/dominators/live_vars/bounds/behavioral/--hotspots, none touch walker code. (3) Pre-existing fmt issues in non-migrated files (api_surface.rs, mcp/cache.rs, etc.) — left untouched per scope.",
+  "tests": {
+    "added": [
+      {"file": "crates/tldr-cli/tests/walker_consolidation_tests.rs", "name": "test_smells_skips_node_modules", "verifies": "VAL-001"},
+      {"file": "crates/tldr-cli/tests/walker_consolidation_tests.rs", "name": "test_secure_skips_node_modules", "verifies": "VAL-001"},
+      {"file": "crates/tldr-cli/tests/walker_consolidation_tests.rs", "name": "test_vuln_respects_lang_filter", "verifies": "VAL-001"},
+      {"file": "crates/tldr-cli/tests/walker_consolidation_tests.rs", "name": "test_smells_no_default_ignore_opt_out", "verifies": "VAL-001"}
+    ],
+    "command": "cargo test -p tldr-cli --test walker_consolidation_tests",
+    "exit_code": 0,
+    "result": "4 passed; 0 failed",
+    "tldr_core_lib": "4596 passed; 0 failed",
+    "secure_sweep_tests": "22 passed; 0 failed"
+  },
+  "checks": [
+    {"command": "cargo build --release", "exit_code": 0, "observed": "clean build"},
+    {"command": "cargo clippy --workspace -- -D warnings", "exit_code": 0, "observed": "no warnings"},
+    {"command": "rustfmt --check on all 30 migrated files", "observed": "clean after fmt applied"},
+    {"command": "cargo test -p tldr-core --lib", "exit_code": 0, "observed": "4596 passed, 0 failed (including walker module's 8 tests)"},
+    {"command": "cargo test -p tldr-cli --test walker_consolidation_tests", "exit_code": 0, "observed": "4 passed, 0 failed"},
+    {"command": "cargo test -p tldr-cli --test secure_sweep_tests", "exit_code": 0, "observed": "22 passed, 0 failed"},
+    {"command": "tldr secure /tmp/tldr-real/dub --lang typescript", "observed": "exit=0, elapsed=41s, 0 node_modules findings (was: would scan 2.4GB node_modules forever)"},
+    {"command": "tldr vuln /tmp/tldr-real/dub --lang typescript", "observed": "exit=0, elapsed=1s, files_scanned=1000 (only .ts/.tsx, no .py), 0 node_modules findings"},
+    {"command": "tldr smells /tmp/tldr-real/dub/packages --lang typescript", "observed": "exit=0, elapsed=1s, files_scanned=712, total_smells=152, 0 node_modules refs"},
+    {"command": "grep -rn 'WalkDir::new|walkdir::WalkDir' in migrated paths (excluding archived/tests)", "observed": "0 matches — all production call sites migrated"}
+  ],
+  "blocks_used": [],
+  "corrections": [
+    "rustfmt re-ordered some imports inserted by Phase 1-3 (use crate::walker::... was placed in wrong position relative to existing imports). Applied cargo fmt to fix.",
+    "Newly-installed binary at ~/.cargo/bin/tldr was SIGKILLed by macOS due to broken ad-hoc signature after `cp`. Re-signed with `codesign -f -s -` to restore execution.",
+    "Direct test of `tldr smells` on /tmp/tldr-real/dub/apps/web/app/(ee)/partners.dub.co/.../screenshot.tsx (1584 lines) hangs >30s on a SINGLE FILE — this bypasses the walker entirely (single-file path), confirming the slowness is a pre-existing perf issue in `analyze_file`, not in the migrated walker. Walker migration verified separately on packages/ subtree (1s, 712 files, 0 node_modules)."
+  ],
+  "discoveries": [
+    {"lib": "tldr-code", "finding": "The is_supported_source_file fallback (when --lang is None) intentionally only matches py|rs because those are the only langs the taint engine supports — verified by inspection. My language-aware refactor preserves this fallback exactly."},
+    {"lib": "tldr-code", "finding": "smells.rs has a single-file fast-path (`if path.is_file()`) that bypasses the walker entirely. Single-file analysis on certain TypeScript files (~1500+ lines) hangs >30s, indicating an O(n^2) or pathological tree-sitter walk in analyze_file/calculate_all_complexities_file — this is pre-existing and out of scope for VAL-001 walker migration."},
+    {"lib": "tldr-code", "finding": "Pre-existing test failures in cli_graph_tests / cli_remaining_tests / cli_patterns_contracts_tests reference subcommands (cfg, dfg, ssa, alias, dominators, live_vars, bounds, behavioral, --hotspots) that do not exist in the current `tldr --help` output. These tests were stale from initial release (commit d64dead) and are unrelated to walker work."},
+    {"lib": "macOS", "finding": "Copying a re-built Mach-O binary over an existing one breaks the ad-hoc codesign, causing SIGKILL on launch. Workaround: `codesign -f -s - <binary>` after cp."}
+  ],
+  "issues": [
+    {"severity": "low", "issue": "Pre-existing broken test in crates/tldr-core/tests/gate3_octagon_ab_comparison.rs (references nonexistent ENABLE_OCTAGON_DOMAIN const) blocks `cargo test --workspace` from compiling. Worked around by running `cargo test -p tldr-core --lib` and `cargo test -p tldr-cli --tests` separately."},
+    {"severity": "low", "issue": "smells command times out on /tmp/tldr-real/dub root (>180s) due to a pre-existing analyze_file hang on a specific 1584-line TypeScript file (apps/web/app/(ee)/partners.dub.co/.../screenshot.tsx). Not a walker regression — single-file input bypasses the walker. Out of VAL-001 scope but worth flagging."}
+  ],
+  "conventions": [
+    "Imports grouped: std → external crates → internal (alphabetical within each group)",
+    "Use crate::walker::walk_project for default walks; ProjectWalker::new(...) builder when extra config (max_depth, no_default_ignore) is needed",
+    "When a CLI command needs the no_default_ignore flag and the walking happens in core, thread the flag via a *_with_walker_opts variant rather than rewriting the core API"
+  ]
+}

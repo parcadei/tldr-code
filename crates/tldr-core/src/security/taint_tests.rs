@@ -15,9 +15,7 @@
 use std::collections::{HashMap, HashSet};
 
 // Phase 1: Type imports (enabled)
-use super::taint::{
-    SanitizerType, TaintInfo, TaintSink, TaintSinkType, TaintSourceType,
-};
+use super::taint::{SanitizerType, TaintInfo, TaintSink, TaintSinkType, TaintSourceType};
 
 // Phase 3: Pattern matching function imports (implemented)
 use super::taint::{
@@ -177,12 +175,14 @@ fn test_taint_source_type_variants() {
     // - EnvVar: os.environ, os.getenv()
     // - FileRead: optional, context-dependent
 
-    let variants = [TaintSourceType::UserInput,
+    let variants = [
+        TaintSourceType::UserInput,
         TaintSourceType::Stdin,
         TaintSourceType::HttpParam,
         TaintSourceType::HttpBody,
         TaintSourceType::EnvVar,
-        TaintSourceType::FileRead];
+        TaintSourceType::FileRead,
+    ];
     assert_eq!(variants.len(), 6);
 }
 
@@ -197,12 +197,14 @@ fn test_taint_sink_type_variants() {
     // - ShellExec: os.system(), subprocess.run()
     // - FileWrite: open(..., 'w'), .write_text()
 
-    let variants = [TaintSinkType::SqlQuery,
+    let variants = [
+        TaintSinkType::SqlQuery,
         TaintSinkType::CodeEval,
         TaintSinkType::CodeExec,
         TaintSinkType::CodeCompile,
         TaintSinkType::ShellExec,
-        TaintSinkType::FileWrite];
+        TaintSinkType::FileWrite,
+    ];
     assert_eq!(variants.len(), 6);
 }
 
@@ -3330,9 +3332,7 @@ fn test_ocaml_detect_sanitizers() {
 // 3. Works with compute_taint_with_tree
 // =============================================================================
 
-use super::taint::{
-    compute_taint_with_tree, detect_sinks_ast, detect_sources_ast,
-};
+use super::taint::{compute_taint_with_tree, detect_sinks_ast, detect_sources_ast};
 use crate::ast::parser::ParserPool;
 
 // =========================================================================

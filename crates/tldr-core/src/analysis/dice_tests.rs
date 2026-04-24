@@ -44,7 +44,6 @@
 //!
 //! Reference: session8-spec.md
 
-
 // =============================================================================
 // Test Fixture Setup Module
 // =============================================================================
@@ -329,10 +328,7 @@ def block_c():
 #[cfg(test)]
 mod dice_coefficient_tests {
     use super::fixtures::*;
-    use crate::analysis::similarity::{
-        compute_similarity, SimilarityMetric, SimilarityOptions,
-    };
-    
+    use crate::analysis::similarity::{compute_similarity, SimilarityMetric, SimilarityOptions};
 
     /// Test: Dice coefficient for identical code
     /// Contract: dice(A, A) = 1.0
@@ -345,7 +341,10 @@ mod dice_coefficient_tests {
         let path_b = test_dir.add_file("b.py", PYTHON_FUNC_A_COPY).unwrap();
 
         // WHEN: Computing Dice similarity
-        let options = crate::analysis::similarity::SimilarityOptions { metric: SimilarityMetric::Dice, ..Default::default() };
+        let options = crate::analysis::similarity::SimilarityOptions {
+            metric: SimilarityMetric::Dice,
+            ..Default::default()
+        };
 
         let report = compute_similarity(&path_a, &path_b, &options).unwrap();
 
@@ -508,7 +507,6 @@ def func():
 mod jaccard_coefficient_tests {
     use super::fixtures::*;
     use crate::analysis::similarity::{compute_similarity, SimilarityMetric, SimilarityOptions};
-    
 
     /// Test: Jaccard for identical code
     /// Contract: jaccard(A, A) = 1.0
@@ -521,7 +519,10 @@ mod jaccard_coefficient_tests {
         let path_b = test_dir.add_file("b.py", PYTHON_FUNC_A_COPY).unwrap();
 
         // WHEN: Computing Jaccard
-        let options = crate::analysis::similarity::SimilarityOptions { metric: SimilarityMetric::Jaccard, ..Default::default() };
+        let options = crate::analysis::similarity::SimilarityOptions {
+            metric: SimilarityMetric::Jaccard,
+            ..Default::default()
+        };
 
         let report = compute_similarity(&path_a, &path_b, &options).unwrap();
 
@@ -561,7 +562,10 @@ mod jaccard_coefficient_tests {
         let path_b = test_dir.add_file("b.py", PYTHON_FUNC_B_SIMILAR).unwrap();
 
         // WHEN: Computing both metrics
-        let options = crate::analysis::similarity::SimilarityOptions { metric: SimilarityMetric::All, ..Default::default() };
+        let options = crate::analysis::similarity::SimilarityOptions {
+            metric: SimilarityMetric::All,
+            ..Default::default()
+        };
 
         let report = compute_similarity(&path_a, &path_b, &options).unwrap();
 
@@ -587,7 +591,10 @@ mod jaccard_coefficient_tests {
             .unwrap();
 
         // WHEN: Computing both metrics
-        let options = crate::analysis::similarity::SimilarityOptions { metric: SimilarityMetric::All, ..Default::default() };
+        let options = crate::analysis::similarity::SimilarityOptions {
+            metric: SimilarityMetric::All,
+            ..Default::default()
+        };
 
         let report = compute_similarity(&path_a, &path_b, &options).unwrap();
 
@@ -627,7 +634,6 @@ mod jaccard_coefficient_tests {
 mod cosine_similarity_tests {
     use super::fixtures::*;
     use crate::analysis::similarity::{compute_similarity, SimilarityMetric};
-    
 
     /// Test: Cosine for identical code
     /// Contract: cosine(A, A) = 1.0
@@ -640,7 +646,10 @@ mod cosine_similarity_tests {
         let path_b = test_dir.add_file("b.py", PYTHON_FUNC_A_COPY).unwrap();
 
         // WHEN: Computing cosine
-        let options = crate::analysis::similarity::SimilarityOptions { metric: SimilarityMetric::Cosine, ..Default::default() };
+        let options = crate::analysis::similarity::SimilarityOptions {
+            metric: SimilarityMetric::Cosine,
+            ..Default::default()
+        };
 
         let report = compute_similarity(&path_a, &path_b, &options).unwrap();
 
@@ -660,7 +669,10 @@ mod cosine_similarity_tests {
         let path_b = test_dir.add_file("b.py", NO_SHARED_TOKENS).unwrap();
 
         // WHEN: Computing cosine
-        let options = crate::analysis::similarity::SimilarityOptions { metric: SimilarityMetric::Cosine, ..Default::default() };
+        let options = crate::analysis::similarity::SimilarityOptions {
+            metric: SimilarityMetric::Cosine,
+            ..Default::default()
+        };
 
         let report = compute_similarity(&path_a, &path_b, &options).unwrap();
 
@@ -679,7 +691,10 @@ mod cosine_similarity_tests {
         let path_b = test_dir.add_file("b.py", PYTHON_FUNC_DIFFERENT).unwrap();
 
         // WHEN: Computing cosine
-        let options = crate::analysis::similarity::SimilarityOptions { metric: SimilarityMetric::Cosine, ..Default::default() };
+        let options = crate::analysis::similarity::SimilarityOptions {
+            metric: SimilarityMetric::Cosine,
+            ..Default::default()
+        };
 
         let report = compute_similarity(&path_a, &path_b, &options).unwrap();
 
@@ -703,7 +718,10 @@ mod cosine_similarity_tests {
         let path_a = test_dir.add_file("a.py", PYTHON_FUNC_A).unwrap();
         let path_b = test_dir.add_file("b.py", PYTHON_FUNC_B_SIMILAR).unwrap();
 
-        let options = crate::analysis::similarity::SimilarityOptions { metric: SimilarityMetric::Cosine, ..Default::default() };
+        let options = crate::analysis::similarity::SimilarityOptions {
+            metric: SimilarityMetric::Cosine,
+            ..Default::default()
+        };
 
         let report = compute_similarity(&path_a, &path_b, &options).unwrap();
 
@@ -722,7 +740,10 @@ mod cosine_similarity_tests {
         let path_normal = test_dir.add_file("normal.py", PYTHON_FUNC_A).unwrap();
 
         // WHEN: Computing cosine
-        let options = crate::analysis::similarity::SimilarityOptions { metric: SimilarityMetric::Cosine, ..Default::default() };
+        let options = crate::analysis::similarity::SimilarityOptions {
+            metric: SimilarityMetric::Cosine,
+            ..Default::default()
+        };
 
         let report = compute_similarity(&path_empty, &path_normal, &options).unwrap();
 
@@ -855,7 +876,6 @@ mod function_level_tests {
 mod file_level_tests {
     use super::fixtures::*;
     use crate::analysis::similarity::{compute_similarity, SimilarityOptions};
-    
 
     /// Test: File-level comparison (default)
     /// Contract: Entire file content is compared
@@ -943,9 +963,7 @@ mod file_level_tests {
 #[cfg(test)]
 mod block_level_tests {
     use super::fixtures::*;
-    use crate::analysis::similarity::{
-        compute_similarity, parse_target, SimilarityOptions,
-    };
+    use crate::analysis::similarity::{compute_similarity, parse_target, SimilarityOptions};
     use std::path::PathBuf;
 
     /// Test: Parse block target syntax
@@ -1094,7 +1112,6 @@ mod block_level_tests {
 mod ngram_tests {
     use super::fixtures::*;
     use crate::analysis::similarity::{compute_similarity, SimilarityOptions};
-    
 
     /// Test: Default n-gram size is 1 (unigrams)
     /// Contract: ngram_size = 1 by default
@@ -1216,7 +1233,6 @@ mod ngram_tests {
 mod pairwise_matrix_tests {
     use super::fixtures::*;
     use crate::analysis::similarity::{compute_pairwise_similarity, SimilarityOptions};
-    
 
     /// Test: Compute all pairwise similarities
     /// Contract: Returns n*(n-1)/2 unique pairs
@@ -1334,7 +1350,6 @@ mod score_interpretation_tests {
     use crate::analysis::similarity::{
         compute_similarity, interpret_similarity_score, SimilarityOptions,
     };
-    
 
     /// Test: Identical code interpretation
     /// Contract: >= 0.95 = "Near-identical"
@@ -1470,7 +1485,6 @@ mod score_interpretation_tests {
 mod token_breakdown_tests {
     use super::fixtures::*;
     use crate::analysis::similarity::{compute_similarity, SimilarityOptions};
-    
 
     /// Test: Token breakdown is computed
     /// Contract: Report includes shared/unique token counts
@@ -1564,7 +1578,6 @@ mod token_breakdown_tests {
 mod multi_language_similarity_tests {
     use super::fixtures::*;
     use crate::analysis::similarity::{compute_similarity, SimilarityOptions};
-    
 
     /// Test: Python similarity
     #[test]
@@ -1574,7 +1587,10 @@ mod multi_language_similarity_tests {
         let path_a = test_dir.add_file("a.py", PYTHON_FUNC_A).unwrap();
         let path_b = test_dir.add_file("b.py", PYTHON_FUNC_B_SIMILAR).unwrap();
 
-        let options = crate::analysis::similarity::SimilarityOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::similarity::SimilarityOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = compute_similarity(&path_a, &path_b, &options).unwrap();
         assert!(report.similarity.dice > 0.5);
@@ -1588,7 +1604,10 @@ mod multi_language_similarity_tests {
         let path_a = test_dir.add_file("a.ts", TS_FUNC_A).unwrap();
         let path_b = test_dir.add_file("b.ts", TS_FUNC_B_SIMILAR).unwrap();
 
-        let options = crate::analysis::similarity::SimilarityOptions { language: Some("typescript".to_string()), ..Default::default() };
+        let options = crate::analysis::similarity::SimilarityOptions {
+            language: Some("typescript".to_string()),
+            ..Default::default()
+        };
 
         let report = compute_similarity(&path_a, &path_b, &options).unwrap();
         assert!(report.similarity.dice > 0.5);
@@ -1602,7 +1621,10 @@ mod multi_language_similarity_tests {
         let path_a = test_dir.add_file("a.go", GO_FUNC_A).unwrap();
         let path_b = test_dir.add_file("b.go", GO_FUNC_B_SIMILAR).unwrap();
 
-        let options = crate::analysis::similarity::SimilarityOptions { language: Some("go".to_string()), ..Default::default() };
+        let options = crate::analysis::similarity::SimilarityOptions {
+            language: Some("go".to_string()),
+            ..Default::default()
+        };
 
         let report = compute_similarity(&path_a, &path_b, &options).unwrap();
         assert!(report.similarity.dice > 0.5);
@@ -1616,7 +1638,10 @@ mod multi_language_similarity_tests {
         let path_a = test_dir.add_file("a.rs", RUST_FUNC_A).unwrap();
         let path_b = test_dir.add_file("b.rs", RUST_FUNC_B_SIMILAR).unwrap();
 
-        let options = crate::analysis::similarity::SimilarityOptions { language: Some("rust".to_string()), ..Default::default() };
+        let options = crate::analysis::similarity::SimilarityOptions {
+            language: Some("rust".to_string()),
+            ..Default::default()
+        };
 
         let report = compute_similarity(&path_a, &path_b, &options).unwrap();
         assert!(report.similarity.dice > 0.5);
@@ -1742,7 +1767,6 @@ mod edge_case_similarity_tests {
 mod serialization_tests {
     use super::fixtures::*;
     use crate::analysis::similarity::{compute_similarity, SimilarityOptions, SimilarityReport};
-    
 
     /// Test: Report serializes to JSON
     #[test]

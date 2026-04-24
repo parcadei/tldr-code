@@ -1007,7 +1007,7 @@ fn test_deep_nesting_performance() {
 // =============================================================================
 
 mod ssa_integration {
-    
+
     use crate::alias::{compute_alias_from_ssa, AliasInfo};
     use crate::ssa::types::{
         PhiFunction, PhiSource, SsaBlock, SsaFunction, SsaInstruction, SsaInstructionKind, SsaName,

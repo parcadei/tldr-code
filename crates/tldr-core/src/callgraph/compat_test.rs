@@ -15,15 +15,14 @@ use tempfile::TempDir;
 // Types from compat module (to be created)
 use super::compat::{
     callgraph_ir_to_old, compare_builders, format_edges_compatible, funcdef_to_functioninfo,
-    importdef_to_importinfo, project_graph_to_edges, ComparisonResult,
-    NormalizedEdge,
+    importdef_to_importinfo, project_graph_to_edges, ComparisonResult, NormalizedEdge,
 };
 
 // New IR types
 use super::builder_v2::{build_project_call_graph_v2, BuildConfig};
 use super::cross_file_types::{
-    CallGraphIR, CallSite, CallType, CrossFileCallEdge, FileIRBuilder, FuncDef,
-    ImportDef, ProjectCallGraphV2,
+    CallGraphIR, CallSite, CallType, CrossFileCallEdge, FileIRBuilder, FuncDef, ImportDef,
+    ProjectCallGraphV2,
 };
 
 // Old types from types.rs (CallEdge no longer needed, using NormalizedEdge instead)

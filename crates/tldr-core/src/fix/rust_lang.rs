@@ -328,7 +328,10 @@ fn analyze_e0277(error: &ParsedError, source: &str) -> Option<Diagnosis> {
                     return Some(Diagnosis {
                         language: "rust".to_string(),
                         error_code: "E0277".to_string(),
-                        message: format!("Index type mismatch -- cast to usize at line {}", line_no),
+                        message: format!(
+                            "Index type mismatch -- cast to usize at line {}",
+                            line_no
+                        ),
                         location: Some(FixLocation {
                             file: error.file.clone().unwrap_or_default(),
                             line: line_no,
@@ -661,12 +664,10 @@ fn analyze_e0308(error: &ParsedError, source: &str) -> Option<Diagnosis> {
 
                 // Subpattern 1: .cloned() present -> replace with .map(|s| s.to_string())
                 if old_line.contains(".cloned()") {
-                    new_line =
-                        old_line.replace(".cloned()", ".map(|s| s.to_string())");
+                    new_line = old_line.replace(".cloned()", ".map(|s| s.to_string())");
                 } else if old_line.contains(".ok_or(") && !old_line.contains(".map(") {
                     // Subpattern 2: .ok_or() without prior .map() -> insert .map(|s| s.to_string())
-                    new_line = old_line
-                        .replace(".ok_or(", ".map(|s| s.to_string()).ok_or(");
+                    new_line = old_line.replace(".ok_or(", ".map(|s| s.to_string()).ok_or(");
                 } else if expected_type == "String" && found_type == "&str" {
                     // Pattern 3: generic "expected String, found &str"
                     // Append .to_string() to the rightmost expression before ; or )
@@ -718,11 +719,11 @@ fn analyze_e0308(error: &ParsedError, source: &str) -> Option<Diagnosis> {
     // This handles non-String/&str cases like i32/&i32, u64/&u64, etc.
     if !expected_type.is_empty() && !found_type.is_empty() {
         // Check: expected `T`, found `&T` -> dereference with *
-        let needs_deref = found_type.starts_with('&')
-            && expected_type == found_type.trim_start_matches('&');
+        let needs_deref =
+            found_type.starts_with('&') && expected_type == found_type.trim_start_matches('&');
         // Check: expected `&T`, found `T` -> add &
-        let needs_ref = expected_type.starts_with('&')
-            && found_type == expected_type.trim_start_matches('&');
+        let needs_ref =
+            expected_type.starts_with('&') && found_type == expected_type.trim_start_matches('&');
 
         if needs_deref || needs_ref {
             if let Some(line_no) = error.line {
@@ -1069,7 +1070,9 @@ help: the following trait is implemented but not in scope; perhaps add a `use` f
         assert!(diag.is_some());
         let d = diag.unwrap();
         assert!(d.fix.is_some());
-        assert!(d.fix.unwrap().edits[0].new_text.contains("use std::io::Write;"));
+        assert!(d.fix.unwrap().edits[0]
+            .new_text
+            .contains("use std::io::Write;"));
     }
 
     // ---- E0277: Type mismatch ----
@@ -1176,7 +1179,9 @@ help: the following trait is implemented but not in scope; perhaps add a `use` f
         assert!(d.fix.is_some());
         let fix = d.fix.unwrap();
         assert!(
-            fix.edits[0].new_text.contains("use std::collections::HashMap;"),
+            fix.edits[0]
+                .new_text
+                .contains("use std::collections::HashMap;"),
             "Fix should inject HashMap import, got: {}",
             fix.edits[0].new_text
         );
@@ -1201,7 +1206,9 @@ help: the following trait is implemented but not in scope; perhaps add a `use` f
         assert!(diag.is_some());
         let d = diag.unwrap();
         assert!(d.fix.is_some());
-        assert!(d.fix.unwrap().edits[0].new_text.contains("use std::path::PathBuf;"));
+        assert!(d.fix.unwrap().edits[0]
+            .new_text
+            .contains("use std::path::PathBuf;"));
     }
 
     #[test]
@@ -1276,7 +1283,8 @@ help: the following trait is implemented but not in scope; perhaps add a `use` f
         let source = "fn get_name(data: &[(&str, i32)]) -> Option<String> {\n    data.iter().find(|(k,_)| *k == \"name\").map(|(k,_)| k).cloned()\n}\n";
         let error = ParsedError {
             error_type: "E0308".to_string(),
-            message: "mismatched types: expected `Option<String>`, found `Option<&&str>`".to_string(),
+            message: "mismatched types: expected `Option<String>`, found `Option<&&str>`"
+                .to_string(),
             file: Some(PathBuf::from("lib.rs")),
             line: Some(2),
             column: None,
@@ -1321,7 +1329,9 @@ help: the following trait is implemented but not in scope; perhaps add a `use` f
         assert!(d.fix.is_some());
         let fix = d.fix.unwrap();
         assert!(
-            fix.edits[0].new_text.contains(".map(|s| s.to_string()).ok_or("),
+            fix.edits[0]
+                .new_text
+                .contains(".map(|s| s.to_string()).ok_or("),
             "Fix should insert .map(|s| s.to_string()) before .ok_or(), got: {}",
             fix.edits[0].new_text
         );
@@ -1438,7 +1448,10 @@ help: the following trait is implemented but not in scope; perhaps add a `use` f
     fn test_inject_use_already_present() {
         let source = "use std::io::Write;\n\nfn main() {}\n";
         let result = inject_use_statement(source, "use std::io::Write;");
-        assert!(result.is_none(), "Should return None when import already present");
+        assert!(
+            result.is_none(),
+            "Should return None when import already present"
+        );
     }
 
     // ---- Integration with fixture files ----
@@ -1550,7 +1563,9 @@ help: the following trait is implemented but not in scope; perhaps add a `use` f
         assert!(d.fix.is_some());
         let fix = d.fix.unwrap();
         assert!(
-            fix.edits[0].new_text.contains("use std::collections::HashMap;"),
+            fix.edits[0]
+                .new_text
+                .contains("use std::collections::HashMap;"),
             "Fix should inject HashMap import, got: {}",
             fix.edits[0].new_text
         );
@@ -1575,7 +1590,9 @@ help: the following trait is implemented but not in scope; perhaps add a `use` f
         assert!(diag.is_some(), "Should diagnose E0433 for Arc");
         let d = diag.unwrap();
         assert!(d.fix.is_some());
-        assert!(d.fix.unwrap().edits[0].new_text.contains("use std::sync::Arc;"));
+        assert!(d.fix.unwrap().edits[0]
+            .new_text
+            .contains("use std::sync::Arc;"));
     }
 
     #[test]
@@ -1602,7 +1619,8 @@ help: the following trait is implemented but not in scope; perhaps add a `use` f
 
     #[test]
     fn test_rust_e0433_already_imported() {
-        let source = "use std::collections::HashMap;\n\nfn main() {\n    let m = HashMap::new();\n}\n";
+        let source =
+            "use std::collections::HashMap;\n\nfn main() {\n    let m = HashMap::new();\n}\n";
         let error = ParsedError {
             error_type: "E0433".to_string(),
             message: "failed to resolve: use of undeclared type `HashMap`".to_string(),
@@ -1642,9 +1660,14 @@ help: the following trait is implemented but not in scope; perhaps add a `use` f
         let d = diag.unwrap();
         assert!(d.fix.is_some());
         let fix = d.fix.unwrap();
-        assert_eq!(fix.edits[0].kind, EditKind::InsertAfter,
-            "Should insert after existing use statements");
-        assert!(fix.edits[0].new_text.contains("use std::collections::HashMap;"));
+        assert_eq!(
+            fix.edits[0].kind,
+            EditKind::InsertAfter,
+            "Should insert after existing use statements"
+        );
+        assert!(fix.edits[0]
+            .new_text
+            .contains("use std::collections::HashMap;"));
     }
 
     #[test]
@@ -1917,7 +1940,8 @@ help: the following trait is implemented but not in scope; perhaps add a `use` f
         let source = "fn get_name(data: &[(&str, i32)]) -> Option<String> {\n    data.iter().find(|(k,_)| *k == \"name\").map(|(k,_)| k).cloned()\n}\n";
         let error = ParsedError {
             error_type: "E0308".to_string(),
-            message: "mismatched types: expected `Option<String>`, found `Option<&&str>`".to_string(),
+            message: "mismatched types: expected `Option<String>`, found `Option<&&str>`"
+                .to_string(),
             file: Some(PathBuf::from("lib.rs")),
             line: Some(2),
             column: None,
@@ -1931,7 +1955,9 @@ help: the following trait is implemented but not in scope; perhaps add a `use` f
         assert!(diag.is_some());
         let d = diag.unwrap();
         assert!(d.fix.is_some());
-        assert!(d.fix.unwrap().edits[0].new_text.contains(".map(|s| s.to_string())"));
+        assert!(d.fix.unwrap().edits[0]
+            .new_text
+            .contains(".map(|s| s.to_string())"));
     }
 
     #[test]
@@ -1954,7 +1980,9 @@ help: the following trait is implemented but not in scope; perhaps add a `use` f
         assert!(diag.is_some());
         let d = diag.unwrap();
         assert!(d.fix.is_some());
-        assert!(d.fix.unwrap().edits[0].new_text.contains(".map(|s| s.to_string()).ok_or("));
+        assert!(d.fix.unwrap().edits[0]
+            .new_text
+            .contains(".map(|s| s.to_string()).ok_or("));
     }
 
     #[test]

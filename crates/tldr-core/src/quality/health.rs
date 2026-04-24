@@ -29,9 +29,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use crate::walker::ProjectWalker;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize, Serializer};
-use walkdir::WalkDir;
 
 use crate::ast::extract::extract_file;
 use crate::callgraph::build_project_call_graph;
@@ -57,7 +57,9 @@ pub use super::smells::ThresholdPreset;
 ///
 /// Ordered from least to most severe: Info < Low < Medium < High < Critical.
 /// Uses explicit discriminants to ensure stable ordering (T6 mitigation).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 #[repr(u8)]
 pub enum Severity {
@@ -892,12 +894,8 @@ fn detect_language(path: &Path) -> TldrResult<Language> {
     // For directories, scan for common file types
     let mut counts: HashMap<Language, usize> = HashMap::new();
 
-    for entry in WalkDir::new(path)
-        .max_depth(5)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        if entry.file_type().is_file() {
+    for entry in ProjectWalker::new(path).max_depth(5).iter() {
+        if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
             if let Some(lang) = Language::from_path(entry.path()) {
                 *counts.entry(lang).or_default() += 1;
             }
@@ -921,11 +919,7 @@ fn collect_module_infos(path: &Path, language: Language) -> Vec<(PathBuf, Module
             module_infos.push((path.to_path_buf(), info));
         }
     } else {
-        for entry in WalkDir::new(path)
-            .follow_links(true)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
+        for entry in ProjectWalker::new(path).iter() {
             let file_path = entry.path();
             if file_path.is_file() {
                 if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {

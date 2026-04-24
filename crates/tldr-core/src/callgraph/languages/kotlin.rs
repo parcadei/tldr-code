@@ -444,10 +444,7 @@ impl CallGraphLanguageSupport for KotlinHandler {
                     );
 
                     if !calls.is_empty() {
-                        calls_by_func
-                            .entry(caller)
-                            .or_default()
-                            .extend(calls);
+                        calls_by_func.entry(caller).or_default().extend(calls);
                     }
                 }
                 // Init blocks: init { ... }
@@ -465,10 +462,7 @@ impl CallGraphLanguageSupport for KotlinHandler {
                         );
 
                         if !calls.is_empty() {
-                            calls_by_func
-                                .entry(caller)
-                                .or_default()
-                                .extend(calls);
+                            calls_by_func.entry(caller).or_default().extend(calls);
                         }
                     }
                 }
@@ -487,10 +481,7 @@ impl CallGraphLanguageSupport for KotlinHandler {
                         );
 
                         if !calls.is_empty() {
-                            calls_by_func
-                                .entry(caller)
-                                .or_default()
-                                .extend(calls);
+                            calls_by_func.entry(caller).or_default().extend(calls);
                         }
                     }
                 }

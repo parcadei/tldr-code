@@ -238,12 +238,13 @@ fn matching_prefix_len(
     for prefix in prefixes {
         for start in 0..segments.len() {
             if starts_with_ignore_case(&segments[start..], prefix)
-                && best.is_none_or(|(_, prev_len)| prefix.len() > prev_len) {
-                    best = Some((start, prefix.len()));
-}
-}
-}
-best
+                && best.is_none_or(|(_, prev_len)| prefix.len() > prev_len)
+            {
+                best = Some((start, prefix.len()));
+            }
+        }
+    }
+    best
 }
 
 fn starts_with_ignore_case(segments: &[String], prefix: &[&str]) -> bool {
@@ -293,8 +294,7 @@ mod tests {
 
     use super::{
         entrypoint_candidates, is_noise_dir, is_noise_file, language_profile,
-        static_preference_score,
-        strip_layout_segments, supported_surface_languages,
+        static_preference_score, strip_layout_segments, supported_surface_languages,
     };
 
     #[test]
@@ -372,10 +372,8 @@ mod tests {
     #[test]
     fn static_preference_score_prioritizes_entrypoints_over_preferred_roots() {
         let entrypoint = static_preference_score(Language::TypeScript, Path::new("src/index.ts"));
-        let preferred_root = static_preference_score(
-            Language::TypeScript,
-            Path::new("src/components/button.ts"),
-        );
+        let preferred_root =
+            static_preference_score(Language::TypeScript, Path::new("src/components/button.ts"));
 
         assert!(entrypoint > preferred_root);
     }
@@ -399,12 +397,12 @@ mod tests {
     #[test]
     fn static_preference_score_orders_entrypoint_preferred_neutral_and_noise_paths() {
         let entrypoint = static_preference_score(Language::TypeScript, Path::new("src/index.ts"));
-        let preferred_root = static_preference_score(
-            Language::TypeScript,
-            Path::new("src/components/button.ts"),
-        );
-        let neutral = static_preference_score(Language::TypeScript, Path::new("scripts/release.ts"));
-        let noise = static_preference_score(Language::TypeScript, Path::new("examples/demo/index.ts"));
+        let preferred_root =
+            static_preference_score(Language::TypeScript, Path::new("src/components/button.ts"));
+        let neutral =
+            static_preference_score(Language::TypeScript, Path::new("scripts/release.ts"));
+        let noise =
+            static_preference_score(Language::TypeScript, Path::new("examples/demo/index.ts"));
 
         assert!(entrypoint > preferred_root);
         assert!(preferred_root > neutral);

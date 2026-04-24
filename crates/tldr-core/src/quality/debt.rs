@@ -2307,19 +2307,25 @@ pub fn analyze_file(
     Ok((issues, loc))
 }
 
-/// Directories to skip during directory traversal
-const SKIP_DIRS: &[&str] = &[
-    "__pycache__",
-    ".git",
-    "node_modules",
-    ".venv",
-    "venv",
-    "target",
-    "build",
-    "dist",
-    ".tox",
-    ".mypy_cache",
-];
+/// Extra skip dirs beyond what [`crate::walker::DEFAULT_EXCLUDE_DIRS`]
+/// already covers. The shared walker handles `node_modules`, `target`,
+/// `dist`, `build`, `.next`, `__pycache__`, `vendor`, `.git`, and all
+/// hidden dirs. Python virtualenv and cache dirs still have to be
+/// filtered post-walk since those names are project-specific.
+const DEBT_EXTRA_SKIP_DIRS: &[&str] = &[".venv", "venv", ".tox", ".mypy_cache"];
+
+/// Return `true` if any component of `path` (relative to `root`) is in
+/// the extra skip list. The shared walker already handles hidden dirs
+/// and the project's standard vendor directories.
+fn debt_has_skipped_component(path: &std::path::Path, root: &std::path::Path) -> bool {
+    let rel = path.strip_prefix(root).unwrap_or(path);
+    rel.components().any(|c| {
+        c.as_os_str()
+            .to_str()
+            .map(|s| DEBT_EXTRA_SKIP_DIRS.contains(&s))
+            .unwrap_or(false)
+    })
+}
 
 /// Main entry point for analyzing technical debt
 ///
@@ -2341,7 +2347,6 @@ const SKIP_DIRS: &[&str] = &[
 /// 9. Return DebtReport
 pub fn analyze_debt(options: DebtOptions) -> TldrResult<DebtReport> {
     use std::collections::HashMap;
-    use walkdir::WalkDir;
 
     let path = &options.path;
 
@@ -2377,27 +2382,15 @@ pub fn analyze_debt(options: DebtOptions) -> TldrResult<DebtReport> {
         // Max file size to analyze (500KB) - skip minified/generated files
         const MAX_FILE_SIZE: u64 = 500 * 1024;
 
-        // Walk directory recursively - collect file paths first
-        let file_paths: Vec<PathBuf> = WalkDir::new(path)
-            .follow_links(false) // Avoid symlink cycles
-            .into_iter()
-            .filter_entry(|entry| {
-                let name = entry.file_name().to_string_lossy();
-
-                // Skip hidden files/directories (except the root path itself)
-                if name.starts_with('.') && entry.depth() > 0 {
-                    return false;
-                }
-
-                // Skip directories in SKIP_DIRS list
-                if entry.file_type().is_dir() && SKIP_DIRS.contains(&name.as_ref()) {
-                    return false;
-                }
-
-                true
-            })
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
+        // Walk directory recursively via the shared walker (handles
+        // `.git`, `node_modules`, `target`, `dist`, `build`, `.next`,
+        // `__pycache__`, `vendor`, hidden dirs, and symlink guards).
+        // Post-filter for `.venv`/`venv`/`.tox`/`.mypy_cache` which are
+        // in this module's historical SKIP_DIRS but not in the walker's
+        // defaults.
+        let file_paths: Vec<PathBuf> = crate::walker::walk_project(path)
+            .filter(|e| !debt_has_skipped_component(e.path(), path))
+            .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
             .filter(|e| Language::from_path(e.path()).is_some() || options.language.is_some())
             .filter(|e| {
                 e.metadata()

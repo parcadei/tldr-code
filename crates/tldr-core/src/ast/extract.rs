@@ -1959,10 +1959,7 @@ fn extract_ts_class_info(node: &Node, source: &str) -> ClassInfo {
         if child.kind() == "class_heritage" {
             let text = get_node_text(&child, source);
             if text.starts_with("extends") {
-                let base = text
-                    .trim_start_matches("extends")
-                    .split_whitespace()
-                    .next();
+                let base = text.trim_start_matches("extends").split_whitespace().next();
                 if let Some(b) = base {
                     bases.push(b.to_string());
                 }
@@ -2130,10 +2127,7 @@ fn extract_go_docstring(node: &Node, source: &str) -> Option<String> {
                     break;
                 }
                 // Strip /* and */ delimiters, trim whitespace
-                let inner = text
-                    .trim_start_matches("/*")
-                    .trim_end_matches("*/")
-                    .trim();
+                let inner = text.trim_start_matches("/*").trim_end_matches("*/").trim();
                 if inner.is_empty() {
                     return None;
                 }
@@ -2141,9 +2135,9 @@ fn extract_go_docstring(node: &Node, source: &str) -> Option<String> {
             }
             // Line comment: strip "// " or "//" prefix
             if text.starts_with("//") {
-                let stripped = text.strip_prefix("// ").unwrap_or(
-                    text.strip_prefix("//").unwrap_or(&text),
-                );
+                let stripped = text
+                    .strip_prefix("// ")
+                    .unwrap_or(text.strip_prefix("//").unwrap_or(&text));
                 comment_lines.push(stripped.to_string());
             } else {
                 break;
@@ -4204,11 +4198,7 @@ fn extract_call_expressions(
                 // For cross-file call detection, we need ALL calls, not just local ones.
                 // Include the full callee name (e.g., "module.func") for cross-file resolution,
                 // and also the simple name for intra-file matching.
-                let simple_name = callee
-                    .split('.')
-                    .next_back()
-                    .unwrap_or(&callee)
-                    .to_string();
+                let simple_name = callee.split('.').next_back().unwrap_or(&callee).to_string();
                 if known_functions.contains(&simple_name) {
                     // Local function call - use simple name
                     calls.push(simple_name);
@@ -4769,13 +4759,11 @@ fn extract_ruby_params(node: &Node, source: &str) -> Vec<String> {
 /// `node.parent(body_statement).prev_sibling()` to reach the comment.
 fn extract_ruby_docstring(node: &Node, source: &str) -> Option<String> {
     // Try direct prev sibling first, then walk up through body_statement
-    let first_prev = node
-        .prev_sibling()
-        .or_else(|| {
-            node.parent()
-                .filter(|p| p.kind() == "body_statement")
-                .and_then(|p| p.prev_sibling())
-        });
+    let first_prev = node.prev_sibling().or_else(|| {
+        node.parent()
+            .filter(|p| p.kind() == "body_statement")
+            .and_then(|p| p.prev_sibling())
+    });
     let mut prev = first_prev;
     let mut comment_lines: Vec<String> = Vec::new();
     while let Some(prev_node) = prev {
@@ -7016,11 +7004,7 @@ let mul x y = x * y
     #[test]
     fn test_extract_ocaml_no_classes() {
         let mut file = NamedTempFile::with_suffix(".ml").unwrap();
-        writeln!(
-            file,
-            r#"let add x y = x + y"#
-        )
-        .unwrap();
+        writeln!(file, r#"let add x y = x + y"#).unwrap();
 
         let info = extract_file(file.path(), None).unwrap();
         assert!(info.classes.is_empty(), "OCaml should have no classes");
@@ -7029,11 +7013,7 @@ let mul x y = x * y
     #[test]
     fn test_extract_lua_no_classes() {
         let mut file = NamedTempFile::with_suffix(".lua").unwrap();
-        writeln!(
-            file,
-            r#"function foo() end"#
-        )
-        .unwrap();
+        writeln!(file, r#"function foo() end"#).unwrap();
 
         let info = extract_file(file.path(), None).unwrap();
         assert!(info.classes.is_empty(), "Lua should have no classes");

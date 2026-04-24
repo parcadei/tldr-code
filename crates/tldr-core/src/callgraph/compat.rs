@@ -18,9 +18,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use super::builder_v2::{build_project_call_graph_v2, BuildConfig, BuildError};
-use super::cross_file_types::{
-    CallGraphIR, FileIR, FuncDef, ImportDef, ProjectCallGraphV2,
-};
+use super::cross_file_types::{CallGraphIR, FileIR, FuncDef, ImportDef, ProjectCallGraphV2};
 
 // =============================================================================
 // V1 Type Definitions

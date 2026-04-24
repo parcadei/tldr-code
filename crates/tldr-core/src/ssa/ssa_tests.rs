@@ -22,9 +22,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use crate::types::{
-    BlockType, CfgBlock, CfgEdge, CfgInfo, DfgInfo, EdgeType, RefType, VarRef,
-};
+use crate::types::{BlockType, CfgBlock, CfgEdge, CfgInfo, DfgInfo, EdgeType, RefType, VarRef};
 
 use super::analysis::*;
 use super::construct::*;
@@ -3980,9 +3978,7 @@ def sum_to_n(n):
 #[cfg(test)]
 mod language_specific_tests {
     use super::*;
-    use crate::ssa::construct::{
-        is_blank_identifier, is_comprehension_scope,
-    };
+    use crate::ssa::construct::{is_blank_identifier, is_comprehension_scope};
     use crate::types::VarRefContext;
 
     // =========================================================================

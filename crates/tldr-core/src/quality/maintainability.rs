@@ -22,9 +22,9 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use crate::walker::walk_project;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
 
 use crate::ast::parser::parse;
 use crate::error::TldrError;
@@ -211,10 +211,8 @@ pub fn maintainability_index(
     let file_paths: Vec<PathBuf> = if path.is_file() {
         vec![path.to_path_buf()]
     } else {
-        WalkDir::new(path)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
+        walk_project(path)
+            .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
             .filter(|e| {
                 let detected = Language::from_path(e.path());
                 match (detected, language) {

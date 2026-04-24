@@ -42,8 +42,8 @@ use std::process::Command;
 
 use crate::metrics::cognitive::{analyze_cognitive, CognitiveOptions, FunctionCognitive};
 use crate::quality::churn::{
-    check_shallow_clone, get_file_churn_detailed,
-    is_git_repository, ChurnError, FileChurn, FileChurnDetailed,
+    check_shallow_clone, get_file_churn_detailed, is_git_repository, ChurnError, FileChurn,
+    FileChurnDetailed,
 };
 use crate::types::Language;
 
@@ -71,7 +71,8 @@ fn get_analysis_prefix(analysis_path: &Path, git_root: &Path) -> Option<String> 
     let canonical_analysis = analysis_path.canonicalize().ok()?;
     let canonical_root = git_root.canonicalize().ok()?;
 
-    canonical_analysis.strip_prefix(&canonical_root)
+    canonical_analysis
+        .strip_prefix(&canonical_root)
         .ok()
         .map(|p| {
             let s = p.to_string_lossy().to_string();
@@ -218,8 +219,8 @@ impl ScoringWeights {
     /// Renormalize active weights to sum to 1.0.
     /// Dimensions with weight=0.0 are considered inactive.
     pub fn renormalize(&self) -> Self {
-        let sum = self.churn + self.complexity
-            + self.knowledge_fragmentation + self.temporal_coupling;
+        let sum =
+            self.churn + self.complexity + self.knowledge_fragmentation + self.temporal_coupling;
         if sum <= 0.0 {
             return self.clone();
         }
@@ -240,8 +241,16 @@ impl ScoringWeights {
         let w = Self {
             churn: if active[0] { self.churn } else { 0.0 },
             complexity: if active[1] { self.complexity } else { 0.0 },
-            knowledge_fragmentation: if active[2] { self.knowledge_fragmentation } else { 0.0 },
-            temporal_coupling: if active[3] { self.temporal_coupling } else { 0.0 },
+            knowledge_fragmentation: if active[2] {
+                self.knowledge_fragmentation
+            } else {
+                0.0
+            },
+            temporal_coupling: if active[3] {
+                self.temporal_coupling
+            } else {
+                0.0
+            },
         };
         w.renormalize()
     }
@@ -512,7 +521,10 @@ pub enum HotspotsError {
 /// 4. Percentile-rank each dimension; exclude zero-variance dimensions
 /// 5. Compute composite score = weighted sum of percentile ranks
 /// 6. Sort by hotspot_score descending, apply threshold, truncate to top N
-pub fn analyze_hotspots(path: &Path, options: &HotspotsOptions) -> Result<HotspotsReport, HotspotsError> {
+pub fn analyze_hotspots(
+    path: &Path,
+    options: &HotspotsOptions,
+) -> Result<HotspotsReport, HotspotsError> {
     // Validate path exists
     if !path.exists() {
         return Err(HotspotsError::PathNotFound(path.to_path_buf()));
@@ -538,21 +550,21 @@ pub fn analyze_hotspots(path: &Path, options: &HotspotsOptions) -> Result<Hotspo
     }
 
     // --- V2: Use get_file_churn_detailed for per-commit data ---
-    let (detailed_churn_raw, total_bot_filtered) = get_file_churn_detailed(
-        path, options.days, &options.exclude, options.include_bots
-    )?;
+    let (detailed_churn_raw, total_bot_filtered) =
+        get_file_churn_detailed(path, options.days, &options.exclude, options.include_bots)?;
 
     // Get git root and analysis prefix to filter files correctly
     let git_root = get_git_root(path);
-    let analysis_prefix = git_root.as_ref().and_then(|root| get_analysis_prefix(path, root));
+    let analysis_prefix = git_root
+        .as_ref()
+        .and_then(|root| get_analysis_prefix(path, root));
 
-    let detailed_churn = remap_detailed_churn_for_analysis(
-        detailed_churn_raw,
-        analysis_prefix.as_deref(),
-    );
+    let detailed_churn =
+        remap_detailed_churn_for_analysis(detailed_churn_raw, analysis_prefix.as_deref());
 
     // Convert to FileChurn map for backward-compatible filtering and complexity analysis
-    let file_churn: HashMap<String, FileChurn> = detailed_churn.iter()
+    let file_churn: HashMap<String, FileChurn> = detailed_churn
+        .iter()
         .map(|(k, v)| (k.clone(), v.base.clone()))
         .collect();
 
@@ -629,7 +641,11 @@ pub fn analyze_hotspots(path: &Path, options: &HotspotsOptions) -> Result<Hotspo
             is_shallow,
             shallow_depth,
             bot_commits_filtered: Some(total_bot_filtered),
-            recency_halflife: if options.recency_halflife > 0.0 { Some(options.recency_halflife as u32) } else { None },
+            recency_halflife: if options.recency_halflife > 0.0 {
+                Some(options.recency_halflife as u32)
+            } else {
+                None
+            },
             scoring_weights: Some(scored.effective_weights.clone()),
             algorithm_version: 2,
         },
@@ -774,16 +790,28 @@ fn score_hotspots_v2(
     let churn_has_variance = has_variance(&churn_values);
     let complexity_has_variance = has_variance(&complexity_values);
     let frag_has_variance = has_variance(&frag_values);
-    let active = [churn_has_variance, complexity_has_variance, frag_has_variance, false];
+    let active = [
+        churn_has_variance,
+        complexity_has_variance,
+        frag_has_variance,
+        false,
+    ];
 
     if !churn_has_variance && hotspots.len() > 1 {
-        warnings.push("All files have similar churn. This dimension excluded from scoring.".to_string());
+        warnings.push(
+            "All files have similar churn. This dimension excluded from scoring.".to_string(),
+        );
     }
     if !complexity_has_variance && hotspots.len() > 1 {
-        warnings.push("All files have similar complexity. This dimension excluded from scoring.".to_string());
+        warnings.push(
+            "All files have similar complexity. This dimension excluded from scoring.".to_string(),
+        );
     }
     if !frag_has_variance && hotspots.len() > 1 {
-        warnings.push("All files have similar knowledge fragmentation. This dimension excluded from scoring.".to_string());
+        warnings.push(
+            "All files have similar knowledge fragmentation. This dimension excluded from scoring."
+                .to_string(),
+        );
     }
     if hotspots.len() == 1 {
         warnings.push("Only one file analyzed. Consider expanding the search scope.".to_string());
@@ -828,7 +856,11 @@ fn score_hotspots_v2(
     });
 
     let top_10_percent = (total_files / 10).max(1);
-    let top_commits: u32 = hotspots.iter().take(top_10_percent).map(|h| h.commit_count).sum();
+    let top_commits: u32 = hotspots
+        .iter()
+        .take(top_10_percent)
+        .map(|h| h.commit_count)
+        .sum();
     let hotspot_concentration = if total_commits > 0 {
         (top_commits as f64 / total_commits as f64) * 100.0
     } else {
@@ -853,7 +885,8 @@ fn score_hotspots_v2(
     hotspots.truncate(options.top);
 
     let summary_recommendation = if hotspot_concentration > 70.0 {
-        "High concentration of changes in few files. Consider breaking up large modules.".to_string()
+        "High concentration of changes in few files. Consider breaking up large modules."
+            .to_string()
     } else if hotspot_concentration > 40.0 {
         "Moderate change concentration. Monitor hotspots for potential refactoring.".to_string()
     } else {
@@ -900,11 +933,17 @@ fn analyze_file_level(
             .with_high_threshold(10000);
 
         let max_complexity = match analyze_cognitive(&full_path, &cognitive_options) {
-            Ok(report) => {
-                report.functions.iter().map(|f| f.cognitive).max().unwrap_or(0)
-            }
+            Ok(report) => report
+                .functions
+                .iter()
+                .map(|f| f.cognitive)
+                .max()
+                .unwrap_or(0),
             Err(e) => {
-                warnings.push(format!("Complexity analysis failed for {}: {}", file_path, e));
+                warnings.push(format!(
+                    "Complexity analysis failed for {}: {}",
+                    file_path, e
+                ));
                 0
             }
         };
@@ -958,13 +997,17 @@ fn analyze_function_level(
             .with_threshold(1000)
             .with_high_threshold(10000);
 
-        let functions: Vec<FunctionCognitive> = match analyze_cognitive(&full_path, &cognitive_options) {
-            Ok(report) => report.functions,
-            Err(e) => {
-                warnings.push(format!("Complexity analysis failed for {}: {}", file_path, e));
-                continue;
-            }
-        };
+        let functions: Vec<FunctionCognitive> =
+            match analyze_cognitive(&full_path, &cognitive_options) {
+                Ok(report) => report.functions,
+                Err(e) => {
+                    warnings.push(format!(
+                        "Complexity analysis failed for {}: {}",
+                        file_path, e
+                    ));
+                    continue;
+                }
+            };
 
         // Create hotspot entry for each function
         for func in functions {
@@ -1010,7 +1053,8 @@ pub fn normalize_value(value: f64, min: f64, max: f64) -> f64 {
 /// - Monitor otherwise
 fn get_recommendation(score: f64) -> String {
     if score > 0.74 {
-        "Critical: High churn + high complexity + fragmented knowledge. Prioritize refactoring.".to_string()
+        "Critical: High churn + high complexity + fragmented knowledge. Prioritize refactoring."
+            .to_string()
     } else if score > 0.63 {
         "High priority: Frequent changes to complex code.".to_string()
     } else if score > 0.50 {

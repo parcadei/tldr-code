@@ -32,12 +32,12 @@
 //! - Spec: session7-spec.md section 2.2 (Type Definitions)
 //! - Phased plan: session7-phased-plan.yaml Phase 8, 9, 10
 
+use crate::walker::walk_project;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tree_sitter::Node;
-use walkdir::WalkDir;
 
 use crate::ast::parser::parse_file;
 use crate::security::ast_utils;
@@ -609,43 +609,9 @@ pub fn find_text_candidates(
 
     // Walk directory, filter by language extension
     // S7-R9: Files are read one at a time to bound memory usage
-    // Skip common non-source directories (matches callgraph/scanner.rs SKIP_DIRECTORIES)
-    for entry in WalkDir::new(root)
-        .into_iter()
-        .filter_entry(|e| {
-            if e.file_type().is_dir() {
-                let name = e.file_name().to_string_lossy();
-                !matches!(
-                    name.as_ref(),
-                    ".git"
-                        | "__pycache__"
-                        | "node_modules"
-                        | ".tox"
-                        | "venv"
-                        | ".venv"
-                        | "__pypackages__"
-                        | ".mypy_cache"
-                        | ".pytest_cache"
-                        | ".ruff_cache"
-                        | "target"
-                        | "build"
-                        | "dist"
-                        | ".next"
-                        | ".nuxt"
-                        | "vendor"
-                        | ".bundle"
-                        | "Pods"
-                        | ".gradle"
-                        | ".idea"
-                        | ".vscode"
-                        | ".eggs"
-                )
-            } else {
-                true
-            }
-        })
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
+    // Skips node_modules, target, dist, hidden dirs via the shared walker
+    for entry in walk_project(root)
+        .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
         .filter(|e| is_source_file(e.path(), language))
     {
         let content = match std::fs::read_to_string(entry.path()) {
@@ -759,10 +725,8 @@ fn is_comment_line(line: &str, language: Option<&str>) -> bool {
 
 /// Count source files in a directory for statistics
 fn count_source_files(root: &Path, language: Option<&str>) -> usize {
-    WalkDir::new(root)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
+    walk_project(root)
+        .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
         .filter(|e| is_source_file(e.path(), language))
         .count()
 }
@@ -1811,8 +1775,11 @@ fn classify_csharp_reference(node: &Node, parent: &Node, _source: &[u8]) -> Refe
             ReferenceKind::Read
         }
 
-        "class_declaration" | "interface_declaration" | "struct_declaration"
-        | "enum_declaration" | "record_declaration" => {
+        "class_declaration"
+        | "interface_declaration"
+        | "struct_declaration"
+        | "enum_declaration"
+        | "record_declaration" => {
             if let Some(name) = parent.child_by_field_name("name") {
                 if node.id() == name.id() {
                     return ReferenceKind::Definition;
@@ -1875,7 +1842,9 @@ fn classify_kotlin_reference(node: &Node, parent: &Node, _source: &[u8]) -> Refe
             ReferenceKind::Read
         }
 
-        "function_declaration" | "class_declaration" | "object_declaration"
+        "function_declaration"
+        | "class_declaration"
+        | "object_declaration"
         | "property_declaration" => {
             if let Some(name) = parent.child_by_field_name("name") {
                 if node.id() == name.id() {
@@ -2544,10 +2513,8 @@ pub fn find_definition(
     language: Option<&str>,
 ) -> TldrResult<Option<Definition>> {
     // Walk all source files
-    for entry in WalkDir::new(root)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
+    for entry in walk_project(root)
+        .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
         .filter(|e| is_source_file(e.path(), language))
     {
         // Try to find definition in this file
@@ -3678,7 +3645,15 @@ mod tests {
             }
             for i in 0..node.child_count() {
                 if let Some(child) = node.child(i) {
-                    walk(child, source, src_str, needle, identifier_kinds, language, out);
+                    walk(
+                        child,
+                        source,
+                        src_str,
+                        needle,
+                        identifier_kinds,
+                        language,
+                        out,
+                    );
                 }
             }
         }
@@ -3792,8 +3767,7 @@ class App {
     }
 }
 "#;
-        let results =
-            collect_reference_kinds_for(src, Language::CSharp, "greet", &["identifier"]);
+        let results = collect_reference_kinds_for(src, Language::CSharp, "greet", &["identifier"]);
         assert_def_and_calls(&results, "C#");
     }
 
@@ -3806,8 +3780,7 @@ fun main() {
     println(greet("Alice"))
 }
 "#;
-        let results =
-            collect_reference_kinds_for(src, Language::Kotlin, "greet", &["identifier"]);
+        let results = collect_reference_kinds_for(src, Language::Kotlin, "greet", &["identifier"]);
         assert_def_and_calls(&results, "Kotlin");
     }
 
@@ -3907,8 +3880,7 @@ end
 IO.puts(App.greet("World"))
 IO.puts(App.greet("Alice"))
 "#;
-        let results =
-            collect_reference_kinds_for(src, Language::Elixir, "greet", &["identifier"]);
+        let results = collect_reference_kinds_for(src, Language::Elixir, "greet", &["identifier"]);
         assert_def_and_calls(&results, "Elixir");
     }
 
@@ -3919,8 +3891,7 @@ let greet name = "Hello " ^ name
 let _ = print_string (greet "World")
 let _ = print_string (greet "Alice")
 "#;
-        let results =
-            collect_reference_kinds_for(src, Language::Ocaml, "greet", &["value_name"]);
+        let results = collect_reference_kinds_for(src, Language::Ocaml, "greet", &["value_name"]);
         assert_def_and_calls(&results, "OCaml");
     }
 }

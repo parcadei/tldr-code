@@ -49,7 +49,8 @@ pub fn compose_born_dead(
     }
 
     // Scan the entire project for identifier refcounts (single-pass tree-sitter).
-    let (_module_infos, ref_counts) = collect_module_infos_with_refcounts(project, *language);
+    let (_module_infos, ref_counts) =
+        collect_module_infos_with_refcounts(project, *language, false);
 
     compose_born_dead_with_refcounts(inserted, &ref_counts)
 }
@@ -151,10 +152,7 @@ fn find_importer_files(
 /// e.g., `lib.rs` -> `["lib"]`
 fn derive_module_names(rel_path: &Path) -> Vec<String> {
     let mut names = Vec::new();
-    let stem = rel_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
+    let stem = rel_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
 
     if stem.is_empty() {
         return names;
@@ -392,15 +390,35 @@ fn is_entry_point(name: &str) -> bool {
 fn is_trait_impl(name: &str, _text: &str) -> bool {
     matches!(
         name,
-        "fmt" | "from" | "into" | "try_from" | "try_into"
-            | "clone" | "clone_from" | "default" | "drop"
-            | "deref" | "deref_mut" | "as_ref" | "as_mut"
-            | "borrow" | "borrow_mut"
-            | "eq" | "ne" | "partial_cmp" | "cmp" | "hash"
-            | "next" | "size_hint"
-            | "index" | "index_mut"
-            | "from_str" | "to_string" | "write_str"
-            | "serialize" | "deserialize"
+        "fmt"
+            | "from"
+            | "into"
+            | "try_from"
+            | "try_into"
+            | "clone"
+            | "clone_from"
+            | "default"
+            | "drop"
+            | "deref"
+            | "deref_mut"
+            | "as_ref"
+            | "as_mut"
+            | "borrow"
+            | "borrow_mut"
+            | "eq"
+            | "ne"
+            | "partial_cmp"
+            | "cmp"
+            | "hash"
+            | "next"
+            | "size_hint"
+            | "index"
+            | "index_mut"
+            | "from_str"
+            | "to_string"
+            | "write_str"
+            | "serialize"
+            | "deserialize"
             | "poll"
     )
 }
@@ -481,12 +499,7 @@ mod tests {
 
     #[test]
     fn test_born_dead_public_medium_severity() {
-        let insert = make_insert(
-            "unused_pub",
-            "pub fn unused_pub() { }",
-            "src/lib.rs",
-            5,
-        );
+        let insert = make_insert("unused_pub", "pub fn unused_pub() { }", "src/lib.rs", 5);
         let inserted: Vec<&ASTChange> = vec![&insert];
 
         let mut ref_counts = HashMap::new();
@@ -510,12 +523,7 @@ mod tests {
 
     #[test]
     fn test_born_dead_private_low_severity() {
-        let insert = make_insert(
-            "unused_priv",
-            "fn unused_priv() { }",
-            "src/lib.rs",
-            5,
-        );
+        let insert = make_insert("unused_priv", "fn unused_priv() { }", "src/lib.rs", 5);
         let inserted: Vec<&ASTChange> = vec![&insert];
 
         let mut ref_counts = HashMap::new();
@@ -585,7 +593,10 @@ mod tests {
         let findings =
             compose_born_dead_with_refcounts(&inserted, &ref_counts).expect("should succeed");
 
-        assert!(findings.is_empty(), "Empty input should produce no findings");
+        assert!(
+            findings.is_empty(),
+            "Empty input should produce no findings"
+        );
     }
 
     #[test]
@@ -615,21 +626,13 @@ mod tests {
         let findings =
             compose_born_dead_with_refcounts(&inserted, &ref_counts).expect("should succeed");
 
-        assert!(
-            findings.is_empty(),
-            "Change with no name should be skipped"
-        );
+        assert!(findings.is_empty(), "Change with no name should be skipped");
     }
 
     #[test]
     fn test_born_dead_zero_refcount_means_dead() {
         // Function not found in refcounts at all => ref_count=0 => dead
-        let insert = make_insert(
-            "orphan_func",
-            "fn orphan_func() { }",
-            "src/lib.rs",
-            20,
-        );
+        let insert = make_insert("orphan_func", "fn orphan_func() { }", "src/lib.rs", 20);
         let inserted: Vec<&ASTChange> = vec![&insert];
 
         // Empty refcounts -- function name not even found
@@ -638,7 +641,11 @@ mod tests {
         let findings =
             compose_born_dead_with_refcounts(&inserted, &ref_counts).expect("should succeed");
 
-        assert_eq!(findings.len(), 1, "Function not in refcounts should be dead");
+        assert_eq!(
+            findings.len(),
+            1,
+            "Function not in refcounts should be dead"
+        );
         assert_eq!(findings[0].function, "orphan_func");
 
         let evidence: BornDeadEvidence =
@@ -666,10 +673,7 @@ mod tests {
             findings.len(),
             2,
             "Should find 2 dead functions, got: {:?}",
-            findings
-                .iter()
-                .map(|f| &f.function)
-                .collect::<Vec<_>>()
+            findings.iter().map(|f| &f.function).collect::<Vec<_>>()
         );
 
         let names: Vec<&str> = findings.iter().map(|f| f.function.as_str()).collect();
@@ -758,15 +762,35 @@ mod tests {
     fn test_is_trait_impl_std_trait_methods() {
         // Standard library trait methods should be recognised
         let std_methods = [
-            "fmt", "from", "into", "try_from", "try_into",
-            "clone", "clone_from", "default", "drop",
-            "deref", "deref_mut", "as_ref", "as_mut",
-            "borrow", "borrow_mut",
-            "eq", "ne", "partial_cmp", "cmp", "hash",
-            "next", "size_hint",
-            "index", "index_mut",
-            "from_str", "to_string", "write_str",
-            "serialize", "deserialize",
+            "fmt",
+            "from",
+            "into",
+            "try_from",
+            "try_into",
+            "clone",
+            "clone_from",
+            "default",
+            "drop",
+            "deref",
+            "deref_mut",
+            "as_ref",
+            "as_mut",
+            "borrow",
+            "borrow_mut",
+            "eq",
+            "ne",
+            "partial_cmp",
+            "cmp",
+            "hash",
+            "next",
+            "size_hint",
+            "index",
+            "index_mut",
+            "from_str",
+            "to_string",
+            "write_str",
+            "serialize",
+            "deserialize",
             "poll",
         ];
         for method in &std_methods {

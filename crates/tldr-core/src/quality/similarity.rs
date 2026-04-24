@@ -35,9 +35,9 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use crate::walker::walk_project;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
 
 use crate::ast::extract::extract_file;
 use crate::types::{FunctionInfo, Language};
@@ -355,11 +355,7 @@ pub fn find_similar_with_options(
 fn detect_dominant_language(path: &Path) -> Language {
     let mut counts: HashMap<Language, usize> = HashMap::new();
 
-    for entry in WalkDir::new(path)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in walk_project(path) {
         if let Some(lang) = Language::from_path(entry.path()) {
             *counts.entry(lang).or_insert(0) += 1;
         }
@@ -382,11 +378,7 @@ fn extract_all_functions(path: &Path, language: Language) -> TldrResult<Vec<Func
         .map(|s| s.to_string())
         .collect();
 
-    for entry in WalkDir::new(path)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in walk_project(path) {
         let entry_path = entry.path();
         if !entry_path.is_file() {
             continue;

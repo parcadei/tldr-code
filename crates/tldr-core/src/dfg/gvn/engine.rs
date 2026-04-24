@@ -523,9 +523,7 @@ impl GVNEngine {
         let expr_ref = ExpressionRef::new(&text, line, vn);
 
         // Track first occurrence
-        self.vn_first
-            .entry(vn)
-            .or_insert_with(|| expr_ref.clone());
+        self.vn_first.entry(vn).or_insert_with(|| expr_ref.clone());
 
         // Track commutativity
         if is_comm {

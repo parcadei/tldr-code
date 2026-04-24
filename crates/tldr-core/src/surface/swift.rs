@@ -274,8 +274,8 @@ fn extract_from_swift_file(
         // Extension members inherit visibility from the extension block if it
         // has an explicit access modifier (e.g. `public extension Foo`), or
         // from each individual member declaration otherwise.
-        let extension_is_public = is_extension
-            && is_swift_public_at_line(&source, class.line_number as usize);
+        let extension_is_public =
+            is_extension && is_swift_public_at_line(&source, class.line_number as usize);
 
         for method in &class.methods {
             if !include_private
@@ -550,13 +550,32 @@ mod tests {
     #[test]
     fn test_find_swift_files_prefers_sources_over_examples_and_tools() {
         let dir = TempDir::new().unwrap();
-        write_file(&dir, "Sources/ArgumentParser/Command.swift", "public struct Command {}");
-        write_file(&dir, "Examples/repeat/Repeat.swift", "public struct RepeatExample {}");
-        write_file(&dir, "Tools/generate-manual/GenerateManual.swift", "public struct GenerateManual {}");
-        write_file(&dir, "Plugins/GenerateDoccReference/GenerateDoccReference.swift", "public struct GenerateDoccReference {}");
+        write_file(
+            &dir,
+            "Sources/ArgumentParser/Command.swift",
+            "public struct Command {}",
+        );
+        write_file(
+            &dir,
+            "Examples/repeat/Repeat.swift",
+            "public struct RepeatExample {}",
+        );
+        write_file(
+            &dir,
+            "Tools/generate-manual/GenerateManual.swift",
+            "public struct GenerateManual {}",
+        );
+        write_file(
+            &dir,
+            "Plugins/GenerateDoccReference/GenerateDoccReference.swift",
+            "public struct GenerateDoccReference {}",
+        );
 
         let files = find_swift_files(dir.path());
-        assert_eq!(files, vec![dir.path().join("Sources/ArgumentParser/Command.swift")]);
+        assert_eq!(
+            files,
+            vec![dir.path().join("Sources/ArgumentParser/Command.swift")]
+        );
     }
 
     #[test]
@@ -580,7 +599,11 @@ let package = Package(
 )
 "#,
         );
-        write_file(&dir, "Sources/ArgumentParser/Command.swift", "public struct Command {}");
+        write_file(
+            &dir,
+            "Sources/ArgumentParser/Command.swift",
+            "public struct Command {}",
+        );
         write_file(
             &dir,
             "Sources/ArgumentParserToolInfo/ToolInfo.swift",
@@ -588,7 +611,10 @@ let package = Package(
         );
 
         let files = find_swift_files(dir.path());
-        assert_eq!(files, vec![dir.path().join("Sources/ArgumentParser/Command.swift")]);
+        assert_eq!(
+            files,
+            vec![dir.path().join("Sources/ArgumentParser/Command.swift")]
+        );
     }
 
     #[test]
@@ -685,18 +711,22 @@ public struct ParsableCommand {
         let surface = extract_swift_api_surface(&resolved, false, Some(1)).unwrap();
         assert_eq!(surface.apis.len(), 1);
         assert_eq!(
-            surface.apis[0].location.as_ref().map(|location| location.file.as_path()),
+            surface.apis[0]
+                .location
+                .as_ref()
+                .map(|location| location.file.as_path()),
             Some(Path::new("Sources/ArgumentParser/Command.swift"))
         );
         assert!(
-            surface.apis[0]
-                .qualified_name
-                .contains("ParsableCommand"),
+            surface.apis[0].qualified_name.contains("ParsableCommand"),
             "expected Sources API to outrank examples, got {:?}",
             surface
                 .apis
                 .iter()
-                .map(|api| (&api.qualified_name, api.location.as_ref().map(|loc| &loc.file)))
+                .map(|api| (
+                    &api.qualified_name,
+                    api.location.as_ref().map(|loc| &loc.file)
+                ))
                 .collect::<Vec<_>>()
         );
     }

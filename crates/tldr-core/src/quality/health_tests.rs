@@ -15,7 +15,6 @@
 //! - Output formats: JSON schema validation, text dashboard
 //! - Edge cases: Empty directories, parse errors, unsupported files
 
-
 // =============================================================================
 // Test Fixture Setup Module
 // =============================================================================
@@ -51,7 +50,6 @@ pub mod fixtures {
             std::fs::write(&path, content)?;
             Ok(path)
         }
-
     }
 
     // -------------------------------------------------------------------------
@@ -498,7 +496,6 @@ def broken_function(
 
 #[cfg(test)]
 mod core_type_tests {
-    
 
     /// Test that HealthReport has all required fields per spec section 2.2
     #[test]
@@ -590,7 +587,6 @@ mod core_type_tests {
 #[cfg(test)]
 mod complexity_tests {
     use super::fixtures::*;
-    
 
     /// Test that functions with CC > 10 are marked as hotspots
     #[test]
@@ -690,7 +686,7 @@ mod complexity_tests {
 #[cfg(test)]
 mod cohesion_tests {
     use super::fixtures::*;
-    
+
     use crate::quality::cohesion::{analyze_cohesion, CohesionVerdict};
 
     /// Test LCOM4 = 1 for single method class
@@ -890,7 +886,6 @@ mod cohesion_tests {
 #[cfg(test)]
 mod dead_code_tests {
     use super::fixtures::*;
-    
 
     /// Test detection of unreachable private functions
     #[test]
@@ -989,7 +984,6 @@ mod dead_code_tests {
 #[cfg(test)]
 mod martin_metrics_tests {
     use super::fixtures::*;
-    
 
     /// Test abstractness calculation: A = abstract_types / total_types
     #[test]
@@ -1108,7 +1102,7 @@ mod martin_metrics_tests {
 #[cfg(test)]
 mod coupling_tests {
     use super::fixtures::*;
-    
+
     use crate::quality::coupling::{analyze_coupling, CouplingVerdict};
     use crate::types::Language;
 
@@ -1224,7 +1218,7 @@ mod coupling_tests {
 #[cfg(test)]
 mod similarity_tests {
     use super::fixtures::*;
-    
+
     use crate::quality::similarity::{find_similar, SimilarityReason};
     use crate::types::Language;
 
@@ -1411,7 +1405,7 @@ mod similarity_tests {
 #[cfg(test)]
 mod integration_tests {
     use super::fixtures::*;
-    
+
     use crate::quality::health::{run_health, HealthOptions};
 
     /// Test that quick mode excludes coupling and similar analyzers
@@ -1632,7 +1626,6 @@ mod integration_tests {
 #[cfg(test)]
 mod output_format_tests {
     use super::fixtures::*;
-    
 
     /// Test JSON output matches schema from spec section 5.1
     #[test]
@@ -1742,7 +1735,7 @@ mod output_format_tests {
 #[cfg(test)]
 mod edge_case_tests {
     use super::fixtures::*;
-    
+
     use crate::quality::health::{run_health, HealthOptions};
     use crate::types::Language;
 
@@ -1904,7 +1897,6 @@ class Émoji:
 
 #[cfg(test)]
 mod error_type_tests {
-    
 
     /// Test HealthError variants exist per spec section 9
     #[test]
@@ -1950,7 +1942,6 @@ mod error_type_tests {
 
 #[cfg(test)]
 mod options_tests {
-    
 
     /// Test HealthOptions defaults per spec section 7.1
     #[test]
@@ -2028,7 +2019,6 @@ mod options_tests {
 
 #[cfg(test)]
 mod incremental_tests {
-    
 
     /// Test IncrementalOptions structure per spec section 7.5
     #[test]
@@ -2069,7 +2059,6 @@ mod incremental_tests {
 
 #[cfg(test)]
 mod health_finding_tests {
-    
 
     /// Test HealthFinding structure per spec section 7.3
     #[test]
@@ -2124,7 +2113,6 @@ mod health_finding_tests {
 
 #[cfg(test)]
 mod parallel_tests {
-    
 
     /// Test that independent analyzers can run in parallel
     #[test]

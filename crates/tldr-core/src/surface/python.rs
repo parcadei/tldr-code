@@ -326,15 +326,33 @@ fn rewrite_and_filter_python_package_exports(
         let exported_top_level = exports
             .import_aliases
             .iter()
-            .find_map(|(alias, target)| target.ends_with(&format!(".{top_level}")).then_some(alias.as_str()))
-            .or_else(|| export_names.iter().find(|name| name.as_str() == top_level).map(String::as_str));
+            .find_map(|(alias, target)| {
+                target
+                    .ends_with(&format!(".{top_level}"))
+                    .then_some(alias.as_str())
+            })
+            .or_else(|| {
+                export_names
+                    .iter()
+                    .find(|name| name.as_str() == top_level)
+                    .map(String::as_str)
+            });
 
         let class_export = if segments.len() >= 2 {
             exports
                 .import_aliases
                 .iter()
-                .find_map(|(alias, target)| target.ends_with(&format!(".{}", segments[1])).then_some(alias.as_str()))
-                .or_else(|| export_names.iter().find(|name| name.as_str() == segments[1]).map(String::as_str))
+                .find_map(|(alias, target)| {
+                    target
+                        .ends_with(&format!(".{}", segments[1]))
+                        .then_some(alias.as_str())
+                })
+                .or_else(|| {
+                    export_names
+                        .iter()
+                        .find(|name| name.as_str() == segments[1])
+                        .map(String::as_str)
+                })
         } else {
             None
         };
@@ -384,7 +402,9 @@ fn rewrite_and_filter_python_package_exports(
     });
 
     let mut apis: Vec<ApiEntry> = rewritten.into_iter().map(|(_, _, _, api)| api).collect();
-    apis.dedup_by(|left, right| left.qualified_name == right.qualified_name && left.kind == right.kind);
+    apis.dedup_by(|left, right| {
+        left.qualified_name == right.qualified_name && left.kind == right.kind
+    });
     apis
 }
 

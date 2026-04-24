@@ -283,30 +283,31 @@ fn analyze_undefined(error: &ParsedError, source: &str) -> Option<Diagnosis> {
     }
 
     // Determine where to insert the import
-    let (insert_line, edit_kind, new_text) = if let Some(close_line) = find_import_block_close(source) {
-        // There is an `import (...)` block -- insert before the closing `)`
-        (
-            close_line,
-            EditKind::InsertBefore,
-            format!("\t{}", import_path),
-        )
-    } else if find_last_import_line(source).is_some() {
-        // There are single-line imports -- add another after the last one
-        let last = find_last_import_line(source).unwrap();
-        (
-            last,
-            EditKind::InsertAfter,
-            format!("import {}", import_path),
-        )
-    } else {
-        // No imports at all -- insert after package declaration
-        let pkg_line = find_package_line(source);
-        (
-            pkg_line,
-            EditKind::InsertAfter,
-            format!("\nimport {}", import_path),
-        )
-    };
+    let (insert_line, edit_kind, new_text) =
+        if let Some(close_line) = find_import_block_close(source) {
+            // There is an `import (...)` block -- insert before the closing `)`
+            (
+                close_line,
+                EditKind::InsertBefore,
+                format!("\t{}", import_path),
+            )
+        } else if find_last_import_line(source).is_some() {
+            // There are single-line imports -- add another after the last one
+            let last = find_last_import_line(source).unwrap();
+            (
+                last,
+                EditKind::InsertAfter,
+                format!("import {}", import_path),
+            )
+        } else {
+            // No imports at all -- insert after package declaration
+            let pkg_line = find_package_line(source);
+            (
+                pkg_line,
+                EditKind::InsertAfter,
+                format!("\nimport {}", import_path),
+            )
+        };
 
     Some(Diagnosis {
         language: "go".to_string(),
@@ -362,8 +363,7 @@ fn analyze_type_mismatch(error: &ParsedError, source: &str) -> Option<Diagnosis>
     // Pass 3: Extract target type from "as type <dst>" or "as <dst>"
     let dst_re = Regex::new(r"as (?:type )?(\S+)").ok()?;
     let dst_caps = dst_re.captures(&full)?;
-    let dst_type_raw = dst_caps.get(1)?.as_str()
-        .trim_end_matches([',', '.', ';']);
+    let dst_type_raw = dst_caps.get(1)?.as_str().trim_end_matches([',', '.', ';']);
 
     // Normalize types for lookup (strip leading *, &, etc.)
     let src_type = src_type_raw.trim_start_matches('*');
@@ -774,7 +774,10 @@ fn analyze_missing_return(error: &ParsedError, source: &str) -> Option<Diagnosis
     // Determine indentation from the function body
     let indent = if closing_brace_line >= 2 && closing_brace_line <= lines.len() {
         let prev_line = lines[closing_brace_line - 2];
-        let leading: String = prev_line.chars().take_while(|c| c.is_whitespace()).collect();
+        let leading: String = prev_line
+            .chars()
+            .take_while(|c| c.is_whitespace())
+            .collect();
         leading
     } else {
         "\t".to_string()
@@ -903,8 +906,13 @@ fn go_zero_value_single(type_str: &str) -> String {
     }
 
     // Struct types -> the struct literal
-    if clean.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
-        return format!("{}{{}}",  clean);
+    if clean
+        .chars()
+        .next()
+        .map(|c| c.is_uppercase())
+        .unwrap_or(false)
+    {
+        return format!("{}{{}}", clean);
     }
 
     // Default fallback
@@ -1036,7 +1044,8 @@ mod tests {
 
     #[test]
     fn test_go_undefined_already_imported() {
-        let source = "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n";
+        let source =
+            "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n";
         let error = ParsedError {
             error_type: "undefined".to_string(),
             message: "undefined: fmt".to_string(),
@@ -1053,7 +1062,10 @@ mod tests {
         assert!(diag.is_some());
         let d = diag.unwrap();
         assert_eq!(d.confidence, FixConfidence::Low);
-        assert!(d.fix.is_none(), "Should not produce a fix when already imported");
+        assert!(
+            d.fix.is_none(),
+            "Should not produce a fix when already imported"
+        );
     }
 
     #[test]
@@ -1125,7 +1137,10 @@ mod tests {
         };
 
         let diag = analyze_type_mismatch(&error, source);
-        assert!(diag.is_some(), "Should diagnose type mismatch string->[]byte");
+        assert!(
+            diag.is_some(),
+            "Should diagnose type mismatch string->[]byte"
+        );
         let d = diag.unwrap();
         assert_eq!(d.error_code, "type_mismatch");
         assert!(d.fix.is_some(), "Should have a fix");
@@ -1139,7 +1154,8 @@ mod tests {
 
     #[test]
     fn test_go_type_mismatch_int_to_int64() {
-        let source = "package main\n\nfunc main() {\n\tvar x int = 42\n\tvar y int64 = x\n\tprintln(y)\n}\n";
+        let source =
+            "package main\n\nfunc main() {\n\tvar x int = 42\n\tvar y int64 = x\n\tprintln(y)\n}\n";
         let error = ParsedError {
             error_type: "type_mismatch".to_string(),
             message: "cannot use x (variable of type int) as type int64 in variable declaration".to_string(),
@@ -1183,7 +1199,10 @@ mod tests {
         assert!(diag.is_some());
         let d = diag.unwrap();
         assert_eq!(d.confidence, FixConfidence::Low);
-        assert!(d.fix.is_none(), "Unknown type pair should not produce a fix");
+        assert!(
+            d.fix.is_none(),
+            "Unknown type pair should not produce a fix"
+        );
     }
 
     // ---- Analyzer 3: field not found ----
@@ -1204,7 +1223,10 @@ mod tests {
         };
 
         let diag = analyze_field_not_found(&error, source);
-        assert!(diag.is_some(), "Should diagnose field not found for Contians");
+        assert!(
+            diag.is_some(),
+            "Should diagnose field not found for Contians"
+        );
         let d = diag.unwrap();
         assert_eq!(d.error_code, "field_not_found");
         assert!(d.fix.is_some());
@@ -1221,7 +1243,8 @@ mod tests {
         let source = "package main\n\nfunc main() {\n\tx := myStruct.DoZzz()\n}\n";
         let error = ParsedError {
             error_type: "field_not_found".to_string(),
-            message: "myStruct.DoZzz undefined (type myStruct has no field or method DoZzz)".to_string(),
+            message: "myStruct.DoZzz undefined (type myStruct has no field or method DoZzz)"
+                .to_string(),
             file: None,
             line: Some(4),
             column: None,
@@ -1324,7 +1347,8 @@ mod tests {
 
     #[test]
     fn test_go_unused_var_short_decl() {
-        let source = "package main\n\nfunc main() {\n\tx := 42\n\ty := \"hello\"\n\tprintln(y)\n}\n";
+        let source =
+            "package main\n\nfunc main() {\n\tx := 42\n\ty := \"hello\"\n\tprintln(y)\n}\n";
         let error = ParsedError {
             error_type: "unused_var".to_string(),
             message: "x declared but not used".to_string(),
@@ -1618,7 +1642,8 @@ mod tests {
 
     #[test]
     fn test_find_function_closing_brace() {
-        let source = "package main\n\nfunc add(a, b int) int {\n\treturn a + b\n}\n\nfunc main() {\n}\n";
+        let source =
+            "package main\n\nfunc add(a, b int) int {\n\treturn a + b\n}\n\nfunc main() {\n}\n";
         assert_eq!(find_function_closing_brace(source, 3), Some(5));
         assert_eq!(find_function_closing_brace(source, 7), Some(8));
     }
@@ -1705,7 +1730,10 @@ mod tests {
         };
 
         let diag = diagnose_go(&error, source, &tree, None);
-        assert!(diag.is_none(), "Should return None for unknown error patterns");
+        assert!(
+            diag.is_none(),
+            "Should return None for unknown error patterns"
+        );
     }
 
     // ---- Bug fix: unused_var short decl must produce `_ = expr` not `_ := expr` ----
@@ -1834,7 +1862,8 @@ mod tests {
     fn test_go_unused_import_in_block_deletes_line() {
         // Removing one import from `import (\n\t"fmt"\n\t"os"\n)` should
         // delete just the "fmt" line, not replace it with blank.
-        let source = "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc main() {\n\tos.Exit(0)\n}\n";
+        let source =
+            "package main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n)\n\nfunc main() {\n\tos.Exit(0)\n}\n";
         let error = ParsedError {
             error_type: "unused_import".to_string(),
             message: "\"fmt\" imported and not used".to_string(),
@@ -1862,7 +1891,8 @@ mod tests {
     fn test_go_unused_import_sole_in_block_deletes_whole_block() {
         // Removing the only import from `import (\n\t"fmt"\n)` should
         // delete all 3 lines of the block.
-        let source = "package main\n\nimport (\n\t\"fmt\"\n)\n\nfunc main() {\n\tprintln(\"hello\")\n}\n";
+        let source =
+            "package main\n\nimport (\n\t\"fmt\"\n)\n\nfunc main() {\n\tprintln(\"hello\")\n}\n";
         let error = ParsedError {
             error_type: "unused_import".to_string(),
             message: "\"fmt\" imported and not used".to_string(),
@@ -1879,7 +1909,11 @@ mod tests {
         assert!(diag.is_some(), "Should diagnose sole import in block");
         let fix = diag.unwrap().fix.unwrap();
         // All 3 lines (import (, "fmt", )) should be deleted
-        assert_eq!(fix.edits.len(), 3, "Should delete all 3 lines of import block");
+        assert_eq!(
+            fix.edits.len(),
+            3,
+            "Should delete all 3 lines of import block"
+        );
         for edit in &fix.edits {
             assert_eq!(
                 edit.kind,
@@ -2066,7 +2100,10 @@ mod tests {
 
         // Both must produce fixes via the dispatcher
         let import_diag = diagnose_go(&import_error, source, &tree, None);
-        assert!(import_diag.is_some(), "Import error must produce a diagnosis");
+        assert!(
+            import_diag.is_some(),
+            "Import error must produce a diagnosis"
+        );
         let id = import_diag.unwrap();
         assert_eq!(id.error_code, "unused_import");
         assert!(id.fix.is_some(), "Import fix must exist");
@@ -2129,12 +2166,18 @@ mod tests {
         };
 
         let import_diag = diagnose_go(&import_error, source, &tree, None);
-        assert!(import_diag.is_some(), "Import error with 'but' phrasing must produce a diagnosis");
+        assert!(
+            import_diag.is_some(),
+            "Import error with 'but' phrasing must produce a diagnosis"
+        );
         assert_eq!(import_diag.as_ref().unwrap().error_code, "unused_import");
         assert!(import_diag.unwrap().fix.is_some());
 
         let var_diag = diagnose_go(&var_error, source, &tree, None);
-        assert!(var_diag.is_some(), "Var error with 'but' phrasing must produce a diagnosis");
+        assert!(
+            var_diag.is_some(),
+            "Var error with 'but' phrasing must produce a diagnosis"
+        );
         assert_eq!(var_diag.as_ref().unwrap().error_code, "unused_var");
         assert!(var_diag.unwrap().fix.is_some());
     }

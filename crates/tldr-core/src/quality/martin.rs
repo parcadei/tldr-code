@@ -43,9 +43,9 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use crate::walker::{walk_project, ProjectWalker};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
 
 use crate::ast::extract::extract_file;
 use crate::error::TldrError;
@@ -473,11 +473,7 @@ fn collect_packages(path: &Path, language: Language) -> TldrResult<IndexMap<Stri
     let extensions: &[&str] = language.extensions();
 
     // Walk the directory tree
-    for entry in WalkDir::new(path)
-        .follow_links(true)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in walk_project(path) {
         let file_path = entry.path();
         if !file_path.is_file() {
             continue;
@@ -708,12 +704,8 @@ fn detect_language(path: &Path) -> TldrResult<Language> {
     // For directories, scan for common file types
     let mut counts: HashMap<Language, usize> = HashMap::new();
 
-    for entry in WalkDir::new(path)
-        .max_depth(3)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        if entry.file_type().is_file() {
+    for entry in ProjectWalker::new(path).max_depth(3).iter() {
+        if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
             if let Some(ext) = entry.path().extension().and_then(|e| e.to_str()) {
                 if let Some(lang) = Language::from_extension(ext) {
                     *counts.entry(lang).or_default() += 1;
@@ -784,10 +776,7 @@ mod tests {
             },
             MetricsHealth::Warning
         );
-        assert_eq!(
-            MetricsHealth::Unhealthy,
-            MetricsHealth::Unhealthy
-        );
+        assert_eq!(MetricsHealth::Unhealthy, MetricsHealth::Unhealthy);
     }
 
     #[test]

@@ -74,7 +74,7 @@ pub fn signals_to_pattern(
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     use crate::types::Evidence;
 
     #[test]

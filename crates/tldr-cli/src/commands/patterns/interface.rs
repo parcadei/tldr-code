@@ -25,8 +25,8 @@
 use std::path::{Path, PathBuf};
 
 use clap::Args;
+use tldr_core::walker::walk_project;
 use tree_sitter::Node;
-use walkdir::WalkDir;
 
 use super::error::{PatternsError, PatternsResult};
 use super::types::{ClassInfo, FunctionInfo, InterfaceInfo, MethodInfo};
@@ -1307,9 +1307,7 @@ fn collect_top_level_definitions(
     func_kinds: &[&str],
     class_kinds: &[&str],
     decorator_kinds: &[&str],
-)
-    -> (Vec<FunctionInfo>, Vec<ClassInfo>)
-{
+) -> (Vec<FunctionInfo>, Vec<ClassInfo>) {
     let mut functions = Vec::new();
     let mut classes = Vec::new();
     let mut cursor = root.walk();
@@ -1491,16 +1489,7 @@ pub fn run(args: InterfaceArgs, format: OutputFormat) -> anyhow::Result<()> {
 
         // Collect all supported source files recursively
         let mut results = Vec::new();
-        let mut entries: Vec<PathBuf> = WalkDir::new(&canonical_dir)
-            .follow_links(false)
-            .into_iter()
-            .filter_entry(|e| {
-                e.file_name()
-                    .to_str()
-                    .map(|s| !s.starts_with('.'))
-                    .unwrap_or(true)
-            })
-            .filter_map(|e| e.ok())
+        let mut entries: Vec<PathBuf> = walk_project(&canonical_dir)
             .filter(|e| e.path().is_file() && is_supported_source_file(e.path()))
             .map(|e| e.path().to_path_buf())
             .collect();

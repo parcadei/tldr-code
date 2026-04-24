@@ -27,7 +27,7 @@ use std::time::Instant;
 
 use anyhow::Result;
 use clap::Args;
-use walkdir::WalkDir;
+use tldr_core::walker::walk_project;
 
 use tldr_core::Language;
 
@@ -271,18 +271,14 @@ fn collect_source_files(path: &Path, language: Language) -> ContractsResult<Vec<
     if path.is_file() {
         files.push(path.to_path_buf());
     } else {
-        for entry in WalkDir::new(path)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.path().is_file()
-                    && e.path()
-                        .extension()
-                        .is_some_and(|ext| ext == extension)
-                    // Skip test files for main analysis
-                    && !e.file_name().to_str().is_some_and(|n| n.starts_with("test_"))
-            })
-        {
+        for entry in walk_project(path).filter(|e| {
+            e.path().is_file()
+                && e.path()
+                    .extension()
+                    .is_some_and(|ext| ext == extension)
+                // Skip test files for main analysis
+                && !e.file_name().to_str().is_some_and(|n| n.starts_with("test_"))
+        }) {
             files.push(entry.path().to_path_buf());
 
             // Apply file limit (E03 mitigation)

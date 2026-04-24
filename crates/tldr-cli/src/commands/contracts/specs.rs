@@ -24,9 +24,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::Args;
+use tldr_core::walker::walk_project;
 use tree_sitter::{Node, Parser, Tree};
 use tree_sitter_python::LANGUAGE as PYTHON_LANGUAGE;
-use walkdir::WalkDir;
 
 use crate::output::{OutputFormat, OutputWriter};
 
@@ -150,16 +150,12 @@ pub fn run_specs(test_path: &Path, function_filter: Option<&str>) -> ContractsRe
         merge_specs(&mut all_specs, file_report.functions);
     } else {
         // Directory: scan all test_*.py files
-        for entry in WalkDir::new(test_path)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.path().is_file()
-                    && e.file_name()
-                        .to_str()
-                        .is_some_and(|n| n.starts_with("test_") && n.ends_with(".py"))
-            })
-        {
+        for entry in walk_project(test_path).filter(|e| {
+            e.path().is_file()
+                && e.file_name()
+                    .to_str()
+                    .is_some_and(|n| n.starts_with("test_") && n.ends_with(".py"))
+        }) {
             let file_path = entry.path();
             match extract_from_test_file(file_path) {
                 Ok(file_report) => {

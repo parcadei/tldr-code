@@ -193,9 +193,8 @@ impl OcamlHandler {
                             match binding_child.kind() {
                                 "module_name" => {
                                     if alias_name.is_none() {
-                                        alias_name = Some(
-                                            get_node_text(&binding_child, source).to_string(),
-                                        );
+                                        alias_name =
+                                            Some(get_node_text(&binding_child, source).to_string());
                                     } else {
                                         // Second module_name is the target
                                         target_module =
@@ -291,12 +290,7 @@ impl OcamlHandler {
                         if let Some(structure) = body {
                             for i in 0..structure.child_count() {
                                 if let Some(child) = structure.child(i) {
-                                    collect_from_node(
-                                        child,
-                                        source,
-                                        definitions,
-                                        &new_path,
-                                    );
+                                    collect_from_node(child, source, definitions, &new_path);
                                 }
                             }
                         }

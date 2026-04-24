@@ -1,7 +1,8 @@
 //! File discovery and filtering for clone detection.
 
 use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
+
+use crate::walker::walk_project;
 
 use super::is_generated_file;
 
@@ -70,33 +71,26 @@ pub fn discover_source_files(
 ) -> Vec<PathBuf> {
     let mut files = Vec::new();
 
-    for entry in WalkDir::new(path).into_iter() {
-        match entry {
-            Ok(e) => {
-                if !e.file_type().is_file() {
-                    continue;
-                }
-                let file_path = e.path();
+    for e in walk_project(path) {
+        if !e.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+            continue;
+        }
+        let file_path = e.path();
 
-                // Skip generated files if requested
-                if exclude_generated && is_generated_file(file_path) {
-                    continue;
-                }
+        // Skip generated files if requested
+        if exclude_generated && is_generated_file(file_path) {
+            continue;
+        }
 
-                // Skip test files if requested
-                if exclude_tests && is_test_file(file_path) {
-                    continue;
-                }
+        // Skip test files if requested
+        if exclude_tests && is_test_file(file_path) {
+            continue;
+        }
 
-                if is_source_file_for_clones(file_path, language) {
-                    files.push(file_path.to_path_buf());
-                    if files.len() >= max_files {
-                        break;
-                    }
-                }
-            }
-            Err(_) => {
-                // Skip entries we can't read
+        if is_source_file_for_clones(file_path, language) {
+            files.push(file_path.to_path_buf());
+            if files.len() >= max_files {
+                break;
             }
         }
     }

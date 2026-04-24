@@ -35,8 +35,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use crate::walker::walk_project;
 use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
 
 use crate::analysis::deps::{DepCycle, DepsReport};
 use crate::ast::extract::extract_file;
@@ -553,11 +553,7 @@ pub fn analyze_coupling_with_graph(
 fn detect_dominant_language(path: &Path) -> Language {
     let mut counts: HashMap<Language, usize> = HashMap::new();
 
-    for entry in WalkDir::new(path)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in walk_project(path) {
         if let Some(lang) = Language::from_path(entry.path()) {
             *counts.entry(lang).or_insert(0) += 1;
         }
@@ -583,11 +579,7 @@ fn collect_module_infos(
         .map(|s| s.to_string())
         .collect();
 
-    for entry in WalkDir::new(path)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in walk_project(path) {
         let entry_path = entry.path();
         if !entry_path.is_file() {
             continue;

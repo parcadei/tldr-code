@@ -405,9 +405,7 @@ pub fn parse_cobertura(xml: &str) -> TldrResult<CoverageReport> {
 
                             match key {
                                 "name" => name = value.to_string(),
-                                "line-rate" => {
-                                    line_rate = value.parse::<f64>().unwrap_or(0.0)
-                                }
+                                "line-rate" => line_rate = value.parse::<f64>().unwrap_or(0.0),
                                 _ => {}
                             }
                         }
@@ -461,7 +459,8 @@ pub fn parse_cobertura(xml: &str) -> TldrResult<CoverageReport> {
                     // Finalize current file
                     if let Some(mut file) = current_file.take() {
                         file.total_lines = current_lines.len() as u32;
-                        file.covered_lines = current_lines.values().filter(|&&h| h > 0).count() as u32;
+                        file.covered_lines =
+                            current_lines.values().filter(|&&h| h > 0).count() as u32;
                         file.uncovered_lines = current_lines
                             .iter()
                             .filter(|(_, &h)| h == 0)
@@ -484,7 +483,11 @@ pub fn parse_cobertura(xml: &str) -> TldrResult<CoverageReport> {
             Err(e) => {
                 return Err(TldrError::CoverageParseError {
                     format: "cobertura".to_string(),
-                    detail: format!("XML parse error at position {}: {}", reader.buffer_position(), e),
+                    detail: format!(
+                        "XML parse error at position {}: {}",
+                        reader.buffer_position(),
+                        e
+                    ),
                 });
             }
             _ => {}
@@ -509,10 +512,11 @@ pub fn parse_cobertura(xml: &str) -> TldrResult<CoverageReport> {
     });
 
     // Count functions
-    let (total_functions, covered_functions): (u32, u32) = files.iter().fold((0, 0), |(tf, cf), f| {
-        let covered = f.functions.iter().filter(|func| func.hits > 0).count() as u32;
-        (tf + f.functions.len() as u32, cf + covered)
-    });
+    let (total_functions, covered_functions): (u32, u32) =
+        files.iter().fold((0, 0), |(tf, cf), f| {
+            let covered = f.functions.iter().filter(|func| func.hits > 0).count() as u32;
+            (tf + f.functions.len() as u32, cf + covered)
+        });
 
     let function_coverage = if total_functions > 0 {
         Some((covered_functions as f64 / total_functions as f64) * 100.0)
@@ -656,7 +660,11 @@ impl LcovParseState {
         let Ok(hits) = parts[0].parse::<u64>() else {
             return;
         };
-        if let Some(func) = self.current_functions.iter_mut().find(|f| f.name == parts[1]) {
+        if let Some(func) = self
+            .current_functions
+            .iter_mut()
+            .find(|f| f.name == parts[1])
+        {
             func.hits = hits;
         }
     }
@@ -716,9 +724,9 @@ impl LcovParseState {
 }
 
 fn summarize_lcov_files(files: &[FileCoverage]) -> CoverageSummary {
-    let (total_lines, covered_lines) = files
-        .iter()
-        .fold((0u32, 0u32), |(tl, cl), file| (tl + file.total_lines, cl + file.covered_lines));
+    let (total_lines, covered_lines) = files.iter().fold((0u32, 0u32), |(tl, cl), file| {
+        (tl + file.total_lines, cl + file.covered_lines)
+    });
     let line_coverage = if total_lines > 0 {
         (covered_lines as f64 / total_lines as f64) * 100.0
     } else {
@@ -802,18 +810,18 @@ struct CoveragePyTotals {
 
 /// Parse coverage.py JSON format
 pub fn parse_coverage_py_json(json_str: &str) -> TldrResult<CoverageReport> {
-    let parsed: CoveragePyJson = serde_json::from_str(json_str).map_err(|e| {
-        TldrError::CoverageParseError {
+    let parsed: CoveragePyJson =
+        serde_json::from_str(json_str).map_err(|e| TldrError::CoverageParseError {
             format: "coveragepy".to_string(),
             detail: format!("JSON parse error: {}", e),
-        }
-    })?;
+        })?;
 
     let mut files: Vec<FileCoverage> = Vec::new();
     let warnings: Vec<String> = Vec::new();
 
     for (path, file_data) in parsed.files {
-        let total_lines = file_data.executed_lines.len() as u32 + file_data.missing_lines.len() as u32;
+        let total_lines =
+            file_data.executed_lines.len() as u32 + file_data.missing_lines.len() as u32;
         let covered_lines = file_data.executed_lines.len() as u32;
 
         let line_coverage = if let Some(summary) = &file_data.summary {

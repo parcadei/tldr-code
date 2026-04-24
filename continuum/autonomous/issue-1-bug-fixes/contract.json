@@ -1,0 +1,54 @@
+{
+  "task": "Consolidate tldr's filesystem walking and directory-level language detection into single implementations. After consolidation, re-assess the two remaining structural bugs (#2 change-impact empty-success, #6 impact 0-callers-with-AST-hit) against the cleaned codebase. The 6 bugs in GitHub issue parcadei/tldr-code#1 stem from two root causes: (a) ~30 raw `walkdir::WalkDir` call sites that don't honor .gitignore or skip vendor dirs, and (b) two competing directory-level language detectors where the broken one (Language::from_directory) is used by 15 commands and the filtered one (surface::detect_lang_from_directory) is used by only 1.",
+  "complexity": "multi-feature",
+  "repro_fixture": "/tmp/tldr-real/dub (dubinc/dub shallow clone, pnpm install --ignore-scripts complete, 3928 .ts/.tsx, 2877 nested node_modules dirs, 2.4GB)",
+  "milestones": [
+    {
+      "name": "walker-consolidation",
+      "status": "pending",
+      "assertions": ["VAL-001"]
+    },
+    {
+      "name": "detector-consolidation",
+      "status": "pending",
+      "assertions": ["VAL-002"]
+    },
+    {
+      "name": "reassess-structural-bugs",
+      "status": "pending",
+      "assertions": ["VAL-003"]
+    }
+  ],
+  "assertions": [
+    {
+      "id": "VAL-001",
+      "type": "invariant",
+      "text": "All command and analysis code that walks a project directory uses a single shared walker built on `ignore::WalkBuilder` that (a) honors `.gitignore`, (b) skips hidden dirs, (c) skips a default-exclude list of `node_modules`, `target`, `dist`, `build`, `.next`, `__pycache__`, `vendor`, `.git`, (d) sets `follow_links(false)` to avoid pnpm symlink loops. The module lives at `crates/tldr-core/src/walker.rs` (new) exposing `pub fn walk_project(root: &Path) -> impl Iterator<Item = ignore::DirEntry>` plus a builder for opt-outs (`no_default_ignore`, `max_depth`, custom extension filter). Every existing `walkdir::WalkDir::new(path)` call in these files migrates to the new walker: `crates/tldr-cli/src/commands/{dead.rs,patterns/cohesion.rs,patterns/interface.rs,patterns/temporal.rs,contracts/invariants.rs,contracts/specs.rs,contracts/verify.rs,remaining/vuln.rs,remaining/secure.rs,remaining/api_check.rs,remaining/todo.rs,daemon/warm.rs}`, `crates/tldr-core/src/{wrappers/todo.rs,analysis/references.rs,analysis/clones/filter.rs,quality/cohesion.rs,quality/complexity.rs,quality/coupling.rs,quality/health.rs,quality/dead_code.rs,quality/maintainability.rs,quality/martin.rs,quality/similarity.rs,quality/smells.rs,types.rs}`. EXCEPTIONS (stay on raw walkdir): `crates/tldr-core/examples/*.rs` (benchmarks), `crates/tldr-cli/src/commands/archived/*` (archived), and any `fs::read_dir` in `core/surface/*.rs` that scans a single package directory looking for a manifest — those are intentionally non-recursive and non-project-wide. Acceptance: (1) `tldr smells /tmp/tldr-real/dub` completes in <60s with zero findings whose `file` contains `/node_modules/`. (2) `tldr secure /tmp/tldr-real/dub` produces zero findings under `/node_modules/`. (3) `tldr vuln /tmp/tldr-real/dub --lang typescript --format json --quiet` produces zero findings under `/node_modules/` AND skips .py files entirely (check: `is_supported_source_file` in vuln.rs now language-aware via `--lang`). (4) `cargo test --workspace` passes. (5) `cargo clippy --workspace -- -D warnings` passes. (6) `grep -rn 'WalkDir::new' crates/tldr-cli/src/commands crates/tldr-core/src/quality crates/tldr-core/src/analysis/references.rs crates/tldr-core/src/wrappers/todo.rs` returns only occurrences inside the new `walker.rs` module itself or explicit non-project walks. Add an opt-out flag `--no-default-ignore` to smells/secure/vuln/dead (top 4 commands users might want to override — pattern after `loc.rs`'s `no_gitignore: bool` at line 71-73).",
+      "milestone": "walker-consolidation",
+      "status": "pending",
+      "depends": [],
+      "worker": null,
+      "evidence": null
+    },
+    {
+      "id": "VAL-002",
+      "type": "invariant",
+      "text": "There is exactly one directory-level language detector in the codebase. Rewrite `Language::from_directory` at `crates/tldr-core/src/types.rs:150` so that it (a) uses the shared walker from VAL-001 (which auto-excludes node_modules), (b) first consults manifest files as strong signals: `tsconfig.json` → TypeScript, `package.json` with `\"typescript\"` in deps → TypeScript else JavaScript, `Cargo.toml` → Rust, `go.mod` → Go, `pyproject.toml` or `setup.py` → Python, `pom.xml` or `build.gradle(.kts)` → Java, (c) falls back to extension-majority via the new walker when no manifest matches. Delete `fn detect_lang_from_directory` and `fn detect_lang_from_directory_recursive` at `crates/tldr-core/src/surface/mod.rs:229-272` and update its single caller at `surface/mod.rs:179` to use `Language::from_directory` (convert between `&'static str` and `Language` enum as needed, or change that caller to return `Language` directly). Keep `Language::from_path` (file-extension, widely used, correct). Keep `surface::detect_lang_from_path` for the single-target string case at `surface/mod.rs:174`. Keep the file-extension wrappers that just alias `Language::from_path` (`dice.rs:192`, `patterns/coupling.rs:306`). DELETE the three copy-pasted `fn detect_language(path: &Path)` in `crates/tldr-core/src/quality/{dead_code.rs:512, health.rs:880, martin.rs:700}` — replace with `Language::from_path` calls. DO NOT touch `api_check.rs::detect_language` (parallel ApiLanguage enum, separate concern) or `fix/error_parser.rs::detect_language` (error-text parsing, different purpose). Update the test `test_language_from_directory_detects_majority` at `types.rs:1923` to reflect new manifest-priority behavior, and add tests for: (a) TS project with node_modules containing Python stubs → detects TypeScript, (b) pure Python project → detects Python, (c) Rust project → detects Rust. Acceptance: (1) `tldr structure /tmp/tldr-real/dub --format json` reports `language: \"typescript\"` (currently reports `\"python\"`). (2) `tldr impact getHighestSeverity /tmp/tldr-real/dub` picks TypeScript as the language automatically. (3) `grep -rn 'fn from_directory\\|fn detect_lang_from_directory\\|fn detect_language' crates/tldr-core/src crates/tldr-cli/src --include='*.rs'` shows ONE directory detector (`Language::from_directory`) plus legitimate file-path/error-text wrappers, no duplicates in quality/ modules. (4) `cargo test --workspace` passes. (5) `cargo clippy --workspace -- -D warnings` passes.",
+      "milestone": "detector-consolidation",
+      "status": "pending",
+      "depends": ["VAL-001"],
+      "worker": null,
+      "evidence": null
+    },
+    {
+      "id": "VAL-003",
+      "type": "behavioral",
+      "text": "Re-run the issue's six bug repros on `/tmp/tldr-real/dub` AFTER M1+M2 are complete. Produce a report at `continuum/autonomous/issue-1-bug-fixes/reports/post-consolidation-assessment.md` that, for each of the six bugs in the issue, states: (a) reproduces / does not reproduce, (b) if reproduces, the new (post-consolidation) root cause diagnosis. Expected outcomes based on static analysis: #3 vuln (walker fixed + --lang gating added in M1) → should pass; #4 smells (walker fixed) → should pass; #5 secure (walker fixed) → should pass; #7 structure autodetect (detector fixed in M2) → should pass. Expected to REMAIN broken: #2 change-impact empty-success (single code path swallows three distinct failure modes — `change_impact.rs:231` returns empty OK regardless of whether git-missing or no-changes or user-asked-session-mode), #6 impact 0-callers-with-AST-hit (on dub specifically this is workspace-awareness in the call graph: pnpm monorepo with per-package tsconfigs, `build_project_call_graph(root, lang, None, true)` at `impact.rs:83` doesn't discover sibling workspaces). This assertion's purpose is to confirm which remain and produce a fresh, clean root-cause diagnosis for #2 and #6 uncontaminated by walker/detector noise. The report gates follow-up work — do NOT attempt to fix #2 or #6 in this session; the user wants to assess first.",
+      "milestone": "reassess-structural-bugs",
+      "status": "pending",
+      "depends": ["VAL-001", "VAL-002"],
+      "worker": null,
+      "evidence": null
+    }
+  ]
+}

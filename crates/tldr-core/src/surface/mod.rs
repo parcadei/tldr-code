@@ -25,27 +25,27 @@
 //! - **Go** (Phase 5): Full support via tree-sitter + exported-name filtering
 //! - **JavaScript** (Phase 6): Full support via tree-sitter + JSDoc parsing
 
-pub mod examples;
 pub mod c_lang;
+pub mod cpp;
+pub mod csharp;
 pub mod elixir;
+pub mod examples;
 pub mod go;
 pub mod java;
 pub mod javascript;
 pub mod kotlin;
+pub mod language_profile;
 pub mod lua;
 pub mod php;
 pub mod python;
 pub mod resolve;
-pub mod cpp;
-pub mod scala;
-pub mod swift;
-pub mod csharp;
 pub mod ruby;
 pub mod rust_lang;
+pub mod scala;
+pub mod swift;
 pub mod triggers;
-pub mod typescript;
-pub mod language_profile;
 pub mod types;
+pub mod typescript;
 
 #[cfg(test)]
 mod hardening;
@@ -263,7 +263,12 @@ fn detect_lang_from_directory_recursive(
             }
         } else if path.is_dir() {
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if !name.starts_with('.') && !matches!(name, "node_modules" | "target" | "vendor" | "__pycache__" | ".git") {
+                if !name.starts_with('.')
+                    && !matches!(
+                        name,
+                        "node_modules" | "target" | "vendor" | "__pycache__" | ".git"
+                    )
+                {
                     detect_lang_from_directory_recursive(&path, counts, depth + 1);
                 }
             }
@@ -344,7 +349,11 @@ pub fn format_api_surface_text(surface: &ApiSurface) -> String {
 
         // Location
         if let Some(loc) = &api.location {
-            output.push_str(&format!("  Location: {}:{}\n", loc.file.display(), loc.line));
+            output.push_str(&format!(
+                "  Location: {}:{}\n",
+                loc.file.display(),
+                loc.line
+            ));
         }
     }
 
@@ -369,7 +378,10 @@ mod tests {
 
     #[test]
     fn test_detect_lang_typescript() {
-        assert_eq!(detect_lang_from_path("/tmp/test_api.ts"), Some("typescript"));
+        assert_eq!(
+            detect_lang_from_path("/tmp/test_api.ts"),
+            Some("typescript")
+        );
         assert_eq!(detect_lang_from_path("app.tsx"), Some("typescript"));
         assert_eq!(detect_lang_from_path("index.d.ts"), Some("typescript"));
         assert_eq!(detect_lang_from_path("/types/foo.d.ts"), Some("typescript"));
@@ -421,7 +433,10 @@ mod tests {
     #[test]
     fn test_detect_lang_swift() {
         assert_eq!(detect_lang_from_path("App.swift"), Some("swift"));
-        assert_eq!(detect_lang_from_path("/srv/Sources/App.swift"), Some("swift"));
+        assert_eq!(
+            detect_lang_from_path("/srv/Sources/App.swift"),
+            Some("swift")
+        );
     }
 
     #[test]
@@ -478,7 +493,11 @@ mod tests {
     fn test_detect_lang_directory_with_dts_files() {
         // A directory containing .d.ts files should auto-detect as TypeScript.
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("index.d.ts"), "export declare const x: number;").unwrap();
+        std::fs::write(
+            dir.path().join("index.d.ts"),
+            "export declare const x: number;",
+        )
+        .unwrap();
         std::fs::write(dir.path().join("types.d.ts"), "export interface Foo {}").unwrap();
 
         let path_str = dir.path().to_str().unwrap();

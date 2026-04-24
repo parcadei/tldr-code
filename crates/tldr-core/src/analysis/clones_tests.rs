@@ -25,7 +25,6 @@
 //! 8. JSON serialization preserved (backward compat)
 //! 9. Existing preserved behaviors (is_test_file, is_generated_file, defaults)
 
-
 // =============================================================================
 // Fixture Helpers
 // =============================================================================
@@ -405,7 +404,12 @@ mod accurate_line_numbers {
         // Write a second copy so detection has something to compare against
         td.write_file("b.py", PYTHON_THREE_FUNCTIONS).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 5, min_lines: 1, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 5,
+            min_lines: 1,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -452,7 +456,12 @@ mod accurate_line_numbers {
         td.write_file("a.rs", RUST_IMPL_BLOCK).unwrap();
         td.write_file("b.rs", RUST_IMPL_BLOCK).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("rust".to_string()), min_tokens: 5, min_lines: 1, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("rust".to_string()),
+            min_tokens: 5,
+            min_lines: 1,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -480,7 +489,12 @@ mod accurate_line_numbers {
         td.write_file("a.py", PYTHON_LONG_FUNCTION_A).unwrap();
         td.write_file("b.py", PYTHON_LONG_FUNCTION_B).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 5, min_lines: 1, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 5,
+            min_lines: 1,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -529,7 +543,12 @@ mod function_level_extraction {
         td.write_file("src/a.py", PYTHON_LONG_FUNCTION_A).unwrap();
         td.write_file("src/b.py", PYTHON_LONG_FUNCTION_B).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -561,7 +580,12 @@ mod function_level_extraction {
         td.write_file("src/b.py", PYTHON_UNRELATED_FUNCTION)
             .unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -582,7 +606,12 @@ mod function_level_extraction {
         td.write_file("a.py", PYTHON_THREE_FUNCTIONS).unwrap();
         td.write_file("b.py", PYTHON_THREE_FUNCTIONS).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 3, min_lines: 1, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 3,
+            min_lines: 1,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -615,7 +644,12 @@ mod function_level_extraction {
         td.write_file("src/a.py", PYTHON_IMPORT_HEAVY_A).unwrap();
         td.write_file("src/b.py", PYTHON_IMPORT_HEAVY_B).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 3, min_lines: 1, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 3,
+            min_lines: 1,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -637,7 +671,12 @@ mod function_level_extraction {
         td.write_file("src/b.py", PYTHON_LONG_FUNCTION_RENAMED)
             .unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -681,7 +720,12 @@ mod no_false_positives {
         td.write_file("src/a.py", PYTHON_KEYWORD_OVERLAP_A).unwrap();
         td.write_file("src/b.py", PYTHON_KEYWORD_OVERLAP_B).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -703,7 +747,12 @@ mod no_false_positives {
         td.write_file("src/a.py", PYTHON_IMPORT_HEAVY_A).unwrap();
         td.write_file("src/b.py", PYTHON_IMPORT_HEAVY_B).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 3, min_lines: 1, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 3,
+            min_lines: 1,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -729,7 +778,12 @@ mod no_false_positives {
         td.write_file("src/validate.py", PYTHON_KEYWORD_OVERLAP_B)
             .unwrap();
 
-        let mut opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 5, min_lines: 3, ..Default::default() };
+        let mut opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 5,
+            min_lines: 3,
+            ..Default::default()
+        };
         // Explicitly use All normalization to stress-test BUG-4 fix
         opts.normalization = crate::analysis::clones::NormalizationMode::All;
 
@@ -755,7 +809,12 @@ mod no_false_positives {
         td.write_file("src/render.py", PYTHON_TYPE3_UNRELATED)
             .unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 5, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 5,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -785,7 +844,12 @@ mod preview_populated {
         td.write_file("src/a.py", PYTHON_LONG_FUNCTION_A).unwrap();
         td.write_file("src/b.py", PYTHON_LONG_FUNCTION_B).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -816,7 +880,12 @@ mod preview_populated {
         td.write_file("src/a.py", PYTHON_LONG_FUNCTION_A).unwrap();
         td.write_file("src/b.py", PYTHON_LONG_FUNCTION_B).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -840,7 +909,12 @@ mod preview_populated {
         td.write_file("src/a.py", PYTHON_LONG_FUNCTION_A).unwrap();
         td.write_file("src/b.py", PYTHON_LONG_FUNCTION_B).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -878,7 +952,12 @@ mod include_within_file {
         td.write_file("src/handlers.py", PYTHON_TWO_FUNCTIONS_SAME_FILE)
             .unwrap();
 
-        let mut opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let mut opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
         opts.include_within_file = false; // <-- the flag under test
 
         let report = detect_clones(td.path(), &opts).unwrap();
@@ -903,7 +982,12 @@ mod include_within_file {
         td.write_file("src/handlers.py", PYTHON_TWO_FUNCTIONS_SAME_FILE)
             .unwrap();
 
-        let mut opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let mut opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
         opts.include_within_file = true; // <-- allow same-file pairs
 
         let report = detect_clones(td.path(), &opts).unwrap();
@@ -935,7 +1019,12 @@ mod include_within_file {
         td.write_file("src/handlers.py", PYTHON_TWO_FUNCTIONS_SAME_FILE)
             .unwrap();
 
-        let mut opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 5, min_lines: 1, ..Default::default() };
+        let mut opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 5,
+            min_lines: 1,
+            ..Default::default()
+        };
         opts.include_within_file = true;
 
         let report = detect_clones(td.path(), &opts).unwrap();
@@ -979,7 +1068,12 @@ mod min_lines_enforced {
         td.write_file("src/a.py", PYTHON_SHORT_3_LINES).unwrap();
         td.write_file("src/b.py", PYTHON_SHORT_3_LINES).unwrap();
 
-        let mut opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 3, min_lines: 5, ..Default::default() }; // <-- 3-line functions should be excluded
+        let mut opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 3,
+            min_lines: 5,
+            ..Default::default()
+        }; // <-- 3-line functions should be excluded
         opts.include_within_file = false;
 
         let report = detect_clones(td.path(), &opts).unwrap();
@@ -1003,7 +1097,12 @@ mod min_lines_enforced {
         td.write_file("src/a.py", short_a).unwrap();
         td.write_file("src/b.py", short_b).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 3, min_lines: 5, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 3,
+            min_lines: 5,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -1023,7 +1122,12 @@ mod min_lines_enforced {
         td.write_file("src/b.py", PYTHON_EXACTLY_5_LINES_COPY)
             .unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 3, min_lines: 5, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 3,
+            min_lines: 5,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -1043,7 +1147,12 @@ mod min_lines_enforced {
         // Also add short functions that should be filtered out
         td.write_file("src/tiny.py", PYTHON_SHORT_3_LINES).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 3, min_lines: 5, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 3,
+            min_lines: 5,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -1080,7 +1189,12 @@ mod sequence_matching {
         td.write_file("src/a.py", SEQ_IDENTICAL_A).unwrap();
         td.write_file("src/b.py", SEQ_IDENTICAL_B).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 5, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 5,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -1102,7 +1216,12 @@ mod sequence_matching {
         td.write_file("src/a.py", SEQ_RENAMED_A).unwrap();
         td.write_file("src/b.py", SEQ_RENAMED_B).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 5, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 5,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -1128,7 +1247,12 @@ mod sequence_matching {
         td.write_file("src/a.py", SEQ_GAPPED_A).unwrap();
         td.write_file("src/b.py", SEQ_GAPPED_B).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 5, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 5,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -1158,7 +1282,12 @@ mod sequence_matching {
         td.write_file("src/a.py", SEQ_DIFFERENT_A).unwrap();
         td.write_file("src/b.py", SEQ_DIFFERENT_B).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 3, min_lines: 1, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 3,
+            min_lines: 1,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -1177,7 +1306,12 @@ mod sequence_matching {
         td.write_file("src/logged.py", PYTHON_TYPE3_WITH_LOGGING)
             .unwrap();
 
-        let mut opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 5, min_lines: 3, ..Default::default() };
+        let mut opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 5,
+            min_lines: 3,
+            ..Default::default()
+        };
         opts.threshold = 0.7;
 
         let report = detect_clones(td.path(), &opts).unwrap();
@@ -1733,7 +1867,12 @@ mod edge_cases {
                 .unwrap();
         }
 
-        let mut opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let mut opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
         opts.max_clones = 5;
 
         let report = detect_clones(td.path(), &opts).unwrap();
@@ -1752,7 +1891,12 @@ mod edge_cases {
         td.write_file("src/a.py", PYTHON_LONG_FUNCTION_A).unwrap();
         td.write_file("src/b.py", PYTHON_LONG_FUNCTION_B).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -1782,7 +1926,12 @@ mod edge_cases {
                 .unwrap();
         }
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -1806,7 +1955,12 @@ mod edge_cases {
         td.write_file("src/a_file.py", PYTHON_LONG_FUNCTION_B)
             .unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
 
@@ -1860,7 +2014,12 @@ mod edge_cases {
         td.write_file("tests/test_main.py", PYTHON_LONG_FUNCTION_B)
             .unwrap();
 
-        let mut opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let mut opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
         opts.exclude_tests = true;
 
         let report = detect_clones(td.path(), &opts).unwrap();
@@ -1882,7 +2041,12 @@ mod edge_cases {
         td.write_file("generated/types_generated.py", PYTHON_LONG_FUNCTION_B)
             .unwrap();
 
-        let mut opts = crate::analysis::clones::ClonesOptions { language: Some("python".to_string()), min_tokens: 10, min_lines: 3, ..Default::default() };
+        let mut opts = crate::analysis::clones::ClonesOptions {
+            language: Some("python".to_string()),
+            min_tokens: 10,
+            min_lines: 3,
+            ..Default::default()
+        };
         opts.exclude_generated = true;
 
         let report = detect_clones(td.path(), &opts).unwrap();
@@ -2181,7 +2345,12 @@ int multiply(int a, int b) {
         td.write_file("src/a.c", c_source).unwrap();
         td.write_file("src/b.c", c_source).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("c".to_string()), min_tokens: 5, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("c".to_string()),
+            min_tokens: 5,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
         assert!(
@@ -2215,7 +2384,12 @@ end
         td.write_file("lib/a.rb", ruby_source).unwrap();
         td.write_file("lib/b.rb", ruby_source).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("ruby".to_string()), min_tokens: 5, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("ruby".to_string()),
+            min_tokens: 5,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
         assert!(
@@ -2249,7 +2423,12 @@ function transformData($input) {
         td.write_file("src/a.php", php_source).unwrap();
         td.write_file("src/b.php", php_source).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("php".to_string()), min_tokens: 5, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("php".to_string()),
+            min_tokens: 5,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
         assert!(
@@ -2285,7 +2464,12 @@ func transformData(input: [Int]) -> [Int] {
         td.write_file("Sources/a.swift", swift_source).unwrap();
         td.write_file("Sources/b.swift", swift_source).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("swift".to_string()), min_tokens: 5, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("swift".to_string()),
+            min_tokens: 5,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
         assert!(
@@ -2319,7 +2503,12 @@ fun transformData(input: List<Int>): List<Int> {
         td.write_file("src/a.kt", kotlin_source).unwrap();
         td.write_file("src/b.kt", kotlin_source).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("kotlin".to_string()), min_tokens: 5, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("kotlin".to_string()),
+            min_tokens: 5,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
         assert!(
@@ -2349,7 +2538,12 @@ object DataProcessor {
         td.write_file("src/a.scala", scala_source).unwrap();
         td.write_file("src/b.scala", scala_source).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("scala".to_string()), min_tokens: 5, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("scala".to_string()),
+            min_tokens: 5,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
         assert!(
@@ -2388,7 +2582,12 @@ public class DataProcessor {
         td.write_file("src/a.cs", csharp_source).unwrap();
         td.write_file("src/b.cs", csharp_source).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("csharp".to_string()), min_tokens: 5, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("csharp".to_string()),
+            min_tokens: 5,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
         assert!(
@@ -2422,7 +2621,12 @@ end
         td.write_file("src/a.lua", lua_source).unwrap();
         td.write_file("src/b.lua", lua_source).unwrap();
 
-        let opts = crate::analysis::clones::ClonesOptions { language: Some("lua".to_string()), min_tokens: 5, min_lines: 3, ..Default::default() };
+        let opts = crate::analysis::clones::ClonesOptions {
+            language: Some("lua".to_string()),
+            min_tokens: 5,
+            min_lines: 3,
+            ..Default::default()
+        };
 
         let report = detect_clones(td.path(), &opts).unwrap();
         assert!(

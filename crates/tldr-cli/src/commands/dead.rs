@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use clap::Args;
 use serde::Serialize;
-use walkdir::WalkDir;
+use tldr_core::walker::ProjectWalker;
 
 /// Maximum number of files to scan in WalkDir traversals.
 ///
@@ -51,6 +51,10 @@ pub struct DeadArgs {
     /// Use call-graph-based analysis instead of the default reference counting
     #[arg(long)]
     pub call_graph: bool,
+
+    /// Walk vendored/build dirs (node_modules, target, dist, etc.) that would normally be skipped.
+    #[arg(long)]
+    pub no_default_ignore: bool,
 }
 
 impl DeadArgs {
@@ -119,7 +123,7 @@ impl DeadArgs {
             let graph = build_project_call_graph(&self.path, language, None, true)?;
 
             writer.progress("Extracting all functions...");
-            let module_infos = collect_module_infos(&self.path, language);
+            let module_infos = collect_module_infos(&self.path, language, self.no_default_ignore);
             let all_functions: Vec<FunctionRef> = collect_all_functions(&module_infos);
 
             writer.progress("Analyzing dead code (call graph)...");
@@ -133,7 +137,7 @@ impl DeadArgs {
             ));
 
             let (module_infos, merged_ref_counts) =
-                collect_module_infos_with_refcounts(&self.path, language);
+                collect_module_infos_with_refcounts(&self.path, language, self.no_default_ignore);
             let all_functions: Vec<FunctionRef> = collect_all_functions(&module_infos);
 
             writer.progress("Analyzing dead code (refcount)...");
@@ -210,13 +214,19 @@ fn tag_directive_functions(info: &mut ModuleInfo, source: &str, path: &Path) {
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
     if source_has_framework_directive(source, ext) {
         for func in &mut info.functions {
-            if !func.decorators.contains(&"use_server_directive".to_string()) {
+            if !func
+                .decorators
+                .contains(&"use_server_directive".to_string())
+            {
                 func.decorators.push("use_server_directive".to_string());
             }
         }
         for class in &mut info.classes {
             for method in &mut class.methods {
-                if !method.decorators.contains(&"use_server_directive".to_string()) {
+                if !method
+                    .decorators
+                    .contains(&"use_server_directive".to_string())
+                {
                     method.decorators.push("use_server_directive".to_string());
                 }
             }
@@ -228,7 +238,11 @@ fn tag_directive_functions(info: &mut ModuleInfo, source: &str, path: &Path) {
 ///
 /// This provides the enriched function metadata (decorators, visibility, etc.)
 /// needed for accurate dead code analysis with low false-positive rates.
-fn collect_module_infos(path: &Path, language: Language) -> Vec<(PathBuf, ModuleInfo)> {
+fn collect_module_infos(
+    path: &Path,
+    language: Language,
+    no_default_ignore: bool,
+) -> Vec<(PathBuf, ModuleInfo)> {
     let mut module_infos = Vec::new();
 
     if path.is_file() {
@@ -246,11 +260,11 @@ fn collect_module_infos(path: &Path, language: Language) -> Vec<(PathBuf, Module
     } else {
         let extensions: &[&str] = language.extensions();
         let mut file_count: usize = 0;
-        for entry in WalkDir::new(path)
-            .follow_links(false)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
+        let mut walker = ProjectWalker::new(path);
+        if no_default_ignore {
+            walker = walker.no_default_ignore();
+        }
+        for entry in walker.iter() {
             let file_path = entry.path();
             if file_path.is_file() {
                 if let Some(ext_str) = file_path.extension().and_then(|e| e.to_str()) {
@@ -296,6 +310,7 @@ fn collect_module_infos(path: &Path, language: Language) -> Vec<(PathBuf, Module
 pub(crate) fn collect_module_infos_with_refcounts(
     path: &Path,
     language: Language,
+    no_default_ignore: bool,
 ) -> (Vec<(PathBuf, ModuleInfo)>, HashMap<String, usize>) {
     let mut module_infos = Vec::new();
     let mut merged_counts: HashMap<String, usize> = HashMap::new();
@@ -320,11 +335,11 @@ pub(crate) fn collect_module_infos_with_refcounts(
     } else {
         let extensions: &[&str] = language.extensions();
         let mut file_count: usize = 0;
-        for entry in WalkDir::new(path)
-            .follow_links(false)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
+        let mut walker = ProjectWalker::new(path);
+        if no_default_ignore {
+            walker = walker.no_default_ignore();
+        }
+        for entry in walker.iter() {
             let file_path = entry.path();
             if file_path.is_file() {
                 if let Some(ext_str) = file_path.extension().and_then(|e| e.to_str()) {

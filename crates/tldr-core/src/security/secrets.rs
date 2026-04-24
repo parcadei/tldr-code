@@ -853,11 +853,7 @@ mod tests {
         let file = dir.join("config.py");
         {
             let mut f = std::fs::File::create(&file).unwrap();
-            writeln!(
-                f,
-                r#"secret = "K8mPqR3sT7uVwX2yZ4aBcDeFgHjKmNpQr""#
-            )
-            .unwrap();
+            writeln!(f, r#"secret = "K8mPqR3sT7uVwX2yZ4aBcDeFgHjKmNpQr""#).unwrap();
             writeln!(f, r#"password = "S3cur3P@ssw0rd!2024""#).unwrap();
         }
         let findings = scan_file(&file, 4.5).unwrap();

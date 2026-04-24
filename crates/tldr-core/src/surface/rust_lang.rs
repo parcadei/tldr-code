@@ -1091,7 +1091,8 @@ mod tests {
         fs::create_dir_all(root.join("examples")).expect("create examples dir");
 
         fs::write(root.join("src/lib.rs"), "pub fn public_api() {}\n").expect("write lib.rs");
-        fs::write(root.join("aaa_guide.rs"), "pub fn guide_api() {}\n").expect("write aaa_guide.rs");
+        fs::write(root.join("aaa_guide.rs"), "pub fn guide_api() {}\n")
+            .expect("write aaa_guide.rs");
         fs::write(root.join("examples/demo.rs"), "pub fn demo_api() {}\n")
             .expect("write examples/demo.rs");
 
@@ -1112,7 +1113,10 @@ mod tests {
             surface
                 .apis
                 .iter()
-                .map(|api| (&api.qualified_name, api.location.as_ref().map(|loc| &loc.file)))
+                .map(|api| (
+                    &api.qualified_name,
+                    api.location.as_ref().map(|loc| &loc.file)
+                ))
                 .collect::<Vec<_>>()
         );
 
@@ -1127,7 +1131,10 @@ mod tests {
             full_surface
                 .apis
                 .iter()
-                .map(|api| (&api.qualified_name, api.location.as_ref().map(|loc| &loc.file)))
+                .map(|api| (
+                    &api.qualified_name,
+                    api.location.as_ref().map(|loc| &loc.file)
+                ))
                 .collect::<Vec<_>>()
         );
     }

@@ -100,9 +100,7 @@ fn is_plausible_cpp_public_api(api: &ApiEntry) -> bool {
 
     if symbol.is_empty()
         || symbol.starts_with('~')
-        || !symbol
-            .chars()
-            .all(|ch| ch.is_alphanumeric() || ch == '_')
+        || !symbol.chars().all(|ch| ch.is_alphanumeric() || ch == '_')
     {
         return false;
     }
@@ -111,22 +109,22 @@ fn is_plausible_cpp_public_api(api: &ApiEntry) -> bool {
 
     if is_top_level
         && matches!(
-        symbol,
-        "unwrap"
-            | "node"
-            | "typed_node"
-            | "push"
-            | "push_back"
-            | "clear"
-            | "reserve"
-            | "data"
-            | "need_copy"
-            | "emplace_arg"
-            | "dynamic_arg_list"
-            | "void_t_impl"
-            | "ignore_unused"
-            | "accessor"
-    )
+            symbol,
+            "unwrap"
+                | "node"
+                | "typed_node"
+                | "push"
+                | "push_back"
+                | "clear"
+                | "reserve"
+                | "data"
+                | "need_copy"
+                | "emplace_arg"
+                | "dynamic_arg_list"
+                | "void_t_impl"
+                | "ignore_unused"
+                | "accessor"
+        )
     {
         return false;
     }
@@ -289,7 +287,10 @@ fn extract_from_cpp_headers(
                                 && !is_cpp_ctor_or_dtor(&name, class_name)
                             {
                                 apis.push(ApiEntry {
-                                    qualified_name: format!("{}.{}.{}", module_path, class_name, name),
+                                    qualified_name: format!(
+                                        "{}.{}.{}",
+                                        module_path, class_name, name
+                                    ),
                                     kind: ApiKind::Method,
                                     module: module_path.clone(),
                                     signature: Some(Signature {
@@ -416,15 +417,9 @@ fn parse_class_or_struct_name(line: &str) -> Option<(String, bool)> {
 }
 
 fn is_internal_scope(scopes: &[Scope]) -> bool {
-    scopes.iter().any(|scope| {
-        matches!(
-            scope,
-            Scope::Namespace {
-                internal: true,
-                ..
-            }
-        )
-    })
+    scopes
+        .iter()
+        .any(|scope| matches!(scope, Scope::Namespace { internal: true, .. }))
 }
 
 fn is_internal_cpp_namespace(name: &str) -> bool {
@@ -461,9 +456,10 @@ fn parse_cpp_prototype(decl: &str) -> Option<(String, Vec<String>, Option<String
         .strip_suffix(&name)
         .map(|s| s.trim().trim_end_matches(':').trim().to_string())
         .filter(|s| !s.is_empty());
-    if return_type.as_deref().is_some_and(|ty| {
-        ty.contains("return") || ty.contains('=') || ty.starts_with("using ")
-    }) {
+    if return_type
+        .as_deref()
+        .is_some_and(|ty| ty.contains("return") || ty.contains('=') || ty.starts_with("using "))
+    {
         return None;
     }
     let params = if params_src.is_empty() || params_src == "void" {
@@ -633,7 +629,10 @@ fn compute_module_path(file_path: &Path, root_dir: &Path, package_name: &str) ->
         .iter()
         .map(|part| part.to_string_lossy().to_string())
         .collect();
-    if parts.first().is_some_and(|part| part == "include" || part == "src") {
+    if parts
+        .first()
+        .is_some_and(|part| part == "include" || part == "src")
+    {
         parts.remove(0);
     }
     if parts

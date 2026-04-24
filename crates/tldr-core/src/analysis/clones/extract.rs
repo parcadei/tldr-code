@@ -29,7 +29,7 @@ pub struct FragmentData {
     /// First line of the fragment (1-indexed, tree-sitter based).
     pub start_line: usize, // 1-indexed, from tree-sitter
     /// Last line of the fragment (1-indexed, inclusive).
-    pub end_line: usize,   // 1-indexed, from tree-sitter
+    pub end_line: usize, // 1-indexed, from tree-sitter
     /// Raw tokens extracted for the fragment.
     pub raw_tokens: Vec<NormalizedToken>,
     /// Normalized tokens for clone matching.

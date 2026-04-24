@@ -454,10 +454,13 @@ pub fn collect_all_functions(
 
         // Add top-level functions
         for func in &info.functions {
-            let is_public =
-                infer_visibility_from_name(&func.name, language, !func.decorators.is_empty(), &func.decorators);
-            let has_decorator =
-                !func.decorators.is_empty() || (is_framework_entry && is_public);
+            let is_public = infer_visibility_from_name(
+                &func.name,
+                language,
+                !func.decorators.is_empty(),
+                &func.decorators,
+            );
+            let has_decorator = !func.decorators.is_empty() || (is_framework_entry && is_public);
             let is_test = is_test_file
                 || is_test_function_name(&func.name)
                 || has_test_decorator(&func.decorators);
@@ -2292,7 +2295,11 @@ mod tests {
         let dir = std::env::temp_dir().join("tldr_test_framework_directive");
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("actions.ts");
-        std::fs::write(&file, "'use server'\n\nexport async function createUser() {}\n").unwrap();
+        std::fs::write(
+            &file,
+            "'use server'\n\nexport async function createUser() {}\n",
+        )
+        .unwrap();
 
         assert!(
             has_framework_directive(&file),
@@ -2301,8 +2308,11 @@ mod tests {
 
         // Also test double-quote variant
         let file2 = dir.join("actions2.tsx");
-        std::fs::write(&file2, "\"use server\";\n\nexport async function deleteUser() {}\n")
-            .unwrap();
+        std::fs::write(
+            &file2,
+            "\"use server\";\n\nexport async function deleteUser() {}\n",
+        )
+        .unwrap();
 
         assert!(
             has_framework_directive(&file2),
@@ -2419,33 +2429,36 @@ mod tests {
 
         // DashboardPage is public (no leading underscore) and in a framework entry file
         // -> should have has_decorator = true (framework entry treatment)
-        let dashboard = functions.iter().find(|f| f.name == "DashboardPage").unwrap();
+        let dashboard = functions
+            .iter()
+            .find(|f| f.name == "DashboardPage")
+            .unwrap();
         assert!(
             dashboard.has_decorator,
             "Public function in page.tsx should have has_decorator=true (framework entry)"
         );
-        assert!(
-            dashboard.is_public,
-            "DashboardPage should be public"
-        );
+        assert!(dashboard.is_public, "DashboardPage should be public");
 
         // generateMetadata is also public in a framework entry file
-        let metadata = functions.iter().find(|f| f.name == "generateMetadata").unwrap();
+        let metadata = functions
+            .iter()
+            .find(|f| f.name == "generateMetadata")
+            .unwrap();
         assert!(
             metadata.has_decorator,
             "Public function in page.tsx should have has_decorator=true (framework entry)"
         );
 
         // _privateHelper is private, so framework entry treatment should NOT apply
-        let private_fn = functions.iter().find(|f| f.name == "_privateHelper").unwrap();
+        let private_fn = functions
+            .iter()
+            .find(|f| f.name == "_privateHelper")
+            .unwrap();
         assert!(
             !private_fn.has_decorator,
             "Private function in page.tsx should NOT have has_decorator=true"
         );
-        assert!(
-            !private_fn.is_public,
-            "_privateHelper should not be public"
-        );
+        assert!(!private_fn.is_public, "_privateHelper should not be public");
 
         // Now verify that public framework entry functions are NOT reported as dead
         let graph = ProjectCallGraph::new();

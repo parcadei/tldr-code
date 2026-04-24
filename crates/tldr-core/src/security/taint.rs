@@ -1087,12 +1087,12 @@ pub fn detect_sinks(statement: &str, line: u32, language: Language) -> Vec<Taint
                             tainted: false,
                             statement: Some(statement.to_string()),
                         });
+                    }
                 }
             }
         }
     }
-}
-sinks
+    sinks
 }
 
 /// Extract a variable from a sink statement when extract_call_arg fails.
@@ -1401,9 +1401,7 @@ fn extract_call_arg(statement: &str, pattern: &Regex) -> Option<String> {
         let mut remaining = rest;
         loop {
             // Find end of current argument (comma or close paren)
-            let end = remaining
-                .find([',', ')'])
-                .unwrap_or(remaining.len());
+            let end = remaining.find([',', ')']).unwrap_or(remaining.len());
             let arg = remaining[..end].trim();
             // Check if it's a variable (not a string literal)
             if !arg.is_empty()
@@ -1436,23 +1434,23 @@ fn extract_call_arg(statement: &str, pattern: &Regex) -> Option<String> {
                         let check_name = var_name.trim_start_matches('$');
                         if is_valid_identifier(check_name) {
                             return Some(var_name.to_string());
+                        }
+                    }
+                }
             }
+            // Move to next argument
+            if end >= remaining.len() {
+                break;
             }
+            let next_char = remaining.as_bytes()[end];
+            if next_char == b')' {
+                break;
+            }
+            // Skip comma and move to next arg
+            remaining = &remaining[end + 1..];
         }
     }
-    // Move to next argument
-    if end >= remaining.len() {
-        break;
-}
-let next_char = remaining.as_bytes()[end];
-if next_char == b')' {
-    break;
-}
-// Skip comma and move to next arg
-remaining = &remaining[end + 1..];
-}
-}
-None
+    None
 }
 
 /// Extract interpolated variables from format strings (f-strings, template literals).
@@ -1552,7 +1550,8 @@ fn extract_interpolated_vars(statement: &str) -> Vec<String> {
                     }
                 } else {
                     // Single variable
-                    after.split(|c: char| c.is_whitespace() || c == ')' || c == ',')
+                    after
+                        .split(|c: char| c.is_whitespace() || c == ')' || c == ',')
                         .next()
                         .unwrap_or("")
                 };

@@ -802,12 +802,7 @@ fn rename_variables_recursive(
     // Step 3: Recursively process dominated children
     if let Some(node) = context.dom_tree.nodes.get(&block_id) {
         for &child in &node.children {
-            rename_variables_recursive(
-                child,
-                context,
-                ssa_blocks,
-                state,
-            );
+            rename_variables_recursive(child, context, ssa_blocks, state);
         }
     }
 

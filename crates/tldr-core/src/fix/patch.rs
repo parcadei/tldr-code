@@ -236,7 +236,10 @@ mod tests {
             }],
         };
         let result = apply_fix(source, &fix);
-        assert_eq!(result, "line1\nline3\n", "DeleteLine should remove the line entirely, not leave a blank");
+        assert_eq!(
+            result, "line1\nline3\n",
+            "DeleteLine should remove the line entirely, not leave a blank"
+        );
     }
 
     #[test]
@@ -266,7 +269,10 @@ mod tests {
             ],
         };
         let result = apply_fix(source, &fix);
-        assert_eq!(result, "func main() {}\n", "Deleting 3 lines should leave only the remaining line");
+        assert_eq!(
+            result, "func main() {}\n",
+            "Deleting 3 lines should leave only the remaining line"
+        );
     }
 
     #[test]

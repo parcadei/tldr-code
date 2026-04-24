@@ -4,10 +4,9 @@
 //! based on detected codebase patterns.
 
 use crate::types::{
-    Constraint, SoftDeletePattern, ErrorHandlingPattern, NamingPattern,
-    ResourceManagementPattern, ValidationPattern, TestIdiomPattern,
-    ImportPattern, TypeCoveragePattern, ApiConventionPattern, AsyncPattern,
-    NamingConvention, ImportStyle, ImportGrouping,
+    ApiConventionPattern, AsyncPattern, Constraint, ErrorHandlingPattern, ImportGrouping,
+    ImportPattern, ImportStyle, NamingConvention, NamingPattern, ResourceManagementPattern,
+    SoftDeletePattern, TestIdiomPattern, TypeCoveragePattern, ValidationPattern,
 };
 
 /// Collection of detected code patterns for constraint generation and analysis.
@@ -102,7 +101,9 @@ fn add_error_handling_constraints(
             2,
         ));
     }
-    if pattern.patterns.contains(&"custom_errors".to_string()) && !pattern.exception_types.is_empty() {
+    if pattern.patterns.contains(&"custom_errors".to_string())
+        && !pattern.exception_types.is_empty()
+    {
         constraints.push(Constraint::new(
             "error_handling",
             format!(
@@ -183,7 +184,10 @@ fn add_validation_constraints(
     if !pattern.frameworks.is_empty() {
         constraints.push(Constraint::new(
             "validation",
-            format!("Use {} for input validation", pattern.frameworks.join(" or ")),
+            format!(
+                "Use {} for input validation",
+                pattern.frameworks.join(" or ")
+            ),
             pattern.confidence,
             1,
         ));
@@ -231,7 +235,10 @@ fn add_test_constraints(test_idioms: &Option<TestIdiomPattern>, constraints: &mu
     }
 }
 
-fn add_import_constraints(import_patterns: &Option<ImportPattern>, constraints: &mut Vec<Constraint>) {
+fn add_import_constraints(
+    import_patterns: &Option<ImportPattern>,
+    constraints: &mut Vec<Constraint>,
+) {
     let Some(pattern) = import_patterns else {
         return;
     };
@@ -267,7 +274,10 @@ fn add_import_constraints(import_patterns: &Option<ImportPattern>, constraints: 
     }
 }
 
-fn add_type_constraints(type_coverage: &Option<TypeCoveragePattern>, constraints: &mut Vec<Constraint>) {
+fn add_type_constraints(
+    type_coverage: &Option<TypeCoveragePattern>,
+    constraints: &mut Vec<Constraint>,
+) {
     let Some(pattern) = type_coverage else {
         return;
     };
@@ -289,7 +299,10 @@ fn add_type_constraints(type_coverage: &Option<TypeCoveragePattern>, constraints
     }
 }
 
-fn add_api_constraints(api_conventions: &Option<ApiConventionPattern>, constraints: &mut Vec<Constraint>) {
+fn add_api_constraints(
+    api_conventions: &Option<ApiConventionPattern>,
+    constraints: &mut Vec<Constraint>,
+) {
     let Some(pattern) = api_conventions else {
         return;
     };

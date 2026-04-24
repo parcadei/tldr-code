@@ -34,13 +34,13 @@ use std::path::Path;
 
 use tree_sitter::{Node, Tree};
 
-use crate::ast::parser::parse;
 use crate::ast::function_finder::{find_function_node, get_function_body};
+use crate::ast::parser::parse;
 use crate::cfg::get_cfg_context;
 use crate::dfg::reaching::compute_reaching_definitions;
 use crate::types::{CfgInfo, DataflowEdge, DfgInfo, Language, RefType, VarRef};
-use crate::TldrResult;
 use crate::TldrError;
+use crate::TldrResult;
 
 /// Maximum recursion depth for nested structures
 const MAX_DEPTH: usize = 50;
@@ -156,11 +156,14 @@ impl<'a> DfgBuilder<'a> {
     fn extract_parameters(&mut self, func_node: Node) -> TldrResult<()> {
         let params_node = match self.language {
             Language::Python => func_node.child_by_field_name("parameters"),
-            Language::TypeScript | Language::JavaScript => func_node.child_by_field_name("parameters"),
+            Language::TypeScript | Language::JavaScript => {
+                func_node.child_by_field_name("parameters")
+            }
             Language::Go => func_node.child_by_field_name("parameters"),
             Language::Rust => func_node.child_by_field_name("parameters"),
             Language::Java => func_node.child_by_field_name("parameters"),
-            Language::C | Language::Cpp => func_node.child_by_field_name("declarator")
+            Language::C | Language::Cpp => func_node
+                .child_by_field_name("declarator")
                 .and_then(|d| d.child_by_field_name("parameters")),
             Language::Ruby => func_node.child_by_field_name("parameters"),
             Language::Php => func_node.child_by_field_name("parameters"),
@@ -378,7 +381,10 @@ impl<'a> DfgBuilder<'a> {
 
     /// Add a variable reference from an AST node
     fn add_ref_from_node(&mut self, node: Node, ref_type: RefType) {
-        let name = node.utf8_text(self.source.as_bytes()).unwrap_or("").to_string();
+        let name = node
+            .utf8_text(self.source.as_bytes())
+            .unwrap_or("")
+            .to_string();
         if name.is_empty() || is_keyword(&name, self.language) {
             return;
         }
@@ -430,16 +436,14 @@ impl<'a> DfgBuilder<'a> {
             // =================================================================
             // JS/TS: let x = ...; const x = ...; var x = ...;
             // Lua/Luau: local x = ...
-            "lexical_declaration" | "variable_declaration" => {
-                match self.language {
-                    Language::Lua | Language::Luau => {
-                        self.process_lua_local_declaration(node, depth)?;
-                    }
-                    _ => {
-                        self.process_js_ts_declaration(node, depth)?;
-                    }
+            "lexical_declaration" | "variable_declaration" => match self.language {
+                Language::Lua | Language::Luau => {
+                    self.process_lua_local_declaration(node, depth)?;
                 }
-            }
+                _ => {
+                    self.process_js_ts_declaration(node, depth)?;
+                }
+            },
 
             // =================================================================
             // TypeScript/JavaScript/Java/C/C++/Rust assignment expressions
@@ -475,16 +479,14 @@ impl<'a> DfgBuilder<'a> {
             }
 
             // Go/Lua/Luau assignment statement: x = ...; x += ...
-            "assignment_statement" => {
-                match self.language {
-                    Language::Lua | Language::Luau => {
-                        self.process_lua_assignment_statement(node, depth)?;
-                    }
-                    _ => {
-                        self.process_go_assignment(node, depth)?;
-                    }
+            "assignment_statement" => match self.language {
+                Language::Lua | Language::Luau => {
+                    self.process_lua_assignment_statement(node, depth)?;
                 }
-            }
+                _ => {
+                    self.process_go_assignment(node, depth)?;
+                }
+            },
 
             // =================================================================
             // Java/C# local variable declaration: int x = ...;
@@ -512,7 +514,9 @@ impl<'a> DfgBuilder<'a> {
             // =================================================================
             // Kotlin/Swift property declaration: val x = ...; var x = ...; let x = ...
             // =================================================================
-            "property_declaration" if matches!(self.language, Language::Kotlin | Language::Swift) => {
+            "property_declaration"
+                if matches!(self.language, Language::Kotlin | Language::Swift) =>
+            {
                 match self.language {
                     Language::Swift => self.process_swift_property(node, depth)?,
                     _ => self.process_kotlin_property(node, depth)?,
@@ -544,10 +548,9 @@ impl<'a> DfgBuilder<'a> {
 
             "binary_operator" if matches!(self.language, Language::Elixir) => {
                 // Check if this is an assignment (= operator)
-                let is_match = node.children(&mut node.walk())
-                    .any(|c| {
-                        !c.is_named() && c.utf8_text(self.source.as_bytes()).unwrap_or("") == "="
-                    });
+                let is_match = node.children(&mut node.walk()).any(|c| {
+                    !c.is_named() && c.utf8_text(self.source.as_bytes()).unwrap_or("") == "="
+                });
                 if is_match {
                     self.process_elixir_match(node, depth)?;
                 } else {
@@ -637,7 +640,8 @@ impl<'a> DfgBuilder<'a> {
             // =================================================================
             "identifier" => {
                 let name = node.utf8_text(self.source.as_bytes()).unwrap_or("");
-                if !name.is_empty() && !is_keyword(name, self.language) && self.is_use_context(node) {
+                if !name.is_empty() && !is_keyword(name, self.language) && self.is_use_context(node)
+                {
                     self.add_ref_from_node(node, RefType::Use);
                 }
             }
@@ -653,7 +657,10 @@ impl<'a> DfgBuilder<'a> {
             // OCaml: value_name is used instead of identifier for variable names
             "value_name" if matches!(self.language, Language::Ocaml) => {
                 let name = node.utf8_text(self.source.as_bytes()).unwrap_or("");
-                if !name.is_empty() && !is_keyword(name, self.language) && self.is_ocaml_use_context(node) {
+                if !name.is_empty()
+                    && !is_keyword(name, self.language)
+                    && self.is_ocaml_use_context(node)
+                {
                     self.add_ref_from_node(node, RefType::Use);
                 }
             }
@@ -661,7 +668,10 @@ impl<'a> DfgBuilder<'a> {
             // Swift: simple_identifier is used instead of identifier
             "simple_identifier" if matches!(self.language, Language::Swift) => {
                 let name = node.utf8_text(self.source.as_bytes()).unwrap_or("");
-                if !name.is_empty() && !is_keyword(name, self.language) && self.is_swift_use_context(node) {
+                if !name.is_empty()
+                    && !is_keyword(name, self.language)
+                    && self.is_swift_use_context(node)
+                {
                     self.add_ref_from_node(node, RefType::Use);
                 }
             }
@@ -1112,11 +1122,10 @@ impl<'a> DfgBuilder<'a> {
     fn process_go_assignment(&mut self, node: Node, depth: usize) -> TldrResult<()> {
         if let Some(left) = node.child_by_field_name("left") {
             // Check for operator: if it's += etc, it's an update
-            let is_update = node.children(&mut node.walk())
-                .any(|c| {
-                    let text = c.utf8_text(self.source.as_bytes()).unwrap_or("");
-                    text.ends_with('=') && text != "="
-                });
+            let is_update = node.children(&mut node.walk()).any(|c| {
+                let text = c.utf8_text(self.source.as_bytes()).unwrap_or("");
+                text.ends_with('=') && text != "="
+            });
 
             if is_update {
                 self.extract_go_lhs_identifiers_as(left, RefType::Update)?;
@@ -1347,7 +1356,8 @@ impl<'a> DfgBuilder<'a> {
         } else {
             // binary_operator: first named child is the LHS
             let mut cursor = node.walk();
-            let named_children: Vec<_> = node.children(&mut cursor)
+            let named_children: Vec<_> = node
+                .children(&mut cursor)
                 .filter(|c| c.is_named())
                 .collect();
             if named_children.len() >= 2 && named_children[0].kind() == "identifier" {
@@ -1360,7 +1370,8 @@ impl<'a> DfgBuilder<'a> {
         } else {
             // binary_operator: last named child is the RHS
             let mut cursor = node.walk();
-            let named_children: Vec<_> = node.children(&mut cursor)
+            let named_children: Vec<_> = node
+                .children(&mut cursor)
                 .filter(|c| c.is_named())
                 .collect();
             if named_children.len() >= 2 {
@@ -1512,7 +1523,9 @@ impl<'a> DfgBuilder<'a> {
                     found_name = true;
                 }
                 _ => {
-                    if !child.is_named() && child.utf8_text(self.source.as_bytes()).unwrap_or("") == "=" {
+                    if !child.is_named()
+                        && child.utf8_text(self.source.as_bytes()).unwrap_or("") == "="
+                    {
                         found_eq = true;
                         continue;
                     }
@@ -1563,7 +1576,9 @@ impl<'a> DfgBuilder<'a> {
                         }
                     }
                 }
-            } else if !child.is_named() && child.utf8_text(self.source.as_bytes()).unwrap_or("") == "=" {
+            } else if !child.is_named()
+                && child.utf8_text(self.source.as_bytes()).unwrap_or("") == "="
+            {
                 found_eq = true;
             } else if found_eq && child.is_named() {
                 // Process the value expression for uses
@@ -1716,7 +1731,8 @@ impl<'a> DfgBuilder<'a> {
                     self.add_ref_from_node(child, RefType::Definition);
                     break;
                 }
-                if !child.is_named() && child.utf8_text(self.source.as_bytes()).unwrap_or("") == "=" {
+                if !child.is_named() && child.utf8_text(self.source.as_bytes()).unwrap_or("") == "="
+                {
                     break; // Stop before the RHS
                 }
             }
@@ -1730,7 +1746,8 @@ impl<'a> DfgBuilder<'a> {
             let mut cursor = node.walk();
             let mut found_eq = false;
             for child in node.children(&mut cursor) {
-                if !child.is_named() && child.utf8_text(self.source.as_bytes()).unwrap_or("") == "=" {
+                if !child.is_named() && child.utf8_text(self.source.as_bytes()).unwrap_or("") == "="
+                {
                     found_eq = true;
                     continue;
                 }
@@ -1760,7 +1777,9 @@ impl<'a> DfgBuilder<'a> {
                         if child.kind() == "value_name" && child.id() == node.id() {
                             return false; // This is the binding name
                         }
-                        if !child.is_named() && child.utf8_text(self.source.as_bytes()).unwrap_or("") == "=" {
+                        if !child.is_named()
+                            && child.utf8_text(self.source.as_bytes()).unwrap_or("") == "="
+                        {
                             break;
                         }
                     }
@@ -1826,7 +1845,8 @@ impl<'a> DfgBuilder<'a> {
                     }
                     // Check if this is the last simple_identifier (method/field name)
                     let mut cursor = parent.walk();
-                    let children: Vec<_> = parent.children(&mut cursor)
+                    let children: Vec<_> = parent
+                        .children(&mut cursor)
                         .filter(|c| c.kind() == "simple_identifier")
                         .collect();
                     if children.len() >= 2 {
@@ -1876,8 +1896,13 @@ impl<'a> DfgBuilder<'a> {
     fn parent_use_context(&self, parent: Node, node: Node) -> Option<bool> {
         let kind = parent.kind();
 
-        if matches!(kind, "assignment" | "for_statement" | "for_in_statement" | "augmented_assignment") {
-            return self.left_field_contains(parent, node).map(|contains| !contains);
+        if matches!(
+            kind,
+            "assignment" | "for_statement" | "for_in_statement" | "augmented_assignment"
+        ) {
+            return self
+                .left_field_contains(parent, node)
+                .map(|contains| !contains);
         }
         if matches!(
             kind,
@@ -1912,7 +1937,10 @@ impl<'a> DfgBuilder<'a> {
         {
             return Some(false);
         }
-        if matches!(kind, "assignment_expression" | "augmented_assignment_expression") {
+        if matches!(
+            kind,
+            "assignment_expression" | "augmented_assignment_expression"
+        ) {
             if let Some(left) = parent.child_by_field_name("left") {
                 if left.id() == node.id() {
                     return Some(false);
@@ -2147,121 +2175,571 @@ fn is_keyword(name: &str, language: Language) -> bool {
     match language {
         Language::Python => matches!(
             name,
-            "False" | "None" | "True" | "and" | "as" | "assert" | "async" | "await"
-            | "break" | "class" | "continue" | "def" | "del" | "elif" | "else"
-            | "except" | "finally" | "for" | "from" | "global" | "if" | "import"
-            | "in" | "is" | "lambda" | "nonlocal" | "not" | "or" | "pass" | "raise"
-            | "return" | "try" | "while" | "with" | "yield"
+            "False"
+                | "None"
+                | "True"
+                | "and"
+                | "as"
+                | "assert"
+                | "async"
+                | "await"
+                | "break"
+                | "class"
+                | "continue"
+                | "def"
+                | "del"
+                | "elif"
+                | "else"
+                | "except"
+                | "finally"
+                | "for"
+                | "from"
+                | "global"
+                | "if"
+                | "import"
+                | "in"
+                | "is"
+                | "lambda"
+                | "nonlocal"
+                | "not"
+                | "or"
+                | "pass"
+                | "raise"
+                | "return"
+                | "try"
+                | "while"
+                | "with"
+                | "yield"
         ),
         Language::TypeScript | Language::JavaScript => matches!(
             name,
-            "break" | "case" | "catch" | "class" | "const" | "continue" | "debugger"
-            | "default" | "delete" | "do" | "else" | "enum" | "export" | "extends"
-            | "false" | "finally" | "for" | "function" | "if" | "import" | "in"
-            | "instanceof" | "let" | "new" | "null" | "return" | "static" | "super"
-            | "switch" | "this" | "throw" | "true" | "try" | "typeof" | "undefined"
-            | "var" | "void" | "while" | "with" | "yield"
+            "break"
+                | "case"
+                | "catch"
+                | "class"
+                | "const"
+                | "continue"
+                | "debugger"
+                | "default"
+                | "delete"
+                | "do"
+                | "else"
+                | "enum"
+                | "export"
+                | "extends"
+                | "false"
+                | "finally"
+                | "for"
+                | "function"
+                | "if"
+                | "import"
+                | "in"
+                | "instanceof"
+                | "let"
+                | "new"
+                | "null"
+                | "return"
+                | "static"
+                | "super"
+                | "switch"
+                | "this"
+                | "throw"
+                | "true"
+                | "try"
+                | "typeof"
+                | "undefined"
+                | "var"
+                | "void"
+                | "while"
+                | "with"
+                | "yield"
         ),
         Language::Go => matches!(
             name,
-            "break" | "case" | "chan" | "const" | "continue" | "default" | "defer"
-            | "else" | "fallthrough" | "for" | "func" | "go" | "goto" | "if"
-            | "import" | "interface" | "map" | "package" | "range" | "return"
-            | "select" | "struct" | "switch" | "type" | "var" | "nil" | "true" | "false"
+            "break"
+                | "case"
+                | "chan"
+                | "const"
+                | "continue"
+                | "default"
+                | "defer"
+                | "else"
+                | "fallthrough"
+                | "for"
+                | "func"
+                | "go"
+                | "goto"
+                | "if"
+                | "import"
+                | "interface"
+                | "map"
+                | "package"
+                | "range"
+                | "return"
+                | "select"
+                | "struct"
+                | "switch"
+                | "type"
+                | "var"
+                | "nil"
+                | "true"
+                | "false"
         ),
         Language::Rust => matches!(
             name,
-            "as" | "break" | "const" | "continue" | "crate" | "else" | "enum"
-            | "extern" | "false" | "fn" | "for" | "if" | "impl" | "in" | "let"
-            | "loop" | "match" | "mod" | "move" | "mut" | "pub" | "ref" | "return"
-            | "self" | "Self" | "static" | "struct" | "super" | "trait" | "true"
-            | "type" | "unsafe" | "use" | "where" | "while" | "async" | "await"
-            | "dyn"
+            "as" | "break"
+                | "const"
+                | "continue"
+                | "crate"
+                | "else"
+                | "enum"
+                | "extern"
+                | "false"
+                | "fn"
+                | "for"
+                | "if"
+                | "impl"
+                | "in"
+                | "let"
+                | "loop"
+                | "match"
+                | "mod"
+                | "move"
+                | "mut"
+                | "pub"
+                | "ref"
+                | "return"
+                | "self"
+                | "Self"
+                | "static"
+                | "struct"
+                | "super"
+                | "trait"
+                | "true"
+                | "type"
+                | "unsafe"
+                | "use"
+                | "where"
+                | "while"
+                | "async"
+                | "await"
+                | "dyn"
         ),
         Language::Java => matches!(
             name,
-            "abstract" | "assert" | "boolean" | "break" | "byte" | "case" | "catch"
-            | "char" | "class" | "const" | "continue" | "default" | "do" | "double"
-            | "else" | "enum" | "extends" | "false" | "final" | "finally" | "float"
-            | "for" | "goto" | "if" | "implements" | "import" | "instanceof" | "int"
-            | "interface" | "long" | "native" | "new" | "null" | "package" | "private"
-            | "protected" | "public" | "return" | "short" | "static" | "strictfp"
-            | "super" | "switch" | "synchronized" | "this" | "throw" | "throws"
-            | "transient" | "true" | "try" | "void" | "volatile" | "while"
+            "abstract"
+                | "assert"
+                | "boolean"
+                | "break"
+                | "byte"
+                | "case"
+                | "catch"
+                | "char"
+                | "class"
+                | "const"
+                | "continue"
+                | "default"
+                | "do"
+                | "double"
+                | "else"
+                | "enum"
+                | "extends"
+                | "false"
+                | "final"
+                | "finally"
+                | "float"
+                | "for"
+                | "goto"
+                | "if"
+                | "implements"
+                | "import"
+                | "instanceof"
+                | "int"
+                | "interface"
+                | "long"
+                | "native"
+                | "new"
+                | "null"
+                | "package"
+                | "private"
+                | "protected"
+                | "public"
+                | "return"
+                | "short"
+                | "static"
+                | "strictfp"
+                | "super"
+                | "switch"
+                | "synchronized"
+                | "this"
+                | "throw"
+                | "throws"
+                | "transient"
+                | "true"
+                | "try"
+                | "void"
+                | "volatile"
+                | "while"
         ),
         Language::C | Language::Cpp => matches!(
             name,
-            "auto" | "break" | "case" | "char" | "const" | "continue" | "default"
-            | "do" | "double" | "else" | "enum" | "extern" | "float" | "for"
-            | "goto" | "if" | "int" | "long" | "register" | "return" | "short"
-            | "signed" | "sizeof" | "static" | "struct" | "switch" | "typedef"
-            | "union" | "unsigned" | "void" | "volatile" | "while" | "NULL"
+            "auto"
+                | "break"
+                | "case"
+                | "char"
+                | "const"
+                | "continue"
+                | "default"
+                | "do"
+                | "double"
+                | "else"
+                | "enum"
+                | "extern"
+                | "float"
+                | "for"
+                | "goto"
+                | "if"
+                | "int"
+                | "long"
+                | "register"
+                | "return"
+                | "short"
+                | "signed"
+                | "sizeof"
+                | "static"
+                | "struct"
+                | "switch"
+                | "typedef"
+                | "union"
+                | "unsigned"
+                | "void"
+                | "volatile"
+                | "while"
+                | "NULL"
         ),
         Language::Ruby => matches!(
             name,
-            "alias" | "and" | "begin" | "break" | "case" | "class" | "def" | "do"
-            | "else" | "elsif" | "end" | "ensure" | "false" | "for" | "if" | "in"
-            | "module" | "next" | "nil" | "not" | "or" | "redo" | "rescue" | "retry"
-            | "return" | "self" | "super" | "then" | "true" | "undef" | "unless"
-            | "until" | "when" | "while" | "yield" | "puts" | "print"
+            "alias"
+                | "and"
+                | "begin"
+                | "break"
+                | "case"
+                | "class"
+                | "def"
+                | "do"
+                | "else"
+                | "elsif"
+                | "end"
+                | "ensure"
+                | "false"
+                | "for"
+                | "if"
+                | "in"
+                | "module"
+                | "next"
+                | "nil"
+                | "not"
+                | "or"
+                | "redo"
+                | "rescue"
+                | "retry"
+                | "return"
+                | "self"
+                | "super"
+                | "then"
+                | "true"
+                | "undef"
+                | "unless"
+                | "until"
+                | "when"
+                | "while"
+                | "yield"
+                | "puts"
+                | "print"
         ),
         Language::Php => matches!(
             name,
-            "abstract" | "and" | "array" | "as" | "break" | "callable" | "case"
-            | "catch" | "class" | "clone" | "const" | "continue" | "declare"
-            | "default" | "die" | "do" | "echo" | "else" | "elseif" | "empty"
-            | "enddeclare" | "endfor" | "endforeach" | "endif" | "endswitch"
-            | "endwhile" | "eval" | "exit" | "extends" | "false" | "final"
-            | "finally" | "fn" | "for" | "foreach" | "function" | "global" | "goto"
-            | "if" | "implements" | "include" | "instanceof" | "interface" | "isset"
-            | "list" | "match" | "namespace" | "new" | "null" | "or" | "print"
-            | "private" | "protected" | "public" | "require" | "return" | "static"
-            | "switch" | "throw" | "trait" | "true" | "try" | "unset" | "use"
-            | "var" | "while" | "xor" | "yield"
+            "abstract"
+                | "and"
+                | "array"
+                | "as"
+                | "break"
+                | "callable"
+                | "case"
+                | "catch"
+                | "class"
+                | "clone"
+                | "const"
+                | "continue"
+                | "declare"
+                | "default"
+                | "die"
+                | "do"
+                | "echo"
+                | "else"
+                | "elseif"
+                | "empty"
+                | "enddeclare"
+                | "endfor"
+                | "endforeach"
+                | "endif"
+                | "endswitch"
+                | "endwhile"
+                | "eval"
+                | "exit"
+                | "extends"
+                | "false"
+                | "final"
+                | "finally"
+                | "fn"
+                | "for"
+                | "foreach"
+                | "function"
+                | "global"
+                | "goto"
+                | "if"
+                | "implements"
+                | "include"
+                | "instanceof"
+                | "interface"
+                | "isset"
+                | "list"
+                | "match"
+                | "namespace"
+                | "new"
+                | "null"
+                | "or"
+                | "print"
+                | "private"
+                | "protected"
+                | "public"
+                | "require"
+                | "return"
+                | "static"
+                | "switch"
+                | "throw"
+                | "trait"
+                | "true"
+                | "try"
+                | "unset"
+                | "use"
+                | "var"
+                | "while"
+                | "xor"
+                | "yield"
         ),
         Language::Kotlin => matches!(
             name,
-            "abstract" | "annotation" | "as" | "break" | "by" | "catch" | "class"
-            | "companion" | "const" | "constructor" | "continue" | "crossinline"
-            | "data" | "do" | "else" | "enum" | "external" | "false" | "final"
-            | "finally" | "for" | "fun" | "if" | "import" | "in" | "infix"
-            | "init" | "inline" | "inner" | "interface" | "internal" | "is"
-            | "lateinit" | "noinline" | "null" | "object" | "open" | "operator"
-            | "out" | "override" | "package" | "private" | "protected" | "public"
-            | "reified" | "return" | "sealed" | "super" | "suspend" | "this"
-            | "throw" | "true" | "try" | "typealias" | "val" | "var" | "vararg"
-            | "when" | "where" | "while"
+            "abstract"
+                | "annotation"
+                | "as"
+                | "break"
+                | "by"
+                | "catch"
+                | "class"
+                | "companion"
+                | "const"
+                | "constructor"
+                | "continue"
+                | "crossinline"
+                | "data"
+                | "do"
+                | "else"
+                | "enum"
+                | "external"
+                | "false"
+                | "final"
+                | "finally"
+                | "for"
+                | "fun"
+                | "if"
+                | "import"
+                | "in"
+                | "infix"
+                | "init"
+                | "inline"
+                | "inner"
+                | "interface"
+                | "internal"
+                | "is"
+                | "lateinit"
+                | "noinline"
+                | "null"
+                | "object"
+                | "open"
+                | "operator"
+                | "out"
+                | "override"
+                | "package"
+                | "private"
+                | "protected"
+                | "public"
+                | "reified"
+                | "return"
+                | "sealed"
+                | "super"
+                | "suspend"
+                | "this"
+                | "throw"
+                | "true"
+                | "try"
+                | "typealias"
+                | "val"
+                | "var"
+                | "vararg"
+                | "when"
+                | "where"
+                | "while"
         ),
         Language::Elixir => matches!(
             name,
-            "after" | "and" | "case" | "catch" | "cond" | "def" | "defp"
-            | "defmodule" | "defstruct" | "defprotocol" | "defimpl" | "defmacro"
-            | "do" | "else" | "end" | "false" | "fn" | "for" | "if" | "import"
-            | "in" | "nil" | "not" | "or" | "raise" | "receive" | "require"
-            | "rescue" | "true" | "try" | "unless" | "use" | "when" | "with"
+            "after"
+                | "and"
+                | "case"
+                | "catch"
+                | "cond"
+                | "def"
+                | "defp"
+                | "defmodule"
+                | "defstruct"
+                | "defprotocol"
+                | "defimpl"
+                | "defmacro"
+                | "do"
+                | "else"
+                | "end"
+                | "false"
+                | "fn"
+                | "for"
+                | "if"
+                | "import"
+                | "in"
+                | "nil"
+                | "not"
+                | "or"
+                | "raise"
+                | "receive"
+                | "require"
+                | "rescue"
+                | "true"
+                | "try"
+                | "unless"
+                | "use"
+                | "when"
+                | "with"
         ),
         Language::Ocaml => matches!(
             name,
-            "and" | "as" | "assert" | "begin" | "class" | "constraint" | "do"
-            | "done" | "downto" | "else" | "end" | "exception" | "external"
-            | "false" | "for" | "fun" | "function" | "functor" | "if" | "in"
-            | "include" | "inherit" | "initializer" | "lazy" | "let" | "match"
-            | "method" | "mod" | "module" | "mutable" | "new" | "nonrec"
-            | "object" | "of" | "open" | "or" | "private" | "rec" | "sig"
-            | "struct" | "then" | "to" | "true" | "try" | "type" | "val"
-            | "virtual" | "when" | "while" | "with"
+            "and"
+                | "as"
+                | "assert"
+                | "begin"
+                | "class"
+                | "constraint"
+                | "do"
+                | "done"
+                | "downto"
+                | "else"
+                | "end"
+                | "exception"
+                | "external"
+                | "false"
+                | "for"
+                | "fun"
+                | "function"
+                | "functor"
+                | "if"
+                | "in"
+                | "include"
+                | "inherit"
+                | "initializer"
+                | "lazy"
+                | "let"
+                | "match"
+                | "method"
+                | "mod"
+                | "module"
+                | "mutable"
+                | "new"
+                | "nonrec"
+                | "object"
+                | "of"
+                | "open"
+                | "or"
+                | "private"
+                | "rec"
+                | "sig"
+                | "struct"
+                | "then"
+                | "to"
+                | "true"
+                | "try"
+                | "type"
+                | "val"
+                | "virtual"
+                | "when"
+                | "while"
+                | "with"
         ),
         Language::Swift => matches!(
             name,
-            "associatedtype" | "break" | "case" | "catch" | "class" | "continue"
-            | "default" | "defer" | "deinit" | "do" | "else" | "enum" | "extension"
-            | "fallthrough" | "false" | "fileprivate" | "for" | "func" | "guard"
-            | "if" | "import" | "in" | "init" | "inout" | "internal" | "is" | "let"
-            | "nil" | "open" | "operator" | "private" | "protocol" | "public"
-            | "repeat" | "rethrows" | "return" | "self" | "Self" | "static"
-            | "struct" | "subscript" | "super" | "switch" | "throw" | "throws"
-            | "true" | "try" | "typealias" | "var" | "where" | "while"
-            | "Int" | "String" | "Bool" | "Double" | "Float" | "Array"
+            "associatedtype"
+                | "break"
+                | "case"
+                | "catch"
+                | "class"
+                | "continue"
+                | "default"
+                | "defer"
+                | "deinit"
+                | "do"
+                | "else"
+                | "enum"
+                | "extension"
+                | "fallthrough"
+                | "false"
+                | "fileprivate"
+                | "for"
+                | "func"
+                | "guard"
+                | "if"
+                | "import"
+                | "in"
+                | "init"
+                | "inout"
+                | "internal"
+                | "is"
+                | "let"
+                | "nil"
+                | "open"
+                | "operator"
+                | "private"
+                | "protocol"
+                | "public"
+                | "repeat"
+                | "rethrows"
+                | "return"
+                | "self"
+                | "Self"
+                | "static"
+                | "struct"
+                | "subscript"
+                | "super"
+                | "switch"
+                | "throw"
+                | "throws"
+                | "true"
+                | "try"
+                | "typealias"
+                | "var"
+                | "where"
+                | "while"
+                | "Int"
+                | "String"
+                | "Bool"
+                | "Double"
+                | "Float"
+                | "Array"
         ),
         _ => false,
     }
@@ -2294,7 +2772,9 @@ def foo():
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Python).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .collect();
 
@@ -2310,7 +2790,9 @@ def foo(x):
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Python).unwrap();
 
-        let uses: Vec<_> = dfg.refs.iter()
+        let uses: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Use)
             .collect();
 
@@ -2334,11 +2816,16 @@ def foo(items):
         let dfg = get_dfg_context(source, "foo", Language::Python).unwrap();
 
         // 'item' should be both a definition (loop var) and a use (in print)
-        let item_defs: Vec<_> = dfg.refs.iter()
+        let item_defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.name == "item" && r.ref_type == RefType::Definition)
             .collect();
 
-        assert!(!item_defs.is_empty(), "for loop variable should be a definition");
+        assert!(
+            !item_defs.is_empty(),
+            "for loop variable should be a definition"
+        );
     }
 
     #[test]
@@ -2351,11 +2838,16 @@ def foo():
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Python).unwrap();
 
-        let updates: Vec<_> = dfg.refs.iter()
+        let updates: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.name == "x" && r.ref_type == RefType::Update)
             .collect();
 
-        assert!(!updates.is_empty(), "augmented assignment should be an update");
+        assert!(
+            !updates.is_empty(),
+            "augmented assignment should be an update"
+        );
     }
 
     #[test]
@@ -2369,9 +2861,7 @@ def foo():
         let dfg = get_dfg_context(source, "foo", Language::Python).unwrap();
 
         // Should have an edge from x's definition to x's use
-        let x_edges: Vec<_> = dfg.edges.iter()
-            .filter(|e| e.var == "x")
-            .collect();
+        let x_edges: Vec<_> = dfg.edges.iter().filter(|e| e.var == "x").collect();
 
         assert!(!x_edges.is_empty(), "should have def-use edge for x");
     }
@@ -2393,17 +2883,36 @@ function foo(x: number) {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::TypeScript).unwrap();
         assert_eq!(dfg.function, "foo");
-        assert!(dfg.variables.contains(&"x".to_string()), "should find param x");
-        assert!(dfg.variables.contains(&"y".to_string()), "should find let y");
-        assert!(dfg.variables.contains(&"z".to_string()), "should find const z");
+        assert!(
+            dfg.variables.contains(&"x".to_string()),
+            "should find param x"
+        );
+        assert!(
+            dfg.variables.contains(&"y".to_string()),
+            "should find let y"
+        );
+        assert!(
+            dfg.variables.contains(&"z".to_string()),
+            "should find const z"
+        );
 
         // y and z should be definitions
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"y"), "y should be a definition, got defs: {:?}", defs);
-        assert!(defs.contains(&"z"), "z should be a definition, got defs: {:?}", defs);
+        assert!(
+            defs.contains(&"y"),
+            "y should be a definition, got defs: {:?}",
+            defs
+        );
+        assert!(
+            defs.contains(&"z"),
+            "z should be a definition, got defs: {:?}",
+            defs
+        );
     }
 
     #[test]
@@ -2418,12 +2927,16 @@ function foo() {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::TypeScript).unwrap();
 
-        let x_defs: Vec<_> = dfg.refs.iter()
+        let x_defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.name == "x" && r.ref_type == RefType::Definition)
             .collect();
         assert!(!x_defs.is_empty(), "x should have at least one definition");
 
-        let x_updates: Vec<_> = dfg.refs.iter()
+        let x_updates: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.name == "x" && r.ref_type == RefType::Update)
             .collect();
         assert!(!x_updates.is_empty(), "x += 3 should produce an update ref");
@@ -2439,12 +2952,20 @@ function foo(items: number[]) {
 }
 "#;
         let dfg = get_dfg_context(source, "foo", Language::TypeScript).unwrap();
-        assert!(dfg.variables.contains(&"item".to_string()), "should find loop var item");
+        assert!(
+            dfg.variables.contains(&"item".to_string()),
+            "should find loop var item"
+        );
 
-        let item_defs: Vec<_> = dfg.refs.iter()
+        let item_defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.name == "item" && r.ref_type == RefType::Definition)
             .collect();
-        assert!(!item_defs.is_empty(), "for-of loop variable should be a definition");
+        assert!(
+            !item_defs.is_empty(),
+            "for-of loop variable should be a definition"
+        );
     }
 
     #[test]
@@ -2456,9 +2977,14 @@ function foo(x) {
 }
 "#;
         let dfg = get_dfg_context(source, "foo", Language::JavaScript).unwrap();
-        assert!(dfg.variables.contains(&"y".to_string()), "should find var y");
+        assert!(
+            dfg.variables.contains(&"y".to_string()),
+            "should find var y"
+        );
 
-        let y_defs: Vec<_> = dfg.refs.iter()
+        let y_defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.name == "y" && r.ref_type == RefType::Definition)
             .collect();
         assert!(!y_defs.is_empty(), "var y should be a definition");
@@ -2477,15 +3003,31 @@ fn foo(x: i32) -> i32 {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Rust).unwrap();
         assert_eq!(dfg.function, "foo");
-        assert!(dfg.variables.contains(&"y".to_string()), "should find let y");
-        assert!(dfg.variables.contains(&"z".to_string()), "should find let z");
+        assert!(
+            dfg.variables.contains(&"y".to_string()),
+            "should find let y"
+        );
+        assert!(
+            dfg.variables.contains(&"z".to_string()),
+            "should find let z"
+        );
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"y"), "y should be a definition, got defs: {:?}", defs);
-        assert!(defs.contains(&"z"), "z should be a definition, got defs: {:?}", defs);
+        assert!(
+            defs.contains(&"y"),
+            "y should be a definition, got defs: {:?}",
+            defs
+        );
+        assert!(
+            defs.contains(&"z"),
+            "z should be a definition, got defs: {:?}",
+            defs
+        );
     }
 
     #[test]
@@ -2501,10 +3043,12 @@ fn foo() -> i32 {
         let dfg = get_dfg_context(source, "foo", Language::Rust).unwrap();
 
         // x = 5 should be a definition or update
-        let x_all: Vec<_> = dfg.refs.iter()
-            .filter(|r| r.name == "x")
-            .collect();
-        assert!(x_all.len() >= 3, "x should have at least 3 refs (def, reassign, use), got {}", x_all.len());
+        let x_all: Vec<_> = dfg.refs.iter().filter(|r| r.name == "x").collect();
+        assert!(
+            x_all.len() >= 3,
+            "x should have at least 3 refs (def, reassign, use), got {}",
+            x_all.len()
+        );
     }
 
     #[test]
@@ -2517,12 +3061,20 @@ fn foo(items: Vec<i32>) {
 }
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Rust).unwrap();
-        assert!(dfg.variables.contains(&"item".to_string()), "should find loop var item");
+        assert!(
+            dfg.variables.contains(&"item".to_string()),
+            "should find loop var item"
+        );
 
-        let item_defs: Vec<_> = dfg.refs.iter()
+        let item_defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.name == "item" && r.ref_type == RefType::Definition)
             .collect();
-        assert!(!item_defs.is_empty(), "for loop variable should be a definition");
+        assert!(
+            !item_defs.is_empty(),
+            "for loop variable should be a definition"
+        );
     }
 
     // --- Go ---
@@ -2538,15 +3090,31 @@ func foo(x int) int {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Go).unwrap();
         assert_eq!(dfg.function, "foo");
-        assert!(dfg.variables.contains(&"y".to_string()), "should find y from :=");
-        assert!(dfg.variables.contains(&"z".to_string()), "should find z from :=");
+        assert!(
+            dfg.variables.contains(&"y".to_string()),
+            "should find y from :="
+        );
+        assert!(
+            dfg.variables.contains(&"z".to_string()),
+            "should find z from :="
+        );
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"y"), "y should be a definition, got defs: {:?}", defs);
-        assert!(defs.contains(&"z"), "z should be a definition, got defs: {:?}", defs);
+        assert!(
+            defs.contains(&"y"),
+            "y should be a definition, got defs: {:?}",
+            defs
+        );
+        assert!(
+            defs.contains(&"z"),
+            "z should be a definition, got defs: {:?}",
+            defs
+        );
     }
 
     #[test]
@@ -2559,8 +3127,14 @@ func foo() int {
 }
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Go).unwrap();
-        assert!(dfg.variables.contains(&"x".to_string()), "should find var x");
-        assert!(dfg.variables.contains(&"y".to_string()), "should find var y");
+        assert!(
+            dfg.variables.contains(&"x".to_string()),
+            "should find var x"
+        );
+        assert!(
+            dfg.variables.contains(&"y".to_string()),
+            "should find var y"
+        );
     }
 
     #[test]
@@ -2574,11 +3148,13 @@ func foo() int {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Go).unwrap();
 
-        let x_refs: Vec<_> = dfg.refs.iter()
-            .filter(|r| r.name == "x")
-            .collect();
+        let x_refs: Vec<_> = dfg.refs.iter().filter(|r| r.name == "x").collect();
         // Should have: definition (:=), definition or update (=), use (return)
-        assert!(x_refs.len() >= 3, "x should have at least 3 refs, got {}", x_refs.len());
+        assert!(
+            x_refs.len() >= 3,
+            "x should have at least 3 refs, got {}",
+            x_refs.len()
+        );
     }
 
     #[test]
@@ -2591,8 +3167,14 @@ func foo(items []int) {
 }
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Go).unwrap();
-        assert!(dfg.variables.contains(&"i".to_string()), "should find range var i");
-        assert!(dfg.variables.contains(&"v".to_string()), "should find range var v");
+        assert!(
+            dfg.variables.contains(&"i".to_string()),
+            "should find range var i"
+        );
+        assert!(
+            dfg.variables.contains(&"v".to_string()),
+            "should find range var v"
+        );
     }
 
     // --- Java ---
@@ -2610,15 +3192,31 @@ class Foo {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Java).unwrap();
         assert_eq!(dfg.function, "foo");
-        assert!(dfg.variables.contains(&"y".to_string()), "should find int y");
-        assert!(dfg.variables.contains(&"z".to_string()), "should find int z");
+        assert!(
+            dfg.variables.contains(&"y".to_string()),
+            "should find int y"
+        );
+        assert!(
+            dfg.variables.contains(&"z".to_string()),
+            "should find int z"
+        );
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"y"), "y should be a definition, got defs: {:?}", defs);
-        assert!(defs.contains(&"z"), "z should be a definition, got defs: {:?}", defs);
+        assert!(
+            defs.contains(&"y"),
+            "y should be a definition, got defs: {:?}",
+            defs
+        );
+        assert!(
+            defs.contains(&"z"),
+            "z should be a definition, got defs: {:?}",
+            defs
+        );
     }
 
     #[test]
@@ -2634,7 +3232,9 @@ class Foo {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Java).unwrap();
 
-        let x_defs: Vec<_> = dfg.refs.iter()
+        let x_defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.name == "x" && r.ref_type == RefType::Definition)
             .collect();
         assert!(!x_defs.is_empty(), "x should have at least one definition");
@@ -2652,12 +3252,20 @@ class Foo {
 }
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Java).unwrap();
-        assert!(dfg.variables.contains(&"item".to_string()), "should find enhanced for var item");
+        assert!(
+            dfg.variables.contains(&"item".to_string()),
+            "should find enhanced for var item"
+        );
 
-        let item_defs: Vec<_> = dfg.refs.iter()
+        let item_defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.name == "item" && r.ref_type == RefType::Definition)
             .collect();
-        assert!(!item_defs.is_empty(), "enhanced for variable should be a definition");
+        assert!(
+            !item_defs.is_empty(),
+            "enhanced for variable should be a definition"
+        );
     }
 
     // --- C ---
@@ -2673,8 +3281,14 @@ int foo(int x) {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::C).unwrap();
         assert_eq!(dfg.function, "foo");
-        assert!(dfg.variables.contains(&"y".to_string()), "should find int y");
-        assert!(dfg.variables.contains(&"z".to_string()), "should find int z");
+        assert!(
+            dfg.variables.contains(&"y".to_string()),
+            "should find int y"
+        );
+        assert!(
+            dfg.variables.contains(&"z".to_string()),
+            "should find int z"
+        );
     }
 
     #[test]
@@ -2688,11 +3302,16 @@ void foo() {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::C).unwrap();
 
-        let x_refs: Vec<_> = dfg.refs.iter()
-            .filter(|r| r.name == "x")
-            .collect();
-        assert!(x_refs.len() >= 2, "x should have at least 2 refs, got {}: {:?}",
-            x_refs.len(), x_refs.iter().map(|r| (&r.name, &r.ref_type, r.line)).collect::<Vec<_>>());
+        let x_refs: Vec<_> = dfg.refs.iter().filter(|r| r.name == "x").collect();
+        assert!(
+            x_refs.len() >= 2,
+            "x should have at least 2 refs, got {}: {:?}",
+            x_refs.len(),
+            x_refs
+                .iter()
+                .map(|r| (&r.name, &r.ref_type, r.line))
+                .collect::<Vec<_>>()
+        );
     }
 
     // --- Ruby ---
@@ -2728,7 +3347,8 @@ function foo($x) {
         // PHP variables include $ prefix in tree-sitter
         assert!(
             dfg.variables.contains(&"$y".to_string()) || dfg.variables.contains(&"y".to_string()),
-            "should find y variable, got: {:?}", dfg.variables
+            "should find y variable, got: {:?}",
+            dfg.variables
         );
     }
 
@@ -2745,10 +3365,11 @@ function foo() {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::TypeScript).unwrap();
 
-        let x_edges: Vec<_> = dfg.edges.iter()
-            .filter(|e| e.var == "x")
-            .collect();
-        assert!(!x_edges.is_empty(), "should have def-use edge for x in TypeScript");
+        let x_edges: Vec<_> = dfg.edges.iter().filter(|e| e.var == "x").collect();
+        assert!(
+            !x_edges.is_empty(),
+            "should have def-use edge for x in TypeScript"
+        );
     }
 
     #[test]
@@ -2762,9 +3383,7 @@ func foo() int {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Go).unwrap();
 
-        let x_edges: Vec<_> = dfg.edges.iter()
-            .filter(|e| e.var == "x")
-            .collect();
+        let x_edges: Vec<_> = dfg.edges.iter().filter(|e| e.var == "x").collect();
         assert!(!x_edges.is_empty(), "should have def-use edge for x in Go");
     }
 
@@ -2779,10 +3398,11 @@ fn foo() -> i32 {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Rust).unwrap();
 
-        let x_edges: Vec<_> = dfg.edges.iter()
-            .filter(|e| e.var == "x")
-            .collect();
-        assert!(!x_edges.is_empty(), "should have def-use edge for x in Rust");
+        let x_edges: Vec<_> = dfg.edges.iter().filter(|e| e.var == "x").collect();
+        assert!(
+            !x_edges.is_empty(),
+            "should have def-use edge for x in Rust"
+        );
     }
 
     // --- Python regression tests ---
@@ -2801,12 +3421,16 @@ def foo(x):
         assert!(dfg.variables.contains(&"y".to_string()));
         assert!(dfg.variables.contains(&"item".to_string()));
 
-        let y_updates: Vec<_> = dfg.refs.iter()
+        let y_updates: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.name == "y" && r.ref_type == RefType::Update)
             .collect();
         assert!(!y_updates.is_empty(), "y += item should be an update");
 
-        let item_defs: Vec<_> = dfg.refs.iter()
+        let item_defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.name == "item" && r.ref_type == RefType::Definition)
             .collect();
         assert!(!item_defs.is_empty(), "for item should be a definition");
@@ -2826,12 +3450,22 @@ fun foo(x: Int): Int {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Kotlin).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"y"), "Kotlin val y should be a definition, got defs: {:?}", defs);
-        assert!(defs.contains(&"x"), "Kotlin param x should be a definition, got defs: {:?}", defs);
+        assert!(
+            defs.contains(&"y"),
+            "Kotlin val y should be a definition, got defs: {:?}",
+            defs
+        );
+        assert!(
+            defs.contains(&"x"),
+            "Kotlin param x should be a definition, got defs: {:?}",
+            defs
+        );
     }
 
     #[test]
@@ -2845,11 +3479,17 @@ fun foo(): Int {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Kotlin).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| matches!(r.ref_type, RefType::Definition | RefType::Update))
             .map(|r| r.name.as_str())
             .collect();
-        assert!(!defs.is_empty(), "Kotlin var count should produce definitions, got defs: {:?}", defs);
+        assert!(
+            !defs.is_empty(),
+            "Kotlin var count should produce definitions, got defs: {:?}",
+            defs
+        );
     }
 
     #[test]
@@ -2862,11 +3502,17 @@ end
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Elixir).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"y"), "Elixir y = x + 1 should produce a definition, got defs: {:?}", defs);
+        assert!(
+            defs.contains(&"y"),
+            "Elixir y = x + 1 should produce a definition, got defs: {:?}",
+            defs
+        );
     }
 
     #[test]
@@ -2879,11 +3525,17 @@ def foo(x: Int): Int = {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Scala).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"y"), "Scala val y should be a definition, got defs: {:?}", defs);
+        assert!(
+            defs.contains(&"y"),
+            "Scala val y should be a definition, got defs: {:?}",
+            defs
+        );
     }
 
     #[test]
@@ -2896,12 +3548,22 @@ int foo(int x) {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Cpp).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"y"), "C++ int y should be a definition, got defs: {:?}", defs);
-        assert!(defs.contains(&"x"), "C++ param x should be a definition, got defs: {:?}", defs);
+        assert!(
+            defs.contains(&"y"),
+            "C++ int y should be a definition, got defs: {:?}",
+            defs
+        );
+        assert!(
+            defs.contains(&"x"),
+            "C++ param x should be a definition, got defs: {:?}",
+            defs
+        );
     }
 
     #[test]
@@ -2914,12 +3576,18 @@ function foo($x) {
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Php).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(!defs.is_empty(), "PHP $y = $x + 1 should produce a definition, got defs: {:?}; all refs: {:?}",
-            defs, dfg.refs);
+        assert!(
+            !defs.is_empty(),
+            "PHP $y = $x + 1 should produce a definition, got defs: {:?}; all refs: {:?}",
+            defs,
+            dfg.refs
+        );
     }
 
     #[test]
@@ -2931,13 +3599,18 @@ let foo x =
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Ocaml).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"y") || defs.contains(&"x"),
+        assert!(
+            defs.contains(&"y") || defs.contains(&"x"),
             "OCaml let y = x + 1 should produce definitions, got defs: {:?}; all refs: {:?}",
-            defs, dfg.refs);
+            defs,
+            dfg.refs
+        );
     }
 
     #[test]
@@ -2951,13 +3624,27 @@ def foo(x):
 "#;
         let dfg = get_dfg_context(source, "foo", Language::Python).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"y"), "Python y should be a definition, got defs: {:?}", defs);
-        assert!(defs.contains(&"z"), "Python z should be a definition, got defs: {:?}", defs);
-        assert!(defs.contains(&"x"), "Python param x should be a definition, got defs: {:?}", defs);
+        assert!(
+            defs.contains(&"y"),
+            "Python y should be a definition, got defs: {:?}",
+            defs
+        );
+        assert!(
+            defs.contains(&"z"),
+            "Python z should be a definition, got defs: {:?}",
+            defs
+        );
+        assert!(
+            defs.contains(&"x"),
+            "Python param x should be a definition, got defs: {:?}",
+            defs
+        );
     }
 
     // =========================================================================
@@ -2978,12 +3665,18 @@ def foo(x):
 end"#;
         let dfg = get_dfg_context(source, "foo", Language::Lua).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"y"),
-            "Lua local y should be a definition, got defs: {:?}; all refs: {:?}", defs, dfg.refs);
+        assert!(
+            defs.contains(&"y"),
+            "Lua local y should be a definition, got defs: {:?}; all refs: {:?}",
+            defs,
+            dfg.refs
+        );
     }
 
     #[test]
@@ -2997,12 +3690,18 @@ end"#;
 end"#;
         let dfg = get_dfg_context(source, "foo", Language::Lua).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"z"),
-            "Lua z = ... should be a definition, got defs: {:?}; all refs: {:?}", defs, dfg.refs);
+        assert!(
+            defs.contains(&"z"),
+            "Lua z = ... should be a definition, got defs: {:?}; all refs: {:?}",
+            defs,
+            dfg.refs
+        );
     }
 
     #[test]
@@ -3014,14 +3713,22 @@ end"#;
 end"#;
         let dfg = get_dfg_context(source, "foo", Language::Lua).unwrap();
 
-        let uses: Vec<_> = dfg.refs.iter()
+        let uses: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Use)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(uses.contains(&"x"),
-            "Lua x in `local y = x + 1` should be a use, got uses: {:?}", uses);
-        assert!(uses.contains(&"y"),
-            "Lua y in `return y` should be a use, got uses: {:?}", uses);
+        assert!(
+            uses.contains(&"x"),
+            "Lua x in `local y = x + 1` should be a use, got uses: {:?}",
+            uses
+        );
+        assert!(
+            uses.contains(&"y"),
+            "Lua y in `return y` should be a use, got uses: {:?}",
+            uses
+        );
     }
 
     #[test]
@@ -3032,14 +3739,22 @@ end"#;
 end"#;
         let dfg = get_dfg_context(source, "foo", Language::Lua).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"x"),
-            "Lua param x should be a definition, got defs: {:?}", defs);
-        assert!(defs.contains(&"y"),
-            "Lua param y should be a definition, got defs: {:?}", defs);
+        assert!(
+            defs.contains(&"x"),
+            "Lua param x should be a definition, got defs: {:?}",
+            defs
+        );
+        assert!(
+            defs.contains(&"y"),
+            "Lua param y should be a definition, got defs: {:?}",
+            defs
+        );
     }
 
     // --- Swift ---
@@ -3054,12 +3769,18 @@ end"#;
 }"#;
         let dfg = get_dfg_context(source, "foo", Language::Swift).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"y"),
-            "Swift let y should be a definition, got defs: {:?}; all refs: {:?}", defs, dfg.refs);
+        assert!(
+            defs.contains(&"y"),
+            "Swift let y should be a definition, got defs: {:?}; all refs: {:?}",
+            defs,
+            dfg.refs
+        );
     }
 
     #[test]
@@ -3072,12 +3793,18 @@ end"#;
 }"#;
         let dfg = get_dfg_context(source, "foo", Language::Swift).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| matches!(r.ref_type, RefType::Definition | RefType::Update))
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"z"),
-            "Swift var z should be a definition, got defs: {:?}; all refs: {:?}", defs, dfg.refs);
+        assert!(
+            defs.contains(&"z"),
+            "Swift var z should be a definition, got defs: {:?}; all refs: {:?}",
+            defs,
+            dfg.refs
+        );
     }
 
     #[test]
@@ -3091,13 +3818,20 @@ end"#;
 }"#;
         let dfg = get_dfg_context(source, "foo", Language::Swift).unwrap();
 
-        let z_defs: Vec<_> = dfg.refs.iter()
-            .filter(|r| r.name == "z" && matches!(r.ref_type, RefType::Definition | RefType::Update))
+        let z_defs: Vec<_> = dfg
+            .refs
+            .iter()
+            .filter(|r| {
+                r.name == "z" && matches!(r.ref_type, RefType::Definition | RefType::Update)
+            })
             .collect();
         // At minimum: var z = x (def) and z = z + 1 (def)
-        assert!(z_defs.len() >= 2,
+        assert!(
+            z_defs.len() >= 2,
             "Swift z should have at least 2 def/update refs (var z = x; z = z + 1), got {}: {:?}",
-            z_defs.len(), z_defs);
+            z_defs.len(),
+            z_defs
+        );
     }
 
     #[test]
@@ -3109,14 +3843,22 @@ end"#;
 }"#;
         let dfg = get_dfg_context(source, "foo", Language::Swift).unwrap();
 
-        let uses: Vec<_> = dfg.refs.iter()
+        let uses: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Use)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(uses.contains(&"x"),
-            "Swift x in `let y = x + 1` should be a use, got uses: {:?}", uses);
-        assert!(uses.contains(&"y"),
-            "Swift y in `return y` should be a use, got uses: {:?}", uses);
+        assert!(
+            uses.contains(&"x"),
+            "Swift x in `let y = x + 1` should be a use, got uses: {:?}",
+            uses
+        );
+        assert!(
+            uses.contains(&"y"),
+            "Swift y in `return y` should be a use, got uses: {:?}",
+            uses
+        );
     }
 
     #[test]
@@ -3127,13 +3869,21 @@ end"#;
 }"#;
         let dfg = get_dfg_context(source, "foo", Language::Swift).unwrap();
 
-        let defs: Vec<_> = dfg.refs.iter()
+        let defs: Vec<_> = dfg
+            .refs
+            .iter()
             .filter(|r| r.ref_type == RefType::Definition)
             .map(|r| r.name.as_str())
             .collect();
-        assert!(defs.contains(&"x"),
-            "Swift param x should be a definition, got defs: {:?}", defs);
-        assert!(defs.contains(&"y"),
-            "Swift param y should be a definition, got defs: {:?}", defs);
+        assert!(
+            defs.contains(&"x"),
+            "Swift param x should be a definition, got defs: {:?}",
+            defs
+        );
+        assert!(
+            defs.contains(&"y"),
+            "Swift param y should be a definition, got defs: {:?}",
+            defs
+        );
     }
 }

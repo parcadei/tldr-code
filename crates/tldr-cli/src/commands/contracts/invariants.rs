@@ -31,9 +31,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::Args;
+use tldr_core::walker::walk_project;
 use tree_sitter::{Node, Parser};
 use tree_sitter_python::LANGUAGE as PYTHON_LANGUAGE;
-use walkdir::WalkDir;
 
 use crate::output::{OutputFormat, OutputWriter};
 
@@ -302,10 +302,8 @@ fn collect_observations(
         observations.extend(file_obs);
     } else {
         // Directory: scan all test_*.py files
-        for entry in WalkDir::new(test_path)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
+        for entry in walk_project(test_path)
+            .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
         {
             let path = entry.path();
             let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
@@ -389,11 +387,7 @@ fn extract_observations_recursive(
         "assert_statement" => {
             // Extract observations from assert statements
             if !current_test_function.is_empty() {
-                if let Some(obs) = extract_observation_from_assert(
-                    node,
-                    source,
-                    function_filter,
-                ) {
+                if let Some(obs) = extract_observation_from_assert(node, source, function_filter) {
                     observations.push(obs);
                 }
             }
@@ -401,11 +395,7 @@ fn extract_observations_recursive(
         "call" => {
             // Also look at standalone calls in test functions
             if !current_test_function.is_empty() {
-                if let Some(obs) = extract_observation_from_call(
-                    node,
-                    source,
-                    function_filter,
-                ) {
+                if let Some(obs) = extract_observation_from_call(node, source, function_filter) {
                     observations.push(obs);
                 }
             }

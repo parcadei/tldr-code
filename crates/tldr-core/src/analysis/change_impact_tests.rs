@@ -32,7 +32,6 @@
 //!
 //! Reference: session6-spec.md
 
-
 // =============================================================================
 // Test Fixture Setup Module
 // =============================================================================
@@ -960,7 +959,6 @@ mod test_function_tests {
 
 #[cfg(test)]
 mod output_format_tests {
-    
 
     /// Test pytest format output
     /// Contract: Space-separated test file paths

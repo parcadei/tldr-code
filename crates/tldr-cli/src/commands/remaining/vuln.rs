@@ -33,8 +33,9 @@ use std::time::Instant;
 use anyhow::Result;
 use clap::Args;
 use serde_json::{json, Value};
+use tldr_core::walker::ProjectWalker;
+use tldr_core::Language;
 use tree_sitter::{Node, Parser};
-use walkdir::WalkDir;
 
 use super::error::RemainingError;
 use super::types::{Severity, TaintFlow, VulnFinding, VulnReport, VulnSummary, VulnType};
@@ -74,6 +75,10 @@ pub struct VulnArgs {
     /// File or directory to analyze
     pub path: PathBuf,
 
+    /// Programming language to filter by (auto-detected if omitted)
+    #[arg(long, short = 'l')]
+    pub lang: Option<Language>,
+
     /// Filter by minimum severity level
     #[arg(long)]
     pub severity: Option<Severity>,
@@ -89,6 +94,10 @@ pub struct VulnArgs {
     /// Output file (optional, stdout if not specified)
     #[arg(long, short = 'O')]
     pub output: Option<PathBuf>,
+
+    /// Walk vendored/build dirs (node_modules, target, dist, etc.) that would normally be skipped.
+    #[arg(long)]
+    pub no_default_ignore: bool,
 }
 
 // =============================================================================
@@ -390,7 +399,7 @@ impl VulnArgs {
         }
 
         // Collect files to analyze
-        let files = collect_files(&self.path)?;
+        let files = collect_files(&self.path, self.lang, self.no_default_ignore)?;
 
         // Analyze all files
         let mut all_findings: Vec<VulnFinding> = Vec::new();
@@ -466,7 +475,11 @@ impl VulnArgs {
 // =============================================================================
 
 /// Collect supported source files to analyze.
-fn collect_files(path: &Path) -> Result<Vec<PathBuf>, RemainingError> {
+fn collect_files(
+    path: &Path,
+    lang: Option<Language>,
+    no_default_ignore: bool,
+) -> Result<Vec<PathBuf>, RemainingError> {
     let mut files = Vec::new();
 
     if path.is_file() {
@@ -477,17 +490,17 @@ fn collect_files(path: &Path) -> Result<Vec<PathBuf>, RemainingError> {
         }
         files.push(path.to_path_buf());
     } else if path.is_dir() {
-        // Directory - walk and collect supported source files
-        for entry in WalkDir::new(path)
-            .max_depth(10)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
+        // Directory - walk and collect supported source files.
+        let mut walker = ProjectWalker::new(path).max_depth(10);
+        if no_default_ignore {
+            walker = walker.no_default_ignore();
+        }
+        for entry in walker.iter() {
             if files.len() >= MAX_DIRECTORY_FILES as usize {
                 break;
             }
             let entry_path = entry.path();
-            if entry_path.is_file() && is_supported_source_file(entry_path) {
+            if entry_path.is_file() && is_supported_source_file(entry_path, lang) {
                 // Check file size
                 if let Ok(metadata) = fs::metadata(entry_path) {
                     if metadata.len() <= MAX_FILE_SIZE {
@@ -501,8 +514,40 @@ fn collect_files(path: &Path) -> Result<Vec<PathBuf>, RemainingError> {
     Ok(files)
 }
 
-fn is_supported_source_file(path: &Path) -> bool {
-    matches!(path.extension().and_then(|e| e.to_str()), Some("py" | "rs"))
+/// Check whether `path` is a source file the vuln scanner should analyze.
+///
+/// With `lang = Some(L)`, only files matching that language's extensions
+/// are accepted. With `lang = None`, we fall back to the historical
+/// behavior of `py | rs` (the extensions the taint engine natively
+/// supports before multi-language dispatch).
+fn is_supported_source_file(path: &Path, lang: Option<Language>) -> bool {
+    let ext = match path.extension().and_then(|e| e.to_str()) {
+        Some(e) => e,
+        None => return false,
+    };
+    match lang {
+        Some(Language::TypeScript) => matches!(ext, "ts" | "tsx"),
+        Some(Language::JavaScript) => matches!(ext, "js" | "mjs" | "cjs" | "jsx"),
+        Some(Language::Python) => ext == "py",
+        Some(Language::Rust) => ext == "rs",
+        Some(Language::Go) => ext == "go",
+        Some(Language::Java) => ext == "java",
+        Some(Language::C) => matches!(ext, "c" | "h"),
+        Some(Language::Cpp) => matches!(ext, "cpp" | "cc" | "cxx" | "hpp" | "hh" | "hxx"),
+        Some(Language::CSharp) => ext == "cs",
+        Some(Language::Ruby) => ext == "rb",
+        Some(Language::Php) => ext == "php",
+        Some(Language::Kotlin) => matches!(ext, "kt" | "kts"),
+        Some(Language::Swift) => ext == "swift",
+        Some(Language::Scala) => ext == "scala",
+        Some(Language::Elixir) => matches!(ext, "ex" | "exs"),
+        Some(Language::Lua) => ext == "lua",
+        Some(Language::Luau) => ext == "luau",
+        Some(Language::Ocaml) => matches!(ext, "ml" | "mli"),
+        // No --lang: preserve historical behavior of scanning py + rs
+        // (the two languages the taint analyzer natively handles).
+        None => matches!(ext, "py" | "rs"),
+    }
 }
 
 // =============================================================================
@@ -517,64 +562,61 @@ fn analyze_file(path: &Path) -> Result<Vec<VulnFinding>, RemainingError> {
     }
     if matches!(path.extension().and_then(|e| e.to_str()), Some("py")) {
         return analyze_python_file(path, &source);
-}
-// For all other languages (Go, Java, JS, TS, C, C++, Ruby, PHP, etc.),
-// use tldr-core's multi-language vulnerability scanner
-match tldr_core::security::vuln::scan_vulnerabilities(path, None, None) {
-    Ok(report) => {
-        let mut findings = Vec::new();
-        for f in report.findings {
-            let vuln_type = match format!("{:?}", f.vuln_type).as_str() {
-                "SqlInjection" => VulnType::SqlInjection,
-                "CommandInjection" => VulnType::CommandInjection,
-                "Xss" => VulnType::Xss,
-                "PathTraversal" => VulnType::PathTraversal,
-                _ => VulnType::SqlInjection,
-            };
-            let severity = match f.severity.to_uppercase().as_str() {
-                "CRITICAL" => Severity::Critical,
-                "HIGH" => Severity::High,
-                "MEDIUM" => Severity::Medium,
-                "LOW" => Severity::Low,
-                _ => Severity::Medium,
-            };
-            let file_str = f.file.display().to_string();
-            findings.push(VulnFinding {
-                vuln_type,
-                severity,
-                cwe_id: f.cwe_id.unwrap_or_default(),
-                title: format!("{:?}", f.vuln_type),
-                description: format!(
-                    "{} with unsanitized input",
-                    f.sink.sink_type
-                ),
-                file: file_str.clone(),
-                line: f.sink.line,
-                column: 0,
-                taint_flow: vec![
-                    TaintFlow {
-                        file: file_str.clone(),
-                        line: f.source.line,
-                        column: 0,
-                        code_snippet: f.source.expression.clone(),
-                        description: format!("Source: {}", f.source.source_type),
-                    },
-                    TaintFlow {
-                        file: file_str,
-                        line: f.sink.line,
-                        column: 0,
-                        code_snippet: f.sink.expression.clone(),
-                        description: format!("Sink: {}", f.sink.sink_type),
-                    },
-                ],
-                remediation: f.remediation.clone(),
-                confidence: 0.85,
-            });
-        }
-        Ok(findings)
     }
-    Err(_) => Ok(Vec::new()),
-}
+    // For all other languages (Go, Java, JS, TS, C, C++, Ruby, PHP, etc.),
+    // use tldr-core's multi-language vulnerability scanner
+    match tldr_core::security::vuln::scan_vulnerabilities(path, None, None) {
+        Ok(report) => {
+            let mut findings = Vec::new();
+            for f in report.findings {
+                let vuln_type = match format!("{:?}", f.vuln_type).as_str() {
+                    "SqlInjection" => VulnType::SqlInjection,
+                    "CommandInjection" => VulnType::CommandInjection,
+                    "Xss" => VulnType::Xss,
+                    "PathTraversal" => VulnType::PathTraversal,
+                    _ => VulnType::SqlInjection,
+                };
+                let severity = match f.severity.to_uppercase().as_str() {
+                    "CRITICAL" => Severity::Critical,
+                    "HIGH" => Severity::High,
+                    "MEDIUM" => Severity::Medium,
+                    "LOW" => Severity::Low,
+                    _ => Severity::Medium,
+                };
+                let file_str = f.file.display().to_string();
+                findings.push(VulnFinding {
+                    vuln_type,
+                    severity,
+                    cwe_id: f.cwe_id.unwrap_or_default(),
+                    title: format!("{:?}", f.vuln_type),
+                    description: format!("{} with unsanitized input", f.sink.sink_type),
+                    file: file_str.clone(),
+                    line: f.sink.line,
+                    column: 0,
+                    taint_flow: vec![
+                        TaintFlow {
+                            file: file_str.clone(),
+                            line: f.source.line,
+                            column: 0,
+                            code_snippet: f.source.expression.clone(),
+                            description: format!("Source: {}", f.source.source_type),
+                        },
+                        TaintFlow {
+                            file: file_str,
+                            line: f.sink.line,
+                            column: 0,
+                            code_snippet: f.sink.expression.clone(),
+                            description: format!("Sink: {}", f.sink.sink_type),
+                        },
+                    ],
+                    remediation: f.remediation.clone(),
+                    confidence: 0.85,
+                });
+            }
+            Ok(findings)
+        }
+        Err(_) => Ok(Vec::new()),
+    }
 }
 
 fn analyze_python_file(path: &Path, source: &str) -> Result<Vec<VulnFinding>, RemainingError> {
@@ -637,7 +679,8 @@ fn analyze_rust_file(path: &Path, source: &str) -> Vec<VulnFinding> {
                 RustFindingMeta {
                     cwe_id: "CWE-119",
                     title: "Risky transmute Usage",
-                    description: "std::mem::transmute can violate type and memory safety guarantees",
+                    description:
+                        "std::mem::transmute can violate type and memory safety guarantees",
                 },
                 RustFindingLocation {
                     file: &file_path,
@@ -660,7 +703,8 @@ fn analyze_rust_file(path: &Path, source: &str) -> Vec<VulnFinding> {
                 RustFindingMeta {
                     cwe_id: "CWE-119",
                     title: "Raw Pointer Operation",
-                    description: "raw pointer operation detected; verify lifetimes, aliasing, and bounds",
+                    description:
+                        "raw pointer operation detected; verify lifetimes, aliasing, and bounds",
                 },
                 RustFindingLocation {
                     file: &file_path,
@@ -701,7 +745,8 @@ fn analyze_rust_file(path: &Path, source: &str) -> Vec<VulnFinding> {
                 RustFindingMeta {
                     cwe_id: "CWE-89",
                     title: "SQL String Interpolation",
-                    description: "SQL query appears to be built via string formatting/interpolation",
+                    description:
+                        "SQL query appears to be built via string formatting/interpolation",
                 },
                 RustFindingLocation {
                     file: &file_path,
@@ -723,7 +768,8 @@ fn analyze_rust_file(path: &Path, source: &str) -> Vec<VulnFinding> {
                 RustFindingMeta {
                     cwe_id: "CWE-20",
                     title: "Unchecked Byte/String Conversion",
-                    description: "unchecked UTF-8 or byte indexing detected without visible validation",
+                    description:
+                        "unchecked UTF-8 or byte indexing detected without visible validation",
                 },
                 RustFindingLocation {
                     file: &file_path,
@@ -1775,7 +1821,7 @@ mod tests {
         std::fs::write(temp.path().join("b.rs"), "fn main() {}").unwrap();
         std::fs::write(temp.path().join("c.txt"), "ignore").unwrap();
 
-        let files = collect_files(temp.path()).unwrap();
+        let files = collect_files(temp.path(), None, false).unwrap();
         assert!(files.iter().any(|f| f.ends_with("a.py")));
         assert!(files.iter().any(|f| f.ends_with("b.rs")));
         assert!(!files.iter().any(|f| f.ends_with("c.txt")));

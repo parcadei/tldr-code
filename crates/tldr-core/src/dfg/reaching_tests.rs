@@ -22,15 +22,9 @@ use crate::types::{BlockType, CfgBlock, CfgEdge, CfgInfo, EdgeType, RefType, Var
 
 // Import the actual implementations from reaching.rs
 use super::reaching::{
-    build_def_use_chains,
-    build_reaching_defs_report,
-    build_use_def_chains,
-    compute_reaching_definitions,
-    detect_uninitialized as detect_uninitialized_with_params,
-    detect_uninitialized_simple,
-    ReachingDefinitions,
-    ReachingDefsReport,
-    UninitSeverity,
+    build_def_use_chains, build_reaching_defs_report, build_use_def_chains,
+    compute_reaching_definitions, detect_uninitialized as detect_uninitialized_with_params,
+    detect_uninitialized_simple, ReachingDefinitions, ReachingDefsReport, UninitSeverity,
     UninitializedUse,
 };
 

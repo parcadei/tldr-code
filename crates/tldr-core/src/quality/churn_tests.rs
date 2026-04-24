@@ -47,9 +47,7 @@ pub mod fixtures {
                 .status;
 
             if !status.success() {
-                return Err(std::io::Error::other(
-                    "Failed to initialize git repo",
-                ));
+                return Err(std::io::Error::other("Failed to initialize git repo"));
             }
 
             // Configure git user for commits
@@ -92,9 +90,7 @@ pub mod fixtures {
                 .status;
 
             if !status.success() {
-                return Err(std::io::Error::other(
-                    "Failed to create shallow clone",
-                ));
+                return Err(std::io::Error::other("Failed to create shallow clone"));
             }
 
             Ok(Self { dir })
@@ -137,9 +133,7 @@ pub mod fixtures {
                 .status;
 
             if !status.success() {
-                return Err(std::io::Error::other(
-                    "Failed to commit",
-                ));
+                return Err(std::io::Error::other("Failed to commit"));
             }
             Ok(())
         }
@@ -161,9 +155,7 @@ pub mod fixtures {
                 .status;
 
             if !status.success() {
-                return Err(std::io::Error::other(
-                    "Failed to commit as author",
-                ));
+                return Err(std::io::Error::other("Failed to commit as author"));
             }
             Ok(())
         }
@@ -728,7 +720,7 @@ mod integration_tests {
 #[cfg(test)]
 mod cli_tests {
     use super::fixtures::TestRepo;
-    
+
     use serde_json::Value;
 
     /// Test 15: JSON output format

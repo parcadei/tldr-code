@@ -26,10 +26,7 @@ pub fn is_shallow_clone(path: &Path) -> bool {
         .arg("--is-shallow-repository")
         .current_dir(path)
         .output()
-        .map(|o| {
-            o.status.success()
-                && String::from_utf8_lossy(&o.stdout).trim() == "true"
-        })
+        .map(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).trim() == "true")
         .unwrap_or(false)
 }
 
@@ -53,16 +50,13 @@ pub fn git_log(
         cmd.arg(arg);
     }
 
-    let output = cmd.output().map_err(|e| {
-        TldrError::GitError(format!("Failed to run git log: {}", e))
-    })?;
+    let output = cmd
+        .output()
+        .map_err(|e| TldrError::GitError(format!("Failed to run git log: {}", e)))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(TldrError::GitError(format!(
-            "git log failed: {}",
-            stderr
-        )));
+        return Err(TldrError::GitError(format!("git log failed: {}", stderr)));
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -79,9 +73,7 @@ pub fn git_log_numstat(path: &Path, since_days: u32) -> TldrResult<String> {
         .arg("--format=")
         .current_dir(path)
         .output()
-        .map_err(|e| {
-            TldrError::GitError(format!("Failed to run git log: {}", e))
-        })?;
+        .map_err(|e| TldrError::GitError(format!("Failed to run git log: {}", e)))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

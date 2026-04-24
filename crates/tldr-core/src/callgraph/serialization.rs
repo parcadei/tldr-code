@@ -23,8 +23,7 @@ use std::io;
 use std::path::PathBuf;
 
 use super::cross_file_types::{
-    CallGraphIR, CallSite, ClassDef, FileIR, FuncDef, ImportDef,
-    ProjectCallGraphV2, VarType,
+    CallGraphIR, CallSite, ClassDef, FileIR, FuncDef, ImportDef, ProjectCallGraphV2, VarType,
 };
 
 // =============================================================================

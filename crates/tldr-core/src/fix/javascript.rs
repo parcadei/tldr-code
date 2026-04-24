@@ -36,7 +36,10 @@ static KNOWN_MODULES: &[(&str, &str)] = &[
     ("util", "const util = require('util');"),
     ("stream", "const stream = require('stream');"),
     ("events", "const events = require('events');"),
-    ("child_process", "const child_process = require('child_process');"),
+    (
+        "child_process",
+        "const child_process = require('child_process');",
+    ),
     ("buffer", "const { Buffer } = require('buffer');"),
     ("Buffer", "const { Buffer } = require('buffer');"),
     ("querystring", "const querystring = require('querystring');"),
@@ -47,7 +50,10 @@ static KNOWN_MODULES: &[(&str, &str)] = &[
     ("tls", "const tls = require('tls');"),
     ("readline", "const readline = require('readline');"),
     ("cluster", "const cluster = require('cluster');"),
-    ("worker_threads", "const { Worker } = require('worker_threads');"),
+    (
+        "worker_threads",
+        "const { Worker } = require('worker_threads');",
+    ),
     ("process", "const process = require('process');"),
     ("timers", "const timers = require('timers');"),
     // Common npm packages
@@ -77,13 +83,33 @@ static KNOWN_MODULES: &[(&str, &str)] = &[
 ///
 /// Maps a misused name to (correct_access, description).
 static PROPERTY_CORRECTIONS: &[(&str, &str, &str)] = &[
-    ("length", ".length", "Access as a property, not a function call"),
+    (
+        "length",
+        ".length",
+        "Access as a property, not a function call",
+    ),
     ("size", ".size", "Access as a property, not a function call"),
     ("name", ".name", "Access as a property, not a function call"),
-    ("message", ".message", "Access as a property, not a function call"),
-    ("constructor", ".constructor", "Access as a property, not a function call"),
-    ("prototype", ".prototype", "Access as a property, not a function call"),
-    ("__proto__", ".__proto__", "Access as a property, not a function call"),
+    (
+        "message",
+        ".message",
+        "Access as a property, not a function call",
+    ),
+    (
+        "constructor",
+        ".constructor",
+        "Access as a property, not a function call",
+    ),
+    (
+        "prototype",
+        ".prototype",
+        "Access as a property, not a function call",
+    ),
+    (
+        "__proto__",
+        ".__proto__",
+        "Access as a property, not a function call",
+    ),
     ("then", ".then()", "Call as a method on a Promise"),
     ("catch", ".catch()", "Call as a method on a Promise"),
     ("toString", ".toString()", "Call toString as a method"),
@@ -112,9 +138,7 @@ pub fn diagnose_javascript(
             // Dispatch to the correct TypeError sub-analyzer
             if msg.contains("is not a function") {
                 analyze_type_error_not_function(error, source)
-            } else if msg.contains("Cannot read propert")
-                || msg.contains("cannot read propert")
-            {
+            } else if msg.contains("Cannot read propert") || msg.contains("cannot read propert") {
                 analyze_type_error_undefined(error, source)
             } else {
                 // Generic TypeError -- not one of our specific patterns
@@ -130,7 +154,10 @@ pub fn diagnose_javascript(
 pub fn has_analyzer(error_type: &str) -> bool {
     matches!(
         error_type,
-        "ReferenceError" | "TypeError:not_a_function" | "TypeError:undefined_property" | "SyntaxError"
+        "ReferenceError"
+            | "TypeError:not_a_function"
+            | "TypeError:undefined_property"
+            | "SyntaxError"
     )
 }
 
@@ -206,9 +233,7 @@ fn analyze_type_error_not_function(error: &ParsedError, source: &str) -> Option<
     let name = extract_not_a_function_name(&error.message)?;
 
     // Check if it's a known property-vs-method confusion
-    let correction = PROPERTY_CORRECTIONS
-        .iter()
-        .find(|(n, _, _)| *n == name);
+    let correction = PROPERTY_CORRECTIONS.iter().find(|(n, _, _)| *n == name);
 
     if let Some((_prop_name, correct_access, description)) = correction {
         if let Some(line_no) = error.line {
@@ -225,10 +250,7 @@ fn analyze_type_error_not_function(error: &ParsedError, source: &str) -> Option<
                     return Some(Diagnosis {
                         language: "javascript".to_string(),
                         error_code: "TypeError".to_string(),
-                        message: format!(
-                            "'{}' is not a function -- {}",
-                            name, description
-                        ),
+                        message: format!("'{}' is not a function -- {}", name, description),
                         location: Some(FixLocation {
                             file: error.file.clone().unwrap_or_default(),
                             line: line_no,
@@ -437,11 +459,7 @@ fn analyze_syntax_error(error: &ParsedError, source: &str) -> Option<Diagnosis> 
 /// - Unexpected `)` -> mismatched parentheses
 /// - Unexpected `]` -> mismatched brackets
 /// - Unexpected `,` at start of object -> trailing comma in previous line
-fn analyze_unexpected_token(
-    error: &ParsedError,
-    source: &str,
-    token: &str,
-) -> Option<Diagnosis> {
+fn analyze_unexpected_token(error: &ParsedError, source: &str, token: &str) -> Option<Diagnosis> {
     if let Some(line_no) = error.line {
         let lines: Vec<&str> = source.lines().collect();
         if line_no > 0 && line_no <= lines.len() {
@@ -531,7 +549,10 @@ fn analyze_unexpected_token(
     Some(Diagnosis {
         language: "javascript".to_string(),
         error_code: "SyntaxError".to_string(),
-        message: format!("Unexpected token '{}' -- review syntax near error location", token),
+        message: format!(
+            "Unexpected token '{}' -- review syntax near error location",
+            token
+        ),
         location: error.line.map(|l| FixLocation {
             file: error.file.clone().unwrap_or_default(),
             line: l,
@@ -681,10 +702,7 @@ fn analyze_missing_initializer(error: &ParsedError, source: &str) -> Option<Diag
                     .trim()
                     .to_string();
 
-                let new_line = old_line.replace(
-                    trimmed,
-                    &format!("let {};", var_name),
-                );
+                let new_line = old_line.replace(trimmed, &format!("let {};", var_name));
 
                 return Some(Diagnosis {
                     language: "javascript".to_string(),
@@ -719,7 +737,8 @@ fn analyze_missing_initializer(error: &ParsedError, source: &str) -> Option<Diag
     Some(Diagnosis {
         language: "javascript".to_string(),
         error_code: "SyntaxError".to_string(),
-        message: "Missing initializer in const declaration -- add `= value` or use `let`".to_string(),
+        message: "Missing initializer in const declaration -- add `= value` or use `let`"
+            .to_string(),
         location: error.line.map(|l| FixLocation {
             file: error.file.clone().unwrap_or_default(),
             line: l,
@@ -983,7 +1002,9 @@ mod tests {
         let d = diag.unwrap();
         assert_eq!(d.confidence, FixConfidence::Low);
         assert!(d.fix.is_some());
-        assert!(d.fix.unwrap().edits[0].new_text.contains("require('somelib')"));
+        assert!(d.fix.unwrap().edits[0]
+            .new_text
+            .contains("require('somelib')"));
     }
 
     #[test]
@@ -1446,6 +1467,9 @@ mod tests {
     fn test_inject_require_already_present() {
         let source = "const fs = require('fs');\nconst data = fs.readFileSync('file.txt');\n";
         let result = inject_require_statement(source, "const fs = require('fs');");
-        assert!(result.is_none(), "Should return None when require already present");
+        assert!(
+            result.is_none(),
+            "Should return None when require already present"
+        );
     }
 }

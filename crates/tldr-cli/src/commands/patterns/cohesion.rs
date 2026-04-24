@@ -34,9 +34,9 @@ use anyhow::Result;
 use clap::{Args, ValueEnum};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
+use tldr_core::walker::walk_project;
 use tree_sitter::{Node, Parser, Tree};
 use tree_sitter_python::LANGUAGE as PYTHON_LANGUAGE;
-use walkdir::WalkDir;
 
 use tldr_core::quality::cohesion as core_cohesion;
 use tldr_core::types::Language;
@@ -405,11 +405,7 @@ fn analyze_directory(
     let mut all_classes = Vec::new();
     let mut file_count = 0u32;
 
-    for entry in WalkDir::new(dir)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in walk_project(dir) {
         // Check timeout
         if start.elapsed() > timeout {
             return Err(PatternsError::Timeout {

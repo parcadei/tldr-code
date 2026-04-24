@@ -37,7 +37,6 @@
 //!
 //! Reference: session7-spec.md
 
-
 // =============================================================================
 // Test Fixture Setup Module
 // =============================================================================
@@ -540,7 +539,10 @@ mod import_graph_internal_tests {
             .add_file("src/db.py", PYTHON_DB_IMPORTS_UTILS)
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -693,7 +695,10 @@ mod import_graph_internal_tests {
     fn test_empty_directory() {
         let test_dir = TestDir::new().unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -717,7 +722,10 @@ mod import_graph_internal_tests {
             .add_file("src/main.py", "def main():\n    print('hello')")
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -762,7 +770,6 @@ mod import_graph_internal_tests {
 mod circular_dependency_tests {
     use super::fixtures::*;
     use crate::analysis::deps::analyze_dependencies;
-    
 
     /// Test simple cycle detection: A -> B -> A
     /// Contract: Detects 2-node cycle with correct nodes
@@ -772,7 +779,10 @@ mod circular_dependency_tests {
         test_dir.add_file("src/cycle_a.py", PYTHON_CYCLE_A).unwrap();
         test_dir.add_file("src/cycle_b.py", PYTHON_CYCLE_B).unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -804,7 +814,10 @@ mod circular_dependency_tests {
             .add_file("src/cycle_c.py", PYTHON_CYCLE_TRIANGLE_C)
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -843,7 +856,10 @@ mod circular_dependency_tests {
             )
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -870,7 +886,10 @@ mod circular_dependency_tests {
             .unwrap();
 
         // DAG structure: auth -> {utils, db}, db -> utils
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -894,7 +913,10 @@ mod circular_dependency_tests {
             .add_file("src/self_import.py", PYTHON_SELF_IMPORT)
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -929,7 +951,10 @@ mod circular_dependency_tests {
             .add_file("src/cyc_e.py", "from cyc_a import f\ndef f(): return f()")
             .unwrap();
 
-        let mut options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let mut options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
         options.max_cycle_length = Some(3); // Only report cycles <= 3 nodes
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
@@ -951,7 +976,10 @@ mod circular_dependency_tests {
         test_dir.add_file("src/cycle_a.ts", TS_CYCLE_A).unwrap();
         test_dir.add_file("src/cycle_b.ts", TS_CYCLE_B).unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("typescript".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("typescript".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -974,7 +1002,10 @@ mod circular_dependency_tests {
         test_dir.add_file("src/cycle_a.rs", RUST_CYCLE_A).unwrap();
         test_dir.add_file("src/cycle_b.rs", RUST_CYCLE_B).unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("rust".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("rust".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -1087,7 +1118,10 @@ mod external_internal_tests {
             .add_file("src/db.py", "def query(sql): pass")
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -1271,7 +1305,10 @@ mod external_internal_tests {
             .unwrap();
 
         // Test with include_external = false (default)
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
         // include_external defaults to false
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
@@ -1337,7 +1374,6 @@ mod external_internal_tests {
 mod granularity_tests {
     use super::fixtures::*;
     use crate::analysis::deps::analyze_dependencies;
-    
 
     /// Test default file-level granularity
     /// Contract: Each source file is a separate node
@@ -1354,7 +1390,10 @@ mod granularity_tests {
             .add_file("pkg/module_b.py", PYTHON_PKG_MODULE_B)
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -1402,7 +1441,10 @@ mod granularity_tests {
             .add_file("other/helper.py", "from pkg import func_a")
             .unwrap();
 
-        let mut options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let mut options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
         options.collapse_packages = true;
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
@@ -1458,7 +1500,10 @@ mod granularity_tests {
             .add_file("main.py", "from pkg import func_a")
             .unwrap();
 
-        let mut options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let mut options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
         options.collapse_packages = true;
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
@@ -1495,7 +1540,10 @@ mod granularity_tests {
             .add_file("pkg/module_b.py", PYTHON_PKG_MODULE_B)
             .unwrap();
 
-        let mut options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let mut options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
         options.collapse_packages = true;
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
@@ -1540,7 +1588,10 @@ mod transitive_deps_tests {
         test_dir.add_file("src/chain_d.py", PYTHON_CHAIN_D).unwrap();
         test_dir.add_file("src/chain_e.py", PYTHON_CHAIN_E).unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -1576,7 +1627,10 @@ mod transitive_deps_tests {
         test_dir.add_file("src/chain_d.py", PYTHON_CHAIN_D).unwrap();
         test_dir.add_file("src/chain_e.py", PYTHON_CHAIN_E).unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -1641,7 +1695,10 @@ mod transitive_deps_tests {
         test_dir.add_file("src/chain_d.py", PYTHON_CHAIN_D).unwrap();
         test_dir.add_file("src/chain_e.py", PYTHON_CHAIN_E).unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -1665,7 +1722,10 @@ mod transitive_deps_tests {
         test_dir.add_file("src/chain_d.py", PYTHON_CHAIN_D).unwrap();
         test_dir.add_file("src/chain_e.py", PYTHON_CHAIN_E).unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -1694,7 +1754,10 @@ mod transitive_deps_tests {
         test_dir.add_file("src/chain_d.py", PYTHON_CHAIN_D).unwrap();
         test_dir.add_file("src/chain_e.py", PYTHON_CHAIN_E).unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -1879,9 +1942,7 @@ def get_path():
 #[cfg(test)]
 mod visualization_tests {
     use super::fixtures::*;
-    use crate::analysis::deps::{
-        analyze_dependencies, format_deps_dot, format_deps_text,
-    };
+    use crate::analysis::deps::{analyze_dependencies, format_deps_dot, format_deps_text};
 
     /// Test valid DOT format output
     /// Contract: Output starts with "digraph", has nodes and edges
@@ -1898,7 +1959,10 @@ mod visualization_tests {
             .add_file("src/db.py", "def query(sql): pass")
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
         let dot = format_deps_dot(&report);
@@ -1931,7 +1995,10 @@ mod visualization_tests {
             .add_file("src/deeply/nested/db.py", "def query(sql): pass")
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
         let dot = format_deps_dot(&report);
@@ -1959,7 +2026,10 @@ mod visualization_tests {
             .unwrap();
         test_dir.add_file("src/b.py", "def x(): pass").unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
         let dot = format_deps_dot(&report);
@@ -1985,7 +2055,10 @@ mod visualization_tests {
             .add_file("src/no_cycle.py", PYTHON_UTILS_NO_DEPS)
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -2027,7 +2100,10 @@ mod visualization_tests {
             .add_file("src/db.py", "def query(sql): pass")
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
         let dot = format_deps_dot(&report);
@@ -2055,7 +2131,10 @@ mod visualization_tests {
             .add_file("src/db.py", PYTHON_DB_IMPORTS_UTILS)
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
         let text = format_deps_text(&report);
@@ -2107,7 +2186,10 @@ mod visualization_tests {
         test_dir.add_file("src/cycle_a.py", PYTHON_CYCLE_A).unwrap();
         test_dir.add_file("src/cycle_b.py", PYTHON_CYCLE_B).unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
         let text = format_deps_text(&report);
@@ -2149,7 +2231,10 @@ mod visualization_tests {
             .add_file("src/db.py", PYTHON_DB_IMPORTS_UTILS)
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("python".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("python".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
         let text = format_deps_text(&report);
@@ -2257,7 +2342,10 @@ func Query(sql string) interface{} {
             .unwrap();
         test_dir.add_file("db/db.go", GO_DB_STORE).unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("go".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("go".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -2320,7 +2408,10 @@ func Query(sql string) interface{} {
             .unwrap();
         test_dir.add_file("utils/extra.go", GO_UTILS_EXTRA).unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("go".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("go".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -2471,7 +2562,10 @@ func GenDocs() string {
             )
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("go".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("go".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -2893,7 +2987,10 @@ mod java_deps_tests {
             .add_file("com/google/common/base/Splitter.java", JAVA_SPLITTER)
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("java".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("java".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -2962,7 +3059,10 @@ mod java_deps_tests {
             .add_file("com/google/common/collect/Lists.java", JAVA_WILDCARD_IMPORT)
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("java".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("java".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -2994,7 +3094,10 @@ mod java_deps_tests {
             .add_file("com/google/common/collect/Sets.java", JAVA_STATIC_IMPORT)
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("java".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("java".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -3058,7 +3161,10 @@ mod java_deps_tests {
             .add_file("com/example/app/App.java", JAVA_EXTERNAL_IMPORTS)
             .unwrap();
 
-        let mut options = crate::analysis::deps::DepsOptions { language: Some("java".to_string()), ..Default::default() };
+        let mut options = crate::analysis::deps::DepsOptions {
+            language: Some("java".to_string()),
+            ..Default::default()
+        };
         options.include_external = true;
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
@@ -3089,7 +3195,10 @@ mod java_deps_tests {
             .add_file("com/example/util/Constants.java", JAVA_NO_DEPS)
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("java".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("java".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 
@@ -3111,7 +3220,10 @@ mod java_deps_tests {
             .add_file("com/example/cycle/CycleB.java", JAVA_CYCLE_B)
             .unwrap();
 
-        let options = crate::analysis::deps::DepsOptions { language: Some("java".to_string()), ..Default::default() };
+        let options = crate::analysis::deps::DepsOptions {
+            language: Some("java".to_string()),
+            ..Default::default()
+        };
 
         let report = analyze_dependencies(test_dir.path(), &options).unwrap();
 

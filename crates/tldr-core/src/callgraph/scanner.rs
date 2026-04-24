@@ -523,7 +523,7 @@ mod tests {
     use super::super::types::{BuildConfig, BuildError};
     use super::*;
     use std::fs;
-    
+
     use tempfile::TempDir;
 
     #[test]
@@ -793,7 +793,11 @@ mod tests {
         ];
 
         let result = filter_tldrignored(dir.path(), paths.clone());
-        assert_eq!(result.len(), 2, "Without .tldrignore, all paths should pass through");
+        assert_eq!(
+            result.len(),
+            2,
+            "Without .tldrignore, all paths should pass through"
+        );
     }
 
     #[test]

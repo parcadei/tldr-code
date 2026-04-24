@@ -32,9 +32,9 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use crate::walker::{walk_project, ProjectWalker};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
 
 use crate::analysis::dead::{
     collect_all_functions, dead_code_analysis, dead_code_analysis_refcount,
@@ -409,11 +409,7 @@ fn build_refcounts(path: &Path, language: Language) -> HashMap<String, usize> {
         }
     } else {
         let extensions = language.extensions();
-        for entry in WalkDir::new(path)
-            .follow_links(true)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
+        for entry in walk_project(path) {
             let file_path = entry.path();
             if file_path.is_file() {
                 if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
@@ -448,11 +444,7 @@ fn collect_module_infos_for_dead(path: &Path, language: Language) -> Vec<(PathBu
         }
     } else {
         let extensions = language.extensions();
-        for entry in WalkDir::new(path)
-            .follow_links(true)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
+        for entry in walk_project(path) {
             let file_path = entry.path();
             if file_path.is_file() {
                 if let Some(ext) = file_path.extension().and_then(|e| e.to_str()) {
@@ -520,12 +512,8 @@ fn detect_language(path: &Path) -> TldrResult<Language> {
     // For directories, scan for common file types
     let mut counts: HashMap<Language, usize> = HashMap::new();
 
-    for entry in WalkDir::new(path)
-        .max_depth(3)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        if entry.file_type().is_file() {
+    for entry in ProjectWalker::new(path).max_depth(3).iter() {
+        if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
             if let Some(ext) = entry.path().extension().and_then(|e| e.to_str()) {
                 if let Some(lang) = Language::from_extension(ext) {
                     *counts.entry(lang).or_default() += 1;
@@ -670,10 +658,7 @@ def caller():
         // Collect module infos (simulating health dashboard context)
         let module_infos = {
             let mut infos = Vec::new();
-            for entry in walkdir::WalkDir::new(dir.path())
-                .into_iter()
-                .filter_map(|e| e.ok())
-            {
+            for entry in crate::walker::walk_project(dir.path()) {
                 if entry.path().extension().map(|e| e == "py").unwrap_or(false) {
                     if let Ok(info) =
                         crate::ast::extract::extract_file(entry.path(), Some(dir.path()))

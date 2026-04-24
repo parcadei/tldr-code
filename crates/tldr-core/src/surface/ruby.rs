@@ -84,9 +84,7 @@ fn select_ruby_surface_files(root_dir: &Path, package_name: &str) -> RubyFileSel
         let relative_path = relative_ruby_path(root_dir, &file_path);
         depth_by_relative_path
             .entry(relative_path)
-            .and_modify(|existing_depth: &mut usize| {
-                *existing_depth = (*existing_depth).min(depth)
-            })
+            .and_modify(|existing_depth: &mut usize| *existing_depth = (*existing_depth).min(depth))
             .or_insert(depth);
         files.push(file_path.clone());
 
@@ -96,7 +94,9 @@ fn select_ruby_surface_files(root_dir: &Path, package_name: &str) -> RubyFileSel
 
         for dependency in parse_ruby_internal_requires(&source)
             .into_iter()
-            .filter_map(|require| resolve_ruby_internal_require(root_dir, &file_path, package_name, &require))
+            .filter_map(|require| {
+                resolve_ruby_internal_require(root_dir, &file_path, package_name, &require)
+            })
         {
             queue.push_back((dependency, depth + 1));
         }
@@ -204,12 +204,18 @@ fn resolve_ruby_internal_require(
     require: &RubyRequire,
 ) -> Option<PathBuf> {
     match require.kind {
-        RubyRequireKind::Relative => resolve_ruby_relative_require(root_dir, current_file, &require.target),
+        RubyRequireKind::Relative => {
+            resolve_ruby_relative_require(root_dir, current_file, &require.target)
+        }
         RubyRequireKind::Load => resolve_ruby_load_require(root_dir, package_name, &require.target),
     }
 }
 
-fn resolve_ruby_relative_require(root_dir: &Path, current_file: &Path, target: &str) -> Option<PathBuf> {
+fn resolve_ruby_relative_require(
+    root_dir: &Path,
+    current_file: &Path,
+    target: &str,
+) -> Option<PathBuf> {
     let base_dir = current_file.parent().unwrap_or(root_dir);
     let candidate = ensure_ruby_extension(&normalize_path(&base_dir.join(target)));
     is_ruby_file_within_root(root_dir, &candidate).then_some(candidate)
@@ -265,10 +271,7 @@ fn ruby_package_entrypoint_candidates(package_name: &str) -> Vec<PathBuf> {
             continue;
         }
 
-        for candidate in [
-            format!("lib/{path}.rb"),
-            format!("{path}.rb"),
-        ] {
+        for candidate in [format!("lib/{path}.rb"), format!("{path}.rb")] {
             if seen.insert(candidate.clone()) {
                 candidates.push(PathBuf::from(candidate));
             }
@@ -644,7 +647,11 @@ fn generate_ruby_method_example(class_name: &str, method_name: &str, params: &[P
 }
 
 fn starts_with_segments(parts: &[String], prefix: &[String]) -> bool {
-    parts.len() >= prefix.len() && parts.iter().zip(prefix.iter()).all(|(left, right)| left == right)
+    parts.len() >= prefix.len()
+        && parts
+            .iter()
+            .zip(prefix.iter())
+            .all(|(left, right)| left == right)
 }
 
 fn normalize_path(path: &Path) -> PathBuf {
@@ -826,7 +833,9 @@ end
             files
         );
         assert!(
-            files.iter().any(|file| file == Path::new("lib/example/base.rb")),
+            files
+                .iter()
+                .any(|file| file == Path::new("lib/example/base.rb")),
             "expected entrypoint load-tree APIs in surface, got files: {:?}",
             files
         );

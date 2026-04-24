@@ -116,7 +116,8 @@ pub fn find_function_node<'a>(
                                         ) {
                                             let mut rhs_cursor = rhs.walk();
                                             for rhs_child in rhs.children(&mut rhs_cursor) {
-                                                if let Some(func) = find_function_in_node(rhs_child, 3)
+                                                if let Some(func) =
+                                                    find_function_in_node(rhs_child, 3)
                                                 {
                                                     return Some(func);
                                                 }

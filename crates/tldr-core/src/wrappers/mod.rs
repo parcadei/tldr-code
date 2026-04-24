@@ -121,11 +121,13 @@ mod tests {
         assert!(Severity::Low > Severity::Info);
 
         // Test all comparisons
-        let mut severities = [Severity::Low,
+        let mut severities = [
+            Severity::Low,
             Severity::Critical,
             Severity::Info,
             Severity::High,
-            Severity::Medium];
+            Severity::Medium,
+        ];
         severities.sort();
 
         // After sorting (ascending), Info should be first, Critical last

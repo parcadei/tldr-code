@@ -255,12 +255,14 @@ mod unit_tests {
     #[test]
     fn test_debt_category_variants() {
         // All SQALE categories should exist
-        let categories = [DebtCategory::Reliability,
+        let categories = [
+            DebtCategory::Reliability,
             DebtCategory::Security,
             DebtCategory::Maintainability,
             DebtCategory::Efficiency,
             DebtCategory::Changeability,
-            DebtCategory::Testability];
+            DebtCategory::Testability,
+        ];
 
         assert_eq!(categories.len(), 6);
     }
@@ -622,7 +624,8 @@ mod unit_tests {
     #[test]
     fn test_debt_report_invariants() {
         // Issues must be sorted by debt_minutes descending
-        let issues = [DebtIssue {
+        let issues = [
+            DebtIssue {
                 file: PathBuf::from("a.py"),
                 line: 1,
                 element: None,
@@ -648,7 +651,8 @@ mod unit_tests {
                 message: "".to_string(),
                 category: "reliability".to_string(),
                 debt_minutes: 10,
-            }];
+            },
+        ];
 
         // Verify descending order
         for window in issues.windows(2) {
@@ -1403,7 +1407,7 @@ class MyClass:
 
 #[cfg(test)]
 mod god_class_tests {
-    
+
     use super::*;
 
     #[test]
@@ -1548,7 +1552,7 @@ def at_threshold():
 
 #[cfg(test)]
 mod coupling_tests {
-    
+
     use super::*;
 
     #[test]

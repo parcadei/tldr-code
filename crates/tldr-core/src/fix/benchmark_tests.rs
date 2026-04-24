@@ -108,7 +108,10 @@ fn test_benchmark_python_unbound_local_error() {
     let d = diag.unwrap();
     assert_eq!(d.error_code, "UnboundLocalError");
     assert_eq!(d.language, "python");
-    assert!(d.fix.is_some(), "UnboundLocalError should produce a fix with global injection");
+    assert!(
+        d.fix.is_some(),
+        "UnboundLocalError should produce a fix with global injection"
+    );
     let fix = d.fix.unwrap();
     assert!(
         fix.edits[0].new_text.contains("global counter"),
@@ -124,7 +127,10 @@ fn test_benchmark_python_type_error_not_callable() {
     let error_text = "TypeError: 'dict' object is not callable";
     let source = "d = {'a': 1}\ndef f():\n    result = d.items()\n";
     let diag = diagnose(error_text, source, Some("python"), None);
-    assert!(diag.is_some(), "TypeError callable must produce a diagnosis");
+    assert!(
+        diag.is_some(),
+        "TypeError callable must produce a diagnosis"
+    );
     let d = diag.unwrap();
     assert_eq!(d.error_code, "TypeError");
     assert_eq!(d.language, "python");
@@ -137,7 +143,10 @@ fn test_benchmark_python_type_error_json_serializable() {
     let error_text = "TypeError: Object of type Foo is not JSON serializable";
     let source = "from dataclasses import dataclass\nimport json\n\n@dataclass\nclass Foo:\n    x: int\n\ndef f():\n    obj = Foo(1)\n    json.dumps(obj)\n";
     let diag = diagnose(error_text, source, Some("python"), None);
-    assert!(diag.is_some(), "TypeError JSON serializable must produce a diagnosis");
+    assert!(
+        diag.is_some(),
+        "TypeError JSON serializable must produce a diagnosis"
+    );
     let d = diag.unwrap();
     assert_eq!(d.error_code, "TypeError");
     assert!(
@@ -157,7 +166,10 @@ fn test_benchmark_python_name_error_stdlib() {
     assert!(diag.is_some(), "NameError must produce a diagnosis");
     let d = diag.unwrap();
     assert_eq!(d.error_code, "NameError");
-    assert!(d.fix.is_some(), "NameError for stdlib name should produce a fix");
+    assert!(
+        d.fix.is_some(),
+        "NameError for stdlib name should produce a fix"
+    );
     let fix = d.fix.unwrap();
     assert!(
         fix.edits[0].new_text.contains("import json"),
@@ -171,10 +183,17 @@ fn test_benchmark_python_name_error_unknown() {
     let error_text = "NameError: name 'foobar_xyz' is not defined";
     let source = "def f():\n    x = foobar_xyz()\n";
     let diag = diagnose(error_text, source, Some("python"), None);
-    assert!(diag.is_some(), "NameError for unknown name must still produce a diagnosis");
+    assert!(
+        diag.is_some(),
+        "NameError for unknown name must still produce a diagnosis"
+    );
     let d = diag.unwrap();
     assert_eq!(d.error_code, "NameError");
-    assert_eq!(d.confidence, FixConfidence::Low, "Unknown name should have Low confidence");
+    assert_eq!(
+        d.confidence,
+        FixConfidence::Low,
+        "Unknown name should have Low confidence"
+    );
     assert!(d.fix.is_none(), "Unknown name should not produce a fix");
 }
 
@@ -195,7 +214,10 @@ fn test_benchmark_python_module_not_found() {
     let error_text = "ModuleNotFoundError: No module named 'nonexistent_pkg'";
     let source = "import nonexistent_pkg\n";
     let diag = diagnose(error_text, source, Some("python"), None);
-    assert!(diag.is_some(), "ModuleNotFoundError must produce a diagnosis");
+    assert!(
+        diag.is_some(),
+        "ModuleNotFoundError must produce a diagnosis"
+    );
     let d = diag.unwrap();
     assert_eq!(d.error_code, "ImportError");
     assert!(d.fix.is_none(), "Unknown module should not produce a fix");
@@ -228,7 +250,10 @@ fn test_benchmark_python_value_error() {
     assert!(diag.is_some(), "ValueError must produce a diagnosis");
     let d = diag.unwrap();
     assert_eq!(d.error_code, "ValueError");
-    assert!(d.fix.is_none(), "ValueError is hint-only, should not produce a fix");
+    assert!(
+        d.fix.is_none(),
+        "ValueError is hint-only, should not produce a fix"
+    );
 }
 
 // --- Analyzer #8: IndexError (hint-only) ---
@@ -241,7 +266,10 @@ fn test_benchmark_python_index_error() {
     assert!(diag.is_some(), "IndexError must produce a diagnosis");
     let d = diag.unwrap();
     assert_eq!(d.error_code, "IndexError");
-    assert!(d.fix.is_none(), "IndexError is hint-only, should not produce a fix");
+    assert!(
+        d.fix.is_none(),
+        "IndexError is hint-only, should not produce a fix"
+    );
 }
 
 // --- Analyzer #9: KeyError ---
@@ -316,7 +344,10 @@ fn test_benchmark_python_stop_iteration_from_traceback() {
     // StopIteration parsed via full traceback (the parser handles bare "StopIteration")
     let error_text = "Traceback (most recent call last):\n  File \"app.py\", line 3, in f\n    return next(it)\nStopIteration";
     let parsed = parse_error(error_text, Some("python"));
-    assert!(parsed.is_some(), "Parser should handle StopIteration in traceback");
+    assert!(
+        parsed.is_some(),
+        "Parser should handle StopIteration in traceback"
+    );
     let error = parsed.unwrap();
     assert_eq!(error.error_type, "StopIteration");
 }
@@ -362,7 +393,10 @@ fn test_benchmark_python_not_implemented_error() {
         offending_line: None,
     };
     let diag = diagnose_parsed(&error, source, None);
-    assert!(diag.is_some(), "NotImplementedError must produce a diagnosis");
+    assert!(
+        diag.is_some(),
+        "NotImplementedError must produce a diagnosis"
+    );
     let d = diag.unwrap();
     assert_eq!(d.error_code, "NotImplementedError");
     assert!(d.fix.is_none(), "NotImplementedError is hint-only");
@@ -372,7 +406,8 @@ fn test_benchmark_python_not_implemented_error() {
 
 #[test]
 fn test_benchmark_python_file_not_found_error() {
-    let error_text = "FileNotFoundError: [Errno 2] No such file or directory: '/tmp/missing/file.txt'";
+    let error_text =
+        "FileNotFoundError: [Errno 2] No such file or directory: '/tmp/missing/file.txt'";
     let source = "def write_data():\n    with open('/tmp/missing/file.txt', 'w') as f:\n        f.write('data')\n";
     let parsed = parse_error(error_text, Some("python"));
     assert!(parsed.is_some());
@@ -420,7 +455,10 @@ fn test_benchmark_python_syntax_error_missing_colon() {
     assert!(diag.is_some(), "SyntaxError must produce a diagnosis");
     let d = diag.unwrap();
     assert_eq!(d.error_code, "SyntaxError");
-    assert!(d.fix.is_some(), "SyntaxError for missing colon should produce a fix");
+    assert!(
+        d.fix.is_some(),
+        "SyntaxError for missing colon should produce a fix"
+    );
 }
 
 #[test]
@@ -428,7 +466,10 @@ fn test_benchmark_python_syntax_error_return_outside_function() {
     let error_text = "SyntaxError: 'return' outside function";
     let source = "return 42\n";
     let diag = diagnose(error_text, source, Some("python"), None);
-    assert!(diag.is_some(), "SyntaxError return outside function must diagnose");
+    assert!(
+        diag.is_some(),
+        "SyntaxError return outside function must diagnose"
+    );
     let d = diag.unwrap();
     assert_eq!(d.error_code, "SyntaxError");
 }
@@ -443,7 +484,10 @@ fn test_benchmark_python_indentation_error_mixed_tabs() {
     assert!(diag.is_some(), "IndentationError must produce a diagnosis");
     let d = diag.unwrap();
     assert_eq!(d.error_code, "IndentationError");
-    assert!(d.fix.is_some(), "IndentationError with tabs should produce a fix");
+    assert!(
+        d.fix.is_some(),
+        "IndentationError with tabs should produce a fix"
+    );
 }
 
 #[test]
@@ -451,7 +495,10 @@ fn test_benchmark_python_indentation_error_unexpected() {
     let error_text = "IndentationError: unexpected indent";
     let source = "x = 1\n    y = 2\n";
     let diag = diagnose(error_text, source, Some("python"), None);
-    assert!(diag.is_some(), "IndentationError unexpected indent must diagnose");
+    assert!(
+        diag.is_some(),
+        "IndentationError unexpected indent must diagnose"
+    );
     let d = diag.unwrap();
     assert_eq!(d.error_code, "IndentationError");
 }
@@ -463,7 +510,10 @@ fn test_benchmark_python_circular_import() {
     let error_text = "ImportError: cannot import name 'helper' from partially initialized module 'mymod' (most likely due to a circular import)";
     let source = "from mymod import helper\n\ndef use_it():\n    return helper()\n";
     let diag = diagnose(error_text, source, Some("python"), None);
-    assert!(diag.is_some(), "CircularImportError must produce a diagnosis");
+    assert!(
+        diag.is_some(),
+        "CircularImportError must produce a diagnosis"
+    );
     let d = diag.unwrap();
     assert_eq!(d.error_code, "ImportError");
     assert!(
@@ -549,17 +599,41 @@ fn test_benchmark_python_generic_exception() {
 fn test_benchmark_python_all_22_analyzers_dispatch() {
     // Each tuple: (error_type, sample_message, expected_error_code)
     let cases: Vec<(&str, &str, &str)> = vec![
-        ("UnboundLocalError", "cannot access local variable 'x'", "UnboundLocalError"),
+        (
+            "UnboundLocalError",
+            "cannot access local variable 'x'",
+            "UnboundLocalError",
+        ),
         ("TypeError", "'dict' object is not callable", "TypeError"),
-        ("TypeError", "Object of type Foo is not JSON serializable", "TypeError"),
+        (
+            "TypeError",
+            "Object of type Foo is not JSON serializable",
+            "TypeError",
+        ),
         ("NameError", "name 'os' is not defined", "NameError"),
-        ("ImportError", "cannot import name 'Foo' from 'bar'", "ImportError"),
-        ("AttributeError", "'str' object has no attribute 'foo'", "AttributeError"),
-        ("ValueError", "invalid literal for int() with base 10", "ValueError"),
+        (
+            "ImportError",
+            "cannot import name 'Foo' from 'bar'",
+            "ImportError",
+        ),
+        (
+            "AttributeError",
+            "'str' object has no attribute 'foo'",
+            "AttributeError",
+        ),
+        (
+            "ValueError",
+            "invalid literal for int() with base 10",
+            "ValueError",
+        ),
         ("IndexError", "list index out of range", "IndexError"),
         ("KeyError", "'name'", "KeyError"),
         ("ZeroDivisionError", "division by zero", "ZeroDivisionError"),
-        ("RecursionError", "maximum recursion depth exceeded", "RecursionError"),
+        (
+            "RecursionError",
+            "maximum recursion depth exceeded",
+            "RecursionError",
+        ),
         ("StopIteration", "", "StopIteration"),
         ("AssertionError", "", "AssertionError"),
         ("NotImplementedError", "", "NotImplementedError"),
@@ -567,8 +641,16 @@ fn test_benchmark_python_all_22_analyzers_dispatch() {
         ("UnicodeError", "codec can't decode byte", "UnicodeError"),
         ("SyntaxError", "expected ':'", "SyntaxError"),
         ("IndentationError", "unexpected indent", "IndentationError"),
-        ("ImportError", "cannot import name 'x' from partially initialized module 'y'", "ImportError"),
-        ("TypeError", "'int' object is not subscriptable", "TypeError"),
+        (
+            "ImportError",
+            "cannot import name 'x' from partially initialized module 'y'",
+            "ImportError",
+        ),
+        (
+            "TypeError",
+            "'int' object is not subscriptable",
+            "TypeError",
+        ),
         ("RuntimeError", "something went wrong", "RuntimeError"),
         ("CustomException", "some custom error", "CustomException"),
     ];
@@ -592,7 +674,8 @@ fn test_benchmark_python_all_22_analyzers_dispatch() {
         assert!(
             result.is_some(),
             "Python analyzer for {} should return Some (message: {})",
-            error_type, message
+            error_type,
+            message
         );
         let d = result.unwrap();
         assert_eq!(
@@ -602,7 +685,11 @@ fn test_benchmark_python_all_22_analyzers_dispatch() {
         );
         handled += 1;
     }
-    assert_eq!(handled, 22, "Expected 22 handled Python analyzers, got {}", handled);
+    assert_eq!(
+        handled, 22,
+        "Expected 22 handled Python analyzers, got {}",
+        handled
+    );
 }
 
 // ============================================================================
@@ -623,7 +710,9 @@ fn test_benchmark_rust_e0425_hashmap() {
     assert!(d.fix.is_some(), "E0425 for known item should produce a fix");
     let fix = d.fix.unwrap();
     assert!(
-        fix.edits[0].new_text.contains("use std::collections::HashMap"),
+        fix.edits[0]
+            .new_text
+            .contains("use std::collections::HashMap"),
         "Fix should inject HashMap use, got: {}",
         fix.edits[0].new_text
     );
@@ -638,7 +727,9 @@ fn test_benchmark_rust_e0425_pathbuf() {
     let d = diag.unwrap();
     assert_eq!(d.error_code, "E0425");
     assert!(d.fix.is_some());
-    assert!(d.fix.unwrap().edits[0].new_text.contains("use std::path::PathBuf"));
+    assert!(d.fix.unwrap().edits[0]
+        .new_text
+        .contains("use std::path::PathBuf"));
 }
 
 // --- E0433: failed to resolve ---
@@ -654,7 +745,9 @@ fn test_benchmark_rust_e0433_hashmap() {
     assert!(d.fix.is_some(), "E0433 for known type should produce a fix");
     let fix = d.fix.unwrap();
     assert!(
-        fix.edits[0].new_text.contains("use std::collections::HashMap"),
+        fix.edits[0]
+            .new_text
+            .contains("use std::collections::HashMap"),
         "Fix should inject HashMap use, got: {}",
         fix.edits[0].new_text
     );
@@ -670,7 +763,10 @@ fn test_benchmark_rust_e0599_write_all() {
     assert!(diag.is_some(), "Rust E0599 must produce a diagnosis");
     let d = diag.unwrap();
     assert_eq!(d.error_code, "E0599");
-    assert!(d.fix.is_some(), "E0599 for known trait should produce a fix");
+    assert!(
+        d.fix.is_some(),
+        "E0599 for known trait should produce a fix"
+    );
     let fix = d.fix.unwrap();
     assert!(
         fix.edits[0].new_text.contains("use std::io::Write"),
@@ -681,14 +777,17 @@ fn test_benchmark_rust_e0599_write_all() {
 
 #[test]
 fn test_benchmark_rust_e0599_read_line() {
-    let error_text = "error[E0599]: no method named `read_line` found for struct `Stdin` in the current scope";
+    let error_text =
+        "error[E0599]: no method named `read_line` found for struct `Stdin` in the current scope";
     let source = "fn main() {\n    let mut buf = String::new();\n    std::io::stdin().read_line(&mut buf);\n}\n";
     let diag = diagnose(error_text, source, Some("rust"), None);
     assert!(diag.is_some());
     let d = diag.unwrap();
     assert_eq!(d.error_code, "E0599");
     assert!(d.fix.is_some());
-    assert!(d.fix.unwrap().edits[0].new_text.contains("use std::io::BufRead"));
+    assert!(d.fix.unwrap().edits[0]
+        .new_text
+        .contains("use std::io::BufRead"));
 }
 
 // --- E0308: mismatched types ---
@@ -708,7 +807,8 @@ fn test_benchmark_rust_e0308_string_str() {
 #[test]
 fn test_benchmark_rust_e0277_iterator_copied() {
     let error_text = "error[E0277]: a value of type `Vec<i32>` cannot be built from an iterator over elements of type `&i32`";
-    let source = "fn main() {\n    let v = vec![1, 2, 3];\n    let w: Vec<i32> = v.iter().collect();\n}\n";
+    let source =
+        "fn main() {\n    let v = vec![1, 2, 3];\n    let w: Vec<i32> = v.iter().collect();\n}\n";
     let parsed = parse_error(error_text, Some("rust"));
     assert!(parsed.is_some());
     let mut error = parsed.unwrap();
@@ -717,7 +817,10 @@ fn test_benchmark_rust_e0277_iterator_copied() {
     assert!(diag.is_some(), "Rust E0277 must produce a diagnosis");
     let d = diag.unwrap();
     assert_eq!(d.error_code, "E0277");
-    assert!(d.fix.is_some(), "E0277 iterator copied should produce a fix");
+    assert!(
+        d.fix.is_some(),
+        "E0277 iterator copied should produce a fix"
+    );
     let fix = d.fix.unwrap();
     assert!(
         fix.edits[0].new_text.contains(".copied().collect()"),
@@ -732,8 +835,14 @@ fn test_benchmark_rust_e0277_iterator_copied() {
 fn test_benchmark_rust_all_5_analyzers_dispatch() {
     let cases = [
         ("E0425", "cannot find value `HashMap` in this scope"),
-        ("E0433", "failed to resolve: use of undeclared type `HashMap`"),
-        ("E0599", "no method named `write_all` found for struct `File`"),
+        (
+            "E0433",
+            "failed to resolve: use of undeclared type `HashMap`",
+        ),
+        (
+            "E0599",
+            "no method named `write_all` found for struct `File`",
+        ),
         ("E0308", "mismatched types: expected `String`, found `&str`"),
         ("E0277", "trait bound not satisfied"),
     ];
@@ -756,7 +865,8 @@ fn test_benchmark_rust_all_5_analyzers_dispatch() {
         assert!(
             result.is_some(),
             "Rust analyzer for {} should return Some (msg: {})",
-            code, msg
+            code,
+            msg
         );
         let d = result.unwrap();
         assert_eq!(
@@ -783,7 +893,10 @@ fn test_benchmark_ts_2304_express() {
     let d = diag.unwrap();
     assert_eq!(d.error_code, "TS2304");
     assert_eq!(d.language, "typescript");
-    assert!(d.fix.is_some(), "TS2304 for known package should produce a fix");
+    assert!(
+        d.fix.is_some(),
+        "TS2304 for known package should produce a fix"
+    );
     let fix = d.fix.unwrap();
     assert!(
         fix.edits[0].new_text.contains("import express"),
@@ -820,7 +933,8 @@ fn test_benchmark_ts_2305_no_export() {
 
 #[test]
 fn test_benchmark_ts_2307_module_not_found() {
-    let error_text = "error TS2307: Cannot find module 'loadsh' or its corresponding type declarations.";
+    let error_text =
+        "error TS2307: Cannot find module 'loadsh' or its corresponding type declarations.";
     let source = "import loadsh from 'loadsh';\n";
     let diag = diagnose(error_text, source, Some("typescript"), None);
     assert!(diag.is_some(), "TS2307 must produce a diagnosis");
@@ -845,7 +959,8 @@ fn test_benchmark_ts_2322_type_not_assignable() {
 #[test]
 fn test_benchmark_ts_2339_property_not_exists() {
     let error_text = "error TS2339: Property 'foo' does not exist on type 'Bar'.";
-    let source = "interface Bar { baz: string; }\nconst b: Bar = { baz: 'x' };\nconsole.log(b.foo);\n";
+    let source =
+        "interface Bar { baz: string; }\nconst b: Bar = { baz: 'x' };\nconsole.log(b.foo);\n";
     let diag = diagnose(error_text, source, Some("typescript"), None);
     assert!(diag.is_some(), "TS2339 must produce a diagnosis");
     let d = diag.unwrap();
@@ -856,7 +971,8 @@ fn test_benchmark_ts_2339_property_not_exists() {
 
 #[test]
 fn test_benchmark_ts_2345_arg_type() {
-    let error_text = "error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.";
+    let error_text =
+        "error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.";
     let source = "function add(a: number) { return a + 1; }\nadd(\"hello\");\n";
     let diag = diagnose(error_text, source, Some("typescript"), None);
     assert!(diag.is_some(), "TS2345 must produce a diagnosis");
@@ -882,11 +998,20 @@ fn test_benchmark_ts_2554_wrong_arg_count() {
 fn test_benchmark_ts_all_8_analyzers_dispatch() {
     let cases = [
         ("TS2304", "Cannot find name 'express'."),
-        ("TS2305", "Module '\"react\"' has no exported member 'createPortal'."),
+        (
+            "TS2305",
+            "Module '\"react\"' has no exported member 'createPortal'.",
+        ),
         ("TS2307", "Cannot find module 'nonexistent'."),
-        ("TS2322", "Type 'string' is not assignable to type 'number'."),
+        (
+            "TS2322",
+            "Type 'string' is not assignable to type 'number'.",
+        ),
         ("TS2339", "Property 'foo' does not exist on type 'Bar'."),
-        ("TS2345", "Argument of type 'string' is not assignable to parameter of type 'number'."),
+        (
+            "TS2345",
+            "Argument of type 'string' is not assignable to parameter of type 'number'.",
+        ),
         ("TS2554", "Expected 2 arguments, but got 1."),
         ("TS7006", "Parameter 'x' implicitly has an 'any' type."),
     ];
@@ -909,7 +1034,8 @@ fn test_benchmark_ts_all_8_analyzers_dispatch() {
         assert!(
             result.is_some(),
             "TypeScript analyzer for {} should return Some (msg: {})",
-            code, msg
+            code,
+            msg
         );
         let d = result.unwrap();
         assert_eq!(
@@ -936,7 +1062,10 @@ fn test_benchmark_go_undefined_fmt() {
     let d = diag.unwrap();
     assert_eq!(d.error_code, "undefined");
     assert_eq!(d.language, "go");
-    assert!(d.fix.is_some(), "Go undefined for known package should produce a fix");
+    assert!(
+        d.fix.is_some(),
+        "Go undefined for known package should produce a fix"
+    );
     let fix = d.fix.unwrap();
     assert!(
         fix.edits[0].new_text.contains("\"fmt\""),
@@ -953,14 +1082,17 @@ fn test_benchmark_go_undefined_json() {
     assert!(diag.is_some());
     let d = diag.unwrap();
     assert!(d.fix.is_some());
-    assert!(d.fix.unwrap().edits[0].new_text.contains("\"encoding/json\""));
+    assert!(d.fix.unwrap().edits[0]
+        .new_text
+        .contains("\"encoding/json\""));
 }
 
 // --- Analyzer 2: type mismatch ---
 
 #[test]
 fn test_benchmark_go_type_mismatch() {
-    let error_text = "./main.go:5:10: cannot use s (variable of type string) as type []byte in argument";
+    let error_text =
+        "./main.go:5:10: cannot use s (variable of type string) as type []byte in argument";
     let source = "package main\n\nfunc main() {\n\ts := \"hello\"\n\tprocessBytes(s)\n}\n\nfunc processBytes(b []byte) {}\n";
     let diag = diagnose(error_text, source, Some("go"), None);
     assert!(diag.is_some(), "Go type mismatch must produce a diagnosis");
@@ -978,7 +1110,10 @@ fn test_benchmark_go_unused_import() {
     assert!(diag.is_some(), "Go unused import must produce a diagnosis");
     let d = diag.unwrap();
     assert_eq!(d.error_code, "unused_import");
-    assert!(d.fix.is_some(), "Unused import should produce a fix (delete line)");
+    assert!(
+        d.fix.is_some(),
+        "Unused import should produce a fix (delete line)"
+    );
 }
 
 // --- Analyzer 4: declared but not used ---
@@ -991,14 +1126,22 @@ fn test_benchmark_go_unused_var() {
     assert!(diag.is_some(), "Go unused var must produce a diagnosis");
     let d = diag.unwrap();
     assert_eq!(d.error_code, "unused_var");
-    assert!(d.fix.is_some(), "Unused var should produce a fix (prefix with _)");
+    assert!(
+        d.fix.is_some(),
+        "Unused var should produce a fix (prefix with _)"
+    );
 }
 
 #[test]
 fn test_benchmark_go_unused_var_declared_and_not_used() {
     // Alternate wording: "declared and not used"
     let error_text = "./main.go:4:2: x declared and not used";
-    let diag = diagnose(error_text, "package main\n\nfunc main() {\n\tx := 42\n}\n", Some("go"), None);
+    let diag = diagnose(
+        error_text,
+        "package main\n\nfunc main() {\n\tx := 42\n}\n",
+        Some("go"),
+        None,
+    );
     assert!(diag.is_some());
     assert_eq!(diag.unwrap().error_code, "unused_var");
 }
@@ -1091,7 +1234,8 @@ fn test_benchmark_go_all_6_patterns_dispatch() {
         assert!(
             result.is_some(),
             "Go analyzer for '{}' should return Some (msg: {})",
-            error_type, msg
+            error_type,
+            msg
         );
         let d = result.unwrap();
         assert_eq!(d.language, "go");
@@ -1113,7 +1257,10 @@ fn test_benchmark_js_reference_error_known_module() {
     let d = diag.unwrap();
     assert_eq!(d.error_code, "ReferenceError");
     assert_eq!(d.language, "javascript");
-    assert!(d.fix.is_some(), "ReferenceError for known module should produce a fix");
+    assert!(
+        d.fix.is_some(),
+        "ReferenceError for known module should produce a fix"
+    );
     let fix = d.fix.unwrap();
     assert!(
         fix.edits[0].new_text.contains("require('fs')"),
@@ -1124,7 +1271,8 @@ fn test_benchmark_js_reference_error_known_module() {
 
 #[test]
 fn test_benchmark_js_reference_error_unknown() {
-    let error_text = "ReferenceError: customLib is not defined\n    at Object.<anonymous> (app.js:1:1)";
+    let error_text =
+        "ReferenceError: customLib is not defined\n    at Object.<anonymous> (app.js:1:1)";
     let source = "const x = customLib.doStuff();\n";
     let diag = diagnose(error_text, source, Some("javascript"), None);
     assert!(diag.is_some());
@@ -1139,7 +1287,10 @@ fn test_benchmark_js_type_error_undefined_property() {
     let error_text = "TypeError: Cannot read properties of undefined (reading 'foo')\n    at Object.<anonymous> (app.js:2:1)";
     let source = "const obj = undefined;\nconst x = obj.foo;\n";
     let diag = diagnose(error_text, source, Some("javascript"), None);
-    assert!(diag.is_some(), "JS TypeError undefined property must produce a diagnosis");
+    assert!(
+        diag.is_some(),
+        "JS TypeError undefined property must produce a diagnosis"
+    );
     let d = diag.unwrap();
     assert_eq!(d.error_code, "TypeError");
     assert_eq!(d.language, "javascript");
@@ -1149,10 +1300,14 @@ fn test_benchmark_js_type_error_undefined_property() {
 
 #[test]
 fn test_benchmark_js_type_error_not_a_function() {
-    let error_text = "TypeError: obj.length is not a function\n    at Object.<anonymous> (app.js:2:1)";
+    let error_text =
+        "TypeError: obj.length is not a function\n    at Object.<anonymous> (app.js:2:1)";
     let source = "const obj = [1, 2, 3];\nconst x = obj.length();\n";
     let diag = diagnose(error_text, source, Some("javascript"), None);
-    assert!(diag.is_some(), "JS TypeError not a function must produce a diagnosis");
+    assert!(
+        diag.is_some(),
+        "JS TypeError not a function must produce a diagnosis"
+    );
     let d = diag.unwrap();
     assert_eq!(d.error_code, "TypeError");
 }
@@ -1176,7 +1331,10 @@ fn test_benchmark_js_syntax_error() {
 fn test_benchmark_js_all_4_analyzers_dispatch() {
     let cases = [
         ("ReferenceError", "fs is not defined"),
-        ("TypeError", "Cannot read properties of undefined (reading 'foo')"),
+        (
+            "TypeError",
+            "Cannot read properties of undefined (reading 'foo')",
+        ),
         ("TypeError", "obj.length is not a function"),
         ("SyntaxError", "Unexpected token '}'"),
     ];
@@ -1191,7 +1349,10 @@ fn test_benchmark_js_all_4_analyzers_dispatch() {
             line: Some(1),
             column: None,
             language: "javascript".to_string(),
-            raw_text: format!("{}: {}\n    at Object.<anonymous> (app.js:1:1)", error_type, msg),
+            raw_text: format!(
+                "{}: {}\n    at Object.<anonymous> (app.js:1:1)",
+                error_type, msg
+            ),
             function_name: None,
             offending_line: None,
         };
@@ -1199,7 +1360,8 @@ fn test_benchmark_js_all_4_analyzers_dispatch() {
         assert!(
             result.is_some(),
             "JS analyzer for {} should return Some (msg: {})",
-            error_type, msg
+            error_type,
+            msg
         );
         let d = result.unwrap();
         assert_eq!(d.language, "javascript");
@@ -1310,7 +1472,8 @@ fn test_benchmark_fix_quality_python_unbound_local_indent() {
 fn test_benchmark_fix_quality_go_import_injection() {
     // Verify Go import injection places the import correctly
     let error_text = "./main.go:4:7: undefined: strings";
-    let source = "package main\n\nfunc main() {\n\ts := strings.ToUpper(\"hello\")\n\tprintln(s)\n}\n";
+    let source =
+        "package main\n\nfunc main() {\n\ts := strings.ToUpper(\"hello\")\n\tprintln(s)\n}\n";
     let diag = diagnose(error_text, source, Some("go"), None);
     assert!(diag.is_some());
     let d = diag.unwrap();

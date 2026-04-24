@@ -980,9 +980,7 @@ fn test_avail_exprs_to_json_serializable() {
 // SECTION 4: MUST Analysis Tests (CAP-AE-04)
 // =============================================================================
 
-use crate::dataflow::available::{
-    compute_available_exprs, AvailableExprsInfo, Expression,
-};
+use crate::dataflow::available::{compute_available_exprs, AvailableExprsInfo, Expression};
 use crate::types::{BlockType, CfgBlock, CfgEdge, CfgInfo, DfgInfo, EdgeType, RefType, VarRef};
 
 /// Helper to create a CFG for testing
@@ -1302,7 +1300,6 @@ fn test_phase4_intra_block_kill_prevents_false_positive() {
     // x = a + b; a = 5; y = a + b
     // The second a + b is NOT redundant because 'a' was redefined
     use crate::dataflow::{AvailableExprsInfo, ExprInstance, Expression};
-    
 
     let mut info = AvailableExprsInfo::new(0);
 
@@ -1338,7 +1335,6 @@ fn test_phase4_intra_block_kill_prevents_false_positive() {
 fn test_phase4_intra_block_same_expr_is_redundant() {
     // When operand is NOT killed between two computations, it IS redundant
     use crate::dataflow::{AvailableExprsInfo, ExprInstance, Expression};
-    
 
     let mut info = AvailableExprsInfo::new(0);
 

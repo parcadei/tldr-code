@@ -9,9 +9,9 @@
 
 use std::path::Path;
 
-use super::cross_file_types::{CallSite, CallType, FuncDef, VarType, FileIR};
-use super::var_types::extract_python_definitions;
+use super::cross_file_types::{CallSite, CallType, FileIR, FuncDef, VarType};
 use super::resolution::apply_type_resolution;
+use super::var_types::extract_python_definitions;
 use crate::types::Language;
 
 // =============================================================================
@@ -127,7 +127,10 @@ def process():
         .count();
     let total_method = method_calls.len();
 
-    eprintln!("H1b: {}/{} method calls have receiver_type after resolution", with_receiver_type, total_method);
+    eprintln!(
+        "H1b: {}/{} method calls have receiver_type after resolution",
+        with_receiver_type, total_method
+    );
 
     for call in &method_calls {
         eprintln!(
@@ -210,7 +213,10 @@ class Calculator:
         .iter()
         .filter(|c| c.receiver_type.as_deref() == Some("Calculator"))
         .collect();
-    eprintln!("H1c: {} self calls resolved to Calculator", calc_calls.len());
+    eprintln!(
+        "H1c: {} self calls resolved to Calculator",
+        calc_calls.len()
+    );
 }
 
 // =============================================================================
@@ -305,7 +311,11 @@ class GrandChild(Child):
     let options = InheritanceOptions::default();
     let report = extract_inheritance(dir.path(), Some(Language::Python), &options).unwrap();
 
-    eprintln!("H2b: InheritanceReport nodes={}, edges={}", report.nodes.len(), report.edges.len());
+    eprintln!(
+        "H2b: InheritanceReport nodes={}, edges={}",
+        report.nodes.len(),
+        report.edges.len()
+    );
     for edge in &report.edges {
         eprintln!(
             "  edge: {} -> {} (kind={:?}, resolution={:?})",
@@ -313,10 +323,7 @@ class GrandChild(Child):
         );
     }
     for node in &report.nodes {
-        eprintln!(
-            "  node: {} | bases={:?}",
-            node.name, node.bases
-        );
+        eprintln!("  node: {} | bases={:?}", node.name, node.bases);
     }
 
     // Should find all 3 classes
@@ -334,19 +341,13 @@ class GrandChild(Child):
         .edges
         .iter()
         .find(|e| e.child == "Child" && e.parent == "Parent");
-    assert!(
-        child_parent.is_some(),
-        "Child -> Parent edge should exist"
-    );
+    assert!(child_parent.is_some(), "Child -> Parent edge should exist");
 
     let gc_child = report
         .edges
         .iter()
         .find(|e| e.child == "GrandChild" && e.parent == "Child");
-    assert!(
-        gc_child.is_some(),
-        "GrandChild -> Child edge should exist"
-    );
+    assert!(gc_child.is_some(), "GrandChild -> Child edge should exist");
 
     // Check nodes have bases populated
     let child_node = report.nodes.iter().find(|n| n.name == "Child");
@@ -381,7 +382,11 @@ class UserService:
 
     let result = extract_python_definitions(source, Path::new("test.py"));
 
-    eprintln!("H3: Found {} classes, {} functions", result.classes.len(), result.funcs.len());
+    eprintln!(
+        "H3: Found {} classes, {} functions",
+        result.classes.len(),
+        result.funcs.len()
+    );
 
     // Check ClassDef.methods
     let user_service = result.classes.iter().find(|c| c.name == "UserService");
@@ -415,7 +420,10 @@ class UserService:
         .filter(|f| f.class_name.as_deref() == Some("UserService"))
         .collect();
 
-    eprintln!("H3: {} FuncDefs have class_name=UserService", method_funcs.len());
+    eprintln!(
+        "H3: {} FuncDefs have class_name=UserService",
+        method_funcs.len()
+    );
     for func in &method_funcs {
         eprintln!(
             "  func: {} | is_method={} | class_name={:?}",
@@ -501,20 +509,14 @@ def process():
         .var_types
         .iter()
         .find(|vt| vt.var_name == "data" && vt.type_name == "dict");
-    assert!(
-        data_vt.is_some(),
-        "VarType for 'data = {{}}' should exist"
-    );
+    assert!(data_vt.is_some(), "VarType for 'data = {{}}' should exist");
 
     // Should have VarType for list literal
     let items_vt = result
         .var_types
         .iter()
         .find(|vt| vt.var_name == "items" && vt.type_name == "list");
-    assert!(
-        items_vt.is_some(),
-        "VarType for 'items = []' should exist"
-    );
+    assert!(items_vt.is_some(), "VarType for 'items = []' should exist");
 }
 
 /// H4b: VarType tracks parameter annotations.
@@ -607,10 +609,7 @@ class Service:
 
     // Check that simple assignment IS captured (name = "default")
     // This is the baseline -- simple identifiers should always work.
-    let name_vt = result
-        .var_types
-        .iter()
-        .find(|vt| vt.var_name == "name");
+    let name_vt = result.var_types.iter().find(|vt| vt.var_name == "name");
     eprintln!("H4c: Simple var 'name' captured: {}", name_vt.is_some());
 }
 
@@ -698,7 +697,10 @@ class Proxy:
 
     // Proxy.do_complex should have 2 calls (NOT pure delegation)
     let proxy_do_complex = result.calls.get("Proxy.do_complex");
-    assert!(proxy_do_complex.is_some(), "Proxy.do_complex should have calls");
+    assert!(
+        proxy_do_complex.is_some(),
+        "Proxy.do_complex should have calls"
+    );
     let complex_method_calls: Vec<&CallSite> = proxy_do_complex
         .unwrap()
         .iter()

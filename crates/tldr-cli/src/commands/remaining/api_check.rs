@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use clap::Args;
 use regex::Regex;
-use walkdir::WalkDir;
+use tldr_core::walker::walk_project;
 
 use super::error::RemainingError;
 use super::types::{
@@ -143,7 +143,8 @@ const GO_RULE_SPECS: &[RegexRuleSpec] = &[
         name: "sql-query-without-context",
         category: MisuseCategory::CallOrder,
         severity: MisuseSeverity::Medium,
-        description: "sql.DB.Query lacks cancellation and timeout propagation compared with QueryContext",
+        description:
+            "sql.DB.Query lacks cancellation and timeout propagation compared with QueryContext",
         correct_usage: "Use db.QueryContext(ctx, query, args...)",
         pattern: r"\bsql\.Query\s*\(",
         api_call: "sql.Query",
@@ -182,7 +183,8 @@ const JAVA_RULE_SPECS: &[RegexRuleSpec] = &[
         name: "objectinputstream-deserialization",
         category: MisuseCategory::Security,
         severity: MisuseSeverity::High,
-        description: "ObjectInputStream on untrusted data can trigger unsafe deserialization gadgets",
+        description:
+            "ObjectInputStream on untrusted data can trigger unsafe deserialization gadgets",
         correct_usage: "Use safer formats like JSON with explicit schemas",
         pattern: r"\bnew\s+ObjectInputStream\s*\(",
         api_call: "ObjectInputStream",
@@ -194,7 +196,8 @@ const JAVA_RULE_SPECS: &[RegexRuleSpec] = &[
         name: "create-statement",
         category: MisuseCategory::Security,
         severity: MisuseSeverity::Medium,
-        description: "createStatement often leads to string-built SQL instead of prepared statements",
+        description:
+            "createStatement often leads to string-built SQL instead of prepared statements",
         correct_usage: "Use prepareStatement with placeholders",
         pattern: r"\bcreateStatement\s*\(",
         api_call: "createStatement",
@@ -647,7 +650,8 @@ const KOTLIN_RULE_SPECS: &[RegexRuleSpec] = &[
         name: "thread-sleep",
         category: MisuseCategory::Concurrency,
         severity: MisuseSeverity::Low,
-        description: "Thread.sleep blocks threads directly and is usually wrong in coroutine-based code",
+        description:
+            "Thread.sleep blocks threads directly and is usually wrong in coroutine-based code",
         correct_usage: "Use delay(...) in coroutines or higher-level scheduling",
         pattern: r"\bThread\.sleep\s*\(",
         api_call: "Thread.sleep",
@@ -710,7 +714,8 @@ const SWIFT_RULE_SPECS: &[RegexRuleSpec] = &[
         name: "fatalerror-call",
         category: MisuseCategory::ErrorHandling,
         severity: MisuseSeverity::Low,
-        description: "fatalError terminates the process and is risky outside clearly impossible states",
+        description:
+            "fatalError terminates the process and is risky outside clearly impossible states",
         correct_usage: "Return/throw recoverable errors where possible",
         pattern: r"\bfatalError\s*\(",
         api_call: "fatalError",
@@ -962,7 +967,8 @@ const LUA_RULE_SPECS: &[RegexRuleSpec] = &[
         name: "dofile-loadfile",
         category: MisuseCategory::Security,
         severity: MisuseSeverity::Medium,
-        description: "dofile/loadfile execute external files and are risky with user-controlled paths",
+        description:
+            "dofile/loadfile execute external files and are risky with user-controlled paths",
         correct_usage: "Validate file origins strictly before executing them",
         pattern: r"\b(?:dofile|loadfile)\s*\(",
         api_call: "dofile",
@@ -1346,11 +1352,7 @@ fn collect_files(path: &Path) -> Result<Vec<PathBuf>> {
             files.push(path.to_path_buf());
         }
     } else if path.is_dir() {
-        for entry in WalkDir::new(path)
-            .follow_links(false)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
+        for entry in walk_project(path) {
             if files.len() >= MAX_DIRECTORY_FILES as usize {
                 break;
             }
@@ -1810,9 +1812,7 @@ fn check_unbounded_with_capacity(
 ) -> Option<MisuseFinding> {
     if line_text.contains("Vec::with_capacity(") {
         let line_lower = line_text.to_lowercase();
-        let user_input_markers = [
-            "input", "args", "user", "request", "len", "size",
-        ];
+        let user_input_markers = ["input", "args", "user", "request", "len", "size"];
         if user_input_markers.iter().any(|m| line_lower.contains(m)) {
             let column = line_text.find("Vec::with_capacity(").unwrap_or(0) as u32;
             return Some(MisuseFinding {
@@ -2293,12 +2293,8 @@ mod tests {
             check_unbounded_with_capacity(rule, "lib.rs", 12, "let v = Vec::with_capacity(len);");
         assert!(finding.is_some());
 
-        let bounded = check_unbounded_with_capacity(
-            rule,
-            "lib.rs",
-            13,
-            "let v = Vec::with_capacity(256);",
-        );
+        let bounded =
+            check_unbounded_with_capacity(rule, "lib.rs", 13, "let v = Vec::with_capacity(256);");
         assert!(bounded.is_none());
     }
 
@@ -2357,16 +2353,26 @@ mod tests {
         let rules = rules_for_language(language);
         let findings = analyze_file(&path, &rules, language).unwrap();
         assert!(
-            findings.iter().any(|finding| finding.rule.id == expected_rule_id),
+            findings
+                .iter()
+                .any(|finding| finding.rule.id == expected_rule_id),
             "expected {expected_rule_id} for {filename}, got {:?}",
-            findings.iter().map(|f| f.rule.id.clone()).collect::<Vec<_>>()
+            findings
+                .iter()
+                .map(|f| f.rule.id.clone())
+                .collect::<Vec<_>>()
         );
     }
 
     #[test]
     fn test_extended_language_rule_detection() {
         let cases = [
-            ("main.go", ApiLanguage::Go, "data, _ := ioutil.ReadFile(path)", "GO001"),
+            (
+                "main.go",
+                ApiLanguage::Go,
+                "data, _ := ioutil.ReadFile(path)",
+                "GO001",
+            ),
             (
                 "Main.java",
                 ApiLanguage::Java,
@@ -2376,14 +2382,44 @@ mod tests {
             ("app.js", ApiLanguage::JavaScript, "if (a == b) {}", "JS001"),
             ("app.ts", ApiLanguage::TypeScript, "if (a == b) {}", "TS001"),
             ("main.c", ApiLanguage::C, "gets(buffer);", "C001"),
-            ("main.cpp", ApiLanguage::Cpp, "std::auto_ptr<Foo> p;", "CPP003"),
+            (
+                "main.cpp",
+                ApiLanguage::Cpp,
+                "std::auto_ptr<Foo> p;",
+                "CPP003",
+            ),
             ("app.rb", ApiLanguage::Ruby, "eval(params[:code])", "RB001"),
-            ("index.php", ApiLanguage::Php, "unserialize($payload);", "PH005"),
+            (
+                "index.php",
+                ApiLanguage::Php,
+                "unserialize($payload);",
+                "PH005",
+            ),
             ("Main.kt", ApiLanguage::Kotlin, "val name = user!!", "KT001"),
-            ("main.swift", ApiLanguage::Swift, "let name = value!", "SW003"),
-            ("Program.cs", ApiLanguage::CSharp, "var x = task.Result;", "CS003"),
-            ("Main.scala", ApiLanguage::Scala, "val casted = value.asInstanceOf[String]", "SC002"),
-            ("app.ex", ApiLanguage::Elixir, "String.to_atom(param)", "EX001"),
+            (
+                "main.swift",
+                ApiLanguage::Swift,
+                "let name = value!",
+                "SW003",
+            ),
+            (
+                "Program.cs",
+                ApiLanguage::CSharp,
+                "var x = task.Result;",
+                "CS003",
+            ),
+            (
+                "Main.scala",
+                ApiLanguage::Scala,
+                "val casted = value.asInstanceOf[String]",
+                "SC002",
+            ),
+            (
+                "app.ex",
+                ApiLanguage::Elixir,
+                "String.to_atom(param)",
+                "EX001",
+            ),
             ("main.lua", ApiLanguage::Lua, "value = 1", "LU001"),
             ("game.luau", ApiLanguage::Luau, "os.execute(cmd)", "LU003"),
             ("main.ml", ApiLanguage::Ocaml, "Obj.magic value", "OC004"),

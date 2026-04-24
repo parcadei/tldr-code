@@ -147,12 +147,7 @@ impl TypeScriptHandler {
     }
 
     /// Parse the import clause (what's being imported).
-    fn parse_import_clause(
-        &self,
-        node: &Node,
-        source: &[u8],
-        result: &mut ImportClauseResult,
-    ) {
+    fn parse_import_clause(&self, node: &Node, source: &[u8], result: &mut ImportClauseResult) {
         for i in 0..node.child_count() {
             if let Some(child) = node.child(i) {
                 match child.kind() {
@@ -568,19 +563,29 @@ impl TypeScriptHandler {
                         let (target, is_component) = match name_node.kind() {
                             "identifier" => {
                                 let t = get_node_text(&name_node, source).to_string();
-                                let is_cap = t.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+                                let is_cap =
+                                    t.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
                                 (t, is_cap)
                             }
                             "member_expression" => {
                                 // <UI.Modal /> — extract property as call target
-                                let prop = name_node.child_by_field_name("property")
+                                let prop = name_node
+                                    .child_by_field_name("property")
                                     .map(|p| get_node_text(&p, source).to_string());
-                                let obj = name_node.child_by_field_name("object")
+                                let obj = name_node
+                                    .child_by_field_name("object")
                                     .map(|o| get_node_text(&o, source).to_string());
                                 match (obj, prop) {
                                     (Some(o), Some(p)) => {
-                                        let is_cap = o.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
-                                            || p.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+                                        let is_cap = o
+                                            .chars()
+                                            .next()
+                                            .map(|c| c.is_uppercase())
+                                            .unwrap_or(false)
+                                            || p.chars()
+                                                .next()
+                                                .map(|c| c.is_uppercase())
+                                                .unwrap_or(false);
                                         (p, is_cap)
                                     }
                                     _ => (String::new(), false),
@@ -592,13 +597,18 @@ impl TypeScriptHandler {
                                 for k in 0..name_node.child_count() {
                                     if let Some(seg) = name_node.child(k) {
                                         if seg.kind() == "identifier" {
-                                            last_ident = Some(get_node_text(&seg, source).to_string());
+                                            last_ident =
+                                                Some(get_node_text(&seg, source).to_string());
                                         }
                                     }
                                 }
                                 match last_ident {
                                     Some(t) => {
-                                        let is_cap = t.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+                                        let is_cap = t
+                                            .chars()
+                                            .next()
+                                            .map(|c| c.is_uppercase())
+                                            .unwrap_or(false);
                                         (t, is_cap)
                                     }
                                     None => (String::new(), false),
@@ -2120,7 +2130,9 @@ function Page() {
 "#;
             let calls = extract_calls(source);
             let page_calls = calls.get("Page").unwrap();
-            assert!(page_calls.iter().any(|c| c.target == "Modal" && c.call_type == CallType::Intra));
+            assert!(page_calls
+                .iter()
+                .any(|c| c.target == "Modal" && c.call_type == CallType::Intra));
         }
 
         #[test]
@@ -2174,7 +2186,9 @@ function App() {
             let calls = extract_calls(source);
             let app_calls = calls.get("App").unwrap();
             assert!(
-                app_calls.iter().any(|c| c.target == "formatDate" && c.call_type == CallType::Intra),
+                app_calls
+                    .iter()
+                    .any(|c| c.target == "formatDate" && c.call_type == CallType::Intra),
                 "Expected formatDate call inside JSX expression, got: {:?}",
                 app_calls
             );

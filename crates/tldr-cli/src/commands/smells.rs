@@ -9,7 +9,8 @@ use anyhow::Result;
 use clap::Args;
 
 use tldr_core::{
-    analyze_smells_aggregated, detect_smells, SmellType, SmellsReport, ThresholdPreset,
+    analyze_smells_aggregated_with_walker_opts, detect_smells_with_walker_opts, Language,
+    SmellType, SmellsReport, SmellsWalkerOpts, ThresholdPreset,
 };
 
 use crate::commands::daemon_router::{params_with_path, try_daemon_route};
@@ -21,6 +22,10 @@ pub struct SmellsArgs {
     /// Path to analyze (file or directory)
     #[arg(default_value = ".")]
     pub path: PathBuf,
+
+    /// Programming language to filter by (auto-detected if omitted)
+    #[arg(long, short = 'l')]
+    pub lang: Option<Language>,
 
     /// Threshold preset
     #[arg(long, short = 't', default_value = "default")]
@@ -39,6 +44,10 @@ pub struct SmellsArgs {
     /// standard smell detectors
     #[arg(long)]
     pub deep: bool,
+
+    /// Walk vendored/build dirs (node_modules, target, dist, etc.) that would normally be skipped.
+    #[arg(long)]
+    pub no_default_ignore: bool,
 }
 
 /// CLI wrapper for threshold preset
@@ -159,19 +168,25 @@ impl SmellsArgs {
         ));
 
         // Detect smells - use aggregated analysis when --deep is set
+        let walker_opts = SmellsWalkerOpts {
+            no_default_ignore: self.no_default_ignore,
+            lang: self.lang,
+        };
         let report = if self.deep {
-            analyze_smells_aggregated(
+            analyze_smells_aggregated_with_walker_opts(
                 &self.path,
                 self.threshold.into(),
                 self.smell_type.map(|s| s.into()),
                 self.suggest,
+                walker_opts,
             )?
         } else {
-            detect_smells(
+            detect_smells_with_walker_opts(
                 &self.path,
                 self.threshold.into(),
                 self.smell_type.map(|s| s.into()),
                 self.suggest,
+                walker_opts,
             )?
         };
 

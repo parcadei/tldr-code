@@ -44,6 +44,8 @@ use std::time::Instant;
 use clap::Args;
 use colored::Colorize;
 use serde_json::Value;
+use tldr_core::walker::ProjectWalker;
+use tldr_core::Language;
 use tree_sitter::Node;
 
 use crate::output::OutputFormat;
@@ -108,6 +110,10 @@ pub struct SecureArgs {
     /// File path or directory to analyze
     pub path: PathBuf,
 
+    /// Programming language to filter by (auto-detected if omitted)
+    #[arg(long, short = 'l')]
+    pub lang: Option<Language>,
+
     /// Show details for specific sub-analysis
     #[arg(long)]
     pub detail: Option<String>,
@@ -119,6 +125,10 @@ pub struct SecureArgs {
     /// Write output to file instead of stdout
     #[arg(long, short = 'o')]
     pub output: Option<PathBuf>,
+
+    /// Walk vendored/build dirs (node_modules, target, dist, etc.) that would normally be skipped.
+    #[arg(long)]
+    pub no_default_ignore: bool,
 }
 
 impl SecureArgs {
@@ -155,7 +165,7 @@ pub fn run(args: SecureArgs, format: OutputFormat) -> anyhow::Result<()> {
     };
 
     // Collect files to analyze (auto-detect Python files)
-    let files = collect_files(&args.path)?;
+    let files = collect_files(&args.path, args.lang, args.no_default_ignore)?;
 
     // Run sub-analyses and collect findings
     let mut all_findings = Vec::new();
@@ -205,22 +215,26 @@ pub fn run(args: SecureArgs, format: OutputFormat) -> anyhow::Result<()> {
 }
 
 /// Collect supported files to analyze.
-fn collect_files(path: &Path) -> RemainingResult<Vec<PathBuf>> {
+fn collect_files(
+    path: &Path,
+    lang: Option<Language>,
+    no_default_ignore: bool,
+) -> RemainingResult<Vec<PathBuf>> {
     let mut files = Vec::new();
 
     if path.is_file() {
-        if is_supported_secure_file(path) {
+        if is_supported_secure_file(path, lang) {
             files.push(path.to_path_buf());
         }
     } else if path.is_dir() {
-        // Walk directory and collect Python/Rust files.
-        for entry in walkdir::WalkDir::new(path)
-            .max_depth(10)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
+        // Walk directory and collect supported source files.
+        let mut walker = ProjectWalker::new(path).max_depth(10);
+        if no_default_ignore {
+            walker = walker.no_default_ignore();
+        }
+        for entry in walker.iter() {
             let p = entry.path();
-            if p.is_file() && is_supported_secure_file(p) {
+            if p.is_file() && is_supported_secure_file(p, lang) {
                 files.push(p.to_path_buf());
             }
         }
@@ -232,8 +246,37 @@ fn collect_files(path: &Path) -> RemainingResult<Vec<PathBuf>> {
     Ok(files)
 }
 
-fn is_supported_secure_file(path: &std::path::Path) -> bool {
-    matches!(path.extension().and_then(|e| e.to_str()), Some("py" | "rs"))
+/// Check whether `path` is a source file the secure analyzer should scan.
+///
+/// With `lang = Some(L)`, only matches that language's extensions. With
+/// `lang = None`, preserves the historical behavior of `py | rs` (the
+/// languages the sub-analyzers natively support).
+fn is_supported_secure_file(path: &std::path::Path, lang: Option<Language>) -> bool {
+    let ext = match path.extension().and_then(|e| e.to_str()) {
+        Some(e) => e,
+        None => return false,
+    };
+    match lang {
+        Some(Language::TypeScript) => matches!(ext, "ts" | "tsx"),
+        Some(Language::JavaScript) => matches!(ext, "js" | "mjs" | "cjs" | "jsx"),
+        Some(Language::Python) => ext == "py",
+        Some(Language::Rust) => ext == "rs",
+        Some(Language::Go) => ext == "go",
+        Some(Language::Java) => ext == "java",
+        Some(Language::C) => matches!(ext, "c" | "h"),
+        Some(Language::Cpp) => matches!(ext, "cpp" | "cc" | "cxx" | "hpp" | "hh" | "hxx"),
+        Some(Language::CSharp) => ext == "cs",
+        Some(Language::Ruby) => ext == "rb",
+        Some(Language::Php) => ext == "php",
+        Some(Language::Kotlin) => matches!(ext, "kt" | "kts"),
+        Some(Language::Swift) => ext == "swift",
+        Some(Language::Scala) => ext == "scala",
+        Some(Language::Elixir) => matches!(ext, "ex" | "exs"),
+        Some(Language::Lua) => ext == "lua",
+        Some(Language::Luau) => ext == "luau",
+        Some(Language::Ocaml) => matches!(ext, "ml" | "mli"),
+        None => matches!(ext, "py" | "rs"),
+    }
 }
 
 fn is_rust_file(path: &std::path::Path) -> bool {
@@ -392,7 +435,12 @@ fn analyze_fstring_injection(
     traverse_for_fstrings(root, source, file, findings);
 }
 
-fn traverse_for_fstrings(node: Node, source: &[u8], file: &Path, findings: &mut Vec<SecureFinding>) {
+fn traverse_for_fstrings(
+    node: Node,
+    source: &[u8],
+    file: &Path,
+    findings: &mut Vec<SecureFinding>,
+) {
     // Check if this is a call to a dangerous function with an f-string
     if node.kind() == "call" {
         if let Some(func) = node.child_by_field_name("function") {
@@ -788,8 +836,8 @@ fn format_text_report(report: &SecureReport) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tree_sitter::Parser;
     use tempfile::TempDir;
+    use tree_sitter::Parser;
 
     fn create_test_file(dir: &TempDir, name: &str, content: &str) -> PathBuf {
         let path = dir.path().join(name);
@@ -802,9 +850,11 @@ mod tests {
         // Test that default values are set correctly
         let args = SecureArgs {
             path: PathBuf::from("test.py"),
+            lang: None,
             detail: None,
             quick: false,
             output: None,
+            no_default_ignore: false,
         };
         assert!(!args.quick);
     }
@@ -883,7 +933,7 @@ def read_file():
         create_test_file(&temp, "lib.rs", "fn main() {}");
         create_test_file(&temp, "notes.txt", "ignore");
 
-        let files = collect_files(temp.path()).unwrap();
+        let files = collect_files(temp.path(), None, false).unwrap();
         assert!(files.iter().any(|f| f.ends_with("sample.py")));
         assert!(files.iter().any(|f| f.ends_with("lib.rs")));
         assert!(!files.iter().any(|f| f.ends_with("notes.txt")));

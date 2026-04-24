@@ -144,28 +144,18 @@ impl Language {
 
     /// Detect dominant language from files in a directory
     ///
-    /// Uses recursive traversal via walkdir to find source files at any depth.
-    /// This is important for projects with deep directory structures like
+    /// Uses the shared project walker to find source files at any depth,
+    /// skipping `node_modules`/`target`/hidden/.gitignored paths. This is
+    /// important for projects with deep directory structures like
     /// Java (src/main/java/...) or C# (src/...).
     pub fn from_directory(path: &std::path::Path) -> Option<Self> {
         use std::collections::HashMap;
-        use walkdir::WalkDir;
 
         let mut counts: HashMap<Language, usize> = HashMap::new();
 
-        // Recursively walk the directory, skipping hidden directories
-        for entry in WalkDir::new(path)
-            .follow_links(false)
-            .into_iter()
-            .filter_entry(|e| {
-                // Skip hidden directories (starting with .)
-                e.file_name()
-                    .to_str()
-                    .map(|s| !s.starts_with('.'))
-                    .unwrap_or(true)
-            })
-            .filter_map(|e| e.ok())
-        {
+        // Recursively walk the directory via the shared walker (skips
+        // hidden, node_modules, target, etc., does not follow symlinks).
+        for entry in crate::walker::walk_project(path) {
             let p = entry.path();
             if p.is_file() {
                 if let Some(lang) = Self::from_path(p) {

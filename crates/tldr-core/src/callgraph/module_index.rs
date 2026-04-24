@@ -1371,18 +1371,17 @@ fn strip_known_prefixes<'a>(path: &'a str, prefixes: &[&str]) -> &'a str {
     for prefix in prefixes {
         if let Some(pos) = path.find(prefix) {
             // Only match at start of path or after a '/' boundary
-            if (pos == 0 || path.as_bytes()[pos - 1] == b'/')
-                && prefix.len() > best_prefix_len {
-                    best_prefix_len = prefix.len();
-                    best_end = Some(pos + prefix.len());
+            if (pos == 0 || path.as_bytes()[pos - 1] == b'/') && prefix.len() > best_prefix_len {
+                best_prefix_len = prefix.len();
+                best_end = Some(pos + prefix.len());
+            }
         }
     }
-}
-if let Some(end) = best_end {
-    &path[end..]
-} else {
-    path
-}
+    if let Some(end) = best_end {
+        &path[end..]
+    } else {
+        path
+    }
 }
 
 fn strip_extension_any<'a>(path: &'a str, extensions: &[&str]) -> &'a str {
@@ -1537,10 +1536,7 @@ fn parse_csharp_namespace(path: &Path) -> Option<String> {
 }
 
 fn simple_module_name(module: &str) -> &str {
-    module
-        .rsplit(['.', '/', '\\'])
-        .next()
-        .unwrap_or(module)
+    module.rsplit(['.', '/', '\\']).next().unwrap_or(module)
 }
 
 /// Check if a directory should be skipped during traversal.

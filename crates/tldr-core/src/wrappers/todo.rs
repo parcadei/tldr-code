@@ -23,8 +23,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use crate::walker::walk_project;
 use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
 
 use super::base::{progress, safe_call, SubAnalysisResult};
 use crate::dfg::gvn::compute_gvn;
@@ -302,10 +302,8 @@ fn run_equivalence_sweep(path: &str) -> TldrResult<Vec<serde_json::Value>> {
         }
     } else {
         // Directory: scan for Python files (max 200)
-        let python_files: Vec<PathBuf> = WalkDir::new(target)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
+        let python_files: Vec<PathBuf> = walk_project(target)
+            .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
             .filter(|e| e.path().extension().map(|ext| ext == "py").unwrap_or(false))
             .map(|e| e.path().to_path_buf())
             .take(200)

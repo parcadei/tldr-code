@@ -588,9 +588,7 @@ fn find_typescript_constructor(source: &str, var_name: &str, call_line: u32) -> 
             let pattern = format!("{}{} = new ", prefix, var_name);
             if let Some(idx) = line.find(&pattern) {
                 let after_new = &line[idx + pattern.len()..];
-                let type_end = after_new
-                    .find(['(', '<'])
-                    .unwrap_or(after_new.len());
+                let type_end = after_new.find(['(', '<']).unwrap_or(after_new.len());
                 let type_name = after_new[..type_end].trim();
                 if let Some(normalized) = normalize_type_name(type_name) {
                     return Some(normalized);
@@ -1442,13 +1440,12 @@ pub struct TypedEdgeParams<'a> {
 /// # Returns
 /// A TypedCallEdge with resolved type and confidence
 pub fn create_typed_edge(params: TypedEdgeParams<'_>) -> TypedCallEdge {
-    let (receiver_type, confidence) =
-        resolve_python_receiver_type(
-            params.source,
-            params.call_line,
-            params.receiver,
-            params.enclosing_class,
-        );
+    let (receiver_type, confidence) = resolve_python_receiver_type(
+        params.source,
+        params.call_line,
+        params.receiver,
+        params.enclosing_class,
+    );
 
     let dst_func = match &receiver_type {
         Some(type_name) => format!("{}.{}", type_name, params.method),

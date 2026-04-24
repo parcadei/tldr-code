@@ -656,10 +656,7 @@ fn get_python_parser() -> PatternsResult<Parser> {
 type TemporalFileAnalysis = (HashMap<String, Vec<String>>, Vec<TemporalConstraint>);
 
 /// Analyze temporal constraints for a single file
-fn analyze_temporal_file(
-    path: &Path,
-    args: &TemporalArgs,
-) -> PatternsResult<TemporalFileAnalysis> {
+fn analyze_temporal_file(path: &Path, args: &TemporalArgs) -> PatternsResult<TemporalFileAnalysis> {
     // Validate path
     let canonical = if let Some(ref root) = args.project_root {
         validate_file_path_in_project(path, root)?
@@ -696,11 +693,7 @@ fn analyze_temporal_directory(
     let mut files_analyzed = 0u32;
 
     // Walk directory
-    for entry in walkdir::WalkDir::new(&canonical)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in tldr_core::walker::walk_project(&canonical) {
         // Check timeout (E03 mitigation)
         if start_time.elapsed() > timeout {
             break;
@@ -983,8 +976,6 @@ pub fn run(args: TemporalArgs, global_format: GlobalOutputFormat) -> anyhow::Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    
 
     #[test]
     fn test_extract_sequences_simple() {

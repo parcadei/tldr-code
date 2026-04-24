@@ -163,10 +163,7 @@ pub fn compute_live_variables(
             let use_b = use_sets.get(&block_id).cloned().unwrap_or_default();
             let def_b = def_sets.get(&block_id).cloned().unwrap_or_default();
 
-            let out_minus_def: HashSet<String> = new_out
-                .difference(&def_b)
-                .cloned()
-                .collect();
+            let out_minus_def: HashSet<String> = new_out.difference(&def_b).cloned().collect();
 
             let mut new_in = use_b;
             new_in.extend(out_minus_def);
@@ -248,10 +245,7 @@ enum CanonicalExpr {
         operands: (u32, u32),
     },
     /// Unary operation
-    UnaryOp {
-        op: String,
-        operand: u32,
-    },
+    UnaryOp { op: String, operand: u32 },
     /// Phi function with value numbers of sources
     Phi(Vec<u32>),
     /// Call (each call gets unique number - not CSE-able)
@@ -284,8 +278,8 @@ pub fn compute_value_numbers(ssa: &SsaFunction) -> TldrResult<ValueNumbering> {
 
     // Helper to get or create value number for an expression
     let get_or_create_number = |expr: CanonicalExpr,
-                                    expr_to_num: &mut HashMap<CanonicalExpr, u32>,
-                                    next_num: &mut u32|
+                                expr_to_num: &mut HashMap<CanonicalExpr, u32>,
+                                next_num: &mut u32|
      -> u32 {
         if let Some(&num) = expr_to_num.get(&expr) {
             num
@@ -782,10 +776,8 @@ pub fn run_sccp(ssa: &SsaFunction) -> TldrResult<SccpResult> {
 
     // Find unreachable blocks
     let all_blocks: HashSet<usize> = ssa.blocks.iter().map(|b| b.id).collect();
-    let unreachable_blocks: HashSet<usize> = all_blocks
-        .difference(&executable_blocks)
-        .copied()
-        .collect();
+    let unreachable_blocks: HashSet<usize> =
+        all_blocks.difference(&executable_blocks).copied().collect();
 
     // Find dead names (not used anywhere)
     let mut used_names: HashSet<SsaNameId> = HashSet::new();
@@ -1545,9 +1537,7 @@ fn extract_expressions_ast(
     cfg: &CfgInfo,
 ) -> Option<ExpressionExtraction> {
     use crate::ast::parser::ParserPool;
-    use crate::security::ast_utils::{
-        binary_expression_node_kinds, walk_descendants,
-    };
+    use crate::security::ast_utils::{binary_expression_node_kinds, walk_descendants};
 
     let pool = ParserPool::new();
     let tree = pool.parse(source, language).ok()?;
@@ -1577,7 +1567,10 @@ fn extract_expressions_ast(
         if let Some(var_name) = extract_def_from_node(node, src_bytes, language) {
             let line_num = node.start_position().row as u32 + 1;
             if let Some(&block_id) = line_to_block.get(&line_num) {
-                block_defs.entry(block_id).or_default().insert(var_name.clone());
+                block_defs
+                    .entry(block_id)
+                    .or_default()
+                    .insert(var_name.clone());
                 defs_by_line.insert(line_num, var_name);
             }
         }
@@ -1632,7 +1625,10 @@ fn extract_expressions_ast(
 
             if let Some(&block_id) = line_to_block.get(&line_num) {
                 let expr = all_expressions[expr_idx].clone();
-                block_exprs.entry(block_id).or_default().push((line_num, expr));
+                block_exprs
+                    .entry(block_id)
+                    .or_default()
+                    .push((line_num, expr));
             }
         }
     }
@@ -1648,7 +1644,10 @@ fn extract_expressions_ast(
 
 /// Check if an operator is an arithmetic operator (for CSE tracking).
 fn is_arithmetic_op(op: &str) -> bool {
-    matches!(op, "+" | "-" | "*" | "/" | "%" | "**" | "//" | "<<" | ">>" | "&" | "|" | "^")
+    matches!(
+        op,
+        "+" | "-" | "*" | "/" | "%" | "**" | "//" | "<<" | ">>" | "&" | "|" | "^"
+    )
 }
 
 /// Check if a string is a simple identifier (variable name).
@@ -1754,7 +1753,9 @@ fn extract_lhs_language_fallback(
     language: Language,
 ) -> Option<String> {
     match language {
-        Language::TypeScript | Language::JavaScript => extract_name_from_variable_declarator(node, source),
+        Language::TypeScript | Language::JavaScript => {
+            extract_name_from_variable_declarator(node, source)
+        }
         Language::Java => {
             if node.kind() == "local_variable_declaration" {
                 extract_name_from_variable_declarator(node, source)
@@ -1872,11 +1873,7 @@ fn extract_lhs_swift(node: &tree_sitter::Node, source: &[u8]) -> Option<String> 
     None
 }
 
-fn extract_lhs_lua(
-    node: &tree_sitter::Node,
-    source: &[u8],
-    language: Language,
-) -> Option<String> {
+fn extract_lhs_lua(node: &tree_sitter::Node, source: &[u8], language: Language) -> Option<String> {
     use crate::security::ast_utils::node_text;
 
     if node.kind() == "variable_declaration" {
@@ -2024,7 +2021,10 @@ fn extract_expressions_regex(
             let rhs = caps.get(2).unwrap().as_str();
 
             if let Some(&block_id) = line_to_block.get(&line_num) {
-                block_defs.entry(block_id).or_default().insert(var_name.clone());
+                block_defs
+                    .entry(block_id)
+                    .or_default()
+                    .insert(var_name.clone());
                 defs_by_line.insert(line_num, var_name);
             }
 
@@ -2061,7 +2061,10 @@ fn extract_expressions_regex(
 
                 if let Some(&block_id) = line_to_block.get(&line_num) {
                     let expr = all_expressions[expr_idx].clone();
-                    block_exprs.entry(block_id).or_default().push((line_num, expr));
+                    block_exprs
+                        .entry(block_id)
+                        .or_default()
+                        .push((line_num, expr));
                 }
             }
         }
@@ -2117,7 +2120,10 @@ pub fn compute_available_expressions_from_refs(
     for var_ref in refs {
         if let Some(&block_id) = line_to_block.get(&var_ref.line) {
             if matches!(var_ref.ref_type, RefType::Definition | RefType::Update) {
-                block_defs.entry(block_id).or_default().insert(var_ref.name.clone());
+                block_defs
+                    .entry(block_id)
+                    .or_default()
+                    .insert(var_ref.name.clone());
             }
         }
     }

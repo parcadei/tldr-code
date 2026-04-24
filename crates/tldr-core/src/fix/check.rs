@@ -26,10 +26,10 @@
 use std::path::Path;
 use std::process::Command;
 
+use super::diagnose;
 use super::error_parser::parse_error;
 use super::patch::apply_fix;
 use super::types::Diagnosis;
-use super::diagnose;
 
 /// Result of a single fix attempt in the check loop.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -94,10 +94,7 @@ fn detect_lang_from_extension(path: &Path) -> Option<&'static str> {
 /// Returns `(exit_success, combined_error_output)` where the error output
 /// is stderr if non-empty, otherwise stdout (some tools write errors to stdout).
 fn run_command(cmd: &str) -> (bool, String) {
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg(cmd)
-        .output();
+    let output = Command::new("sh").arg("-c").arg(cmd).output();
 
     match output {
         Ok(out) => {
@@ -323,10 +320,7 @@ mod tests {
 
     #[test]
     fn test_detect_lang_go() {
-        assert_eq!(
-            detect_lang_from_extension(Path::new("main.go")),
-            Some("go")
-        );
+        assert_eq!(detect_lang_from_extension(Path::new("main.go")), Some("go"));
     }
 
     #[test]
@@ -352,12 +346,11 @@ mod tests {
     #[test]
     fn test_check_loop_terminates_on_success() {
         // Test command that succeeds immediately
-        let (_dir, source_path, _script_path) =
-            setup_temp_env("app.py", "x = 1\n", "");
+        let (_dir, source_path, _script_path) = setup_temp_env("app.py", "x = 1\n", "");
 
         let config = CheckConfig {
             file: &source_path,
-            test_cmd: "true",  // always succeeds
+            test_cmd: "true", // always succeeds
             lang: Some("python"),
             max_attempts: 5,
         };

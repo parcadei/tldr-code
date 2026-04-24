@@ -39,30 +39,30 @@ use super::type_resolver::{expand_union_type, MAX_UNION_EXPANSION};
 use crate::types::Language;
 
 // --- Re-exports for backward compatibility (sub-modules are private) ---
-pub use super::types::{
-    BuildConfig, BuildResult, BuildDiagnostics, ParseDiagnostic, ResolutionWarning,
-    SkipReason, BuildError, FuncIndex, ClassIndex, FuncEntry, ClassEntry,
-};
-pub use super::scanner::{ScannedFile, scan_project_files, should_skip_path, filter_tldrignored};
-pub use super::module_path::path_to_module;
 pub use super::imports::{
-    ImportMap, ModuleImports, build_import_map, augment_go_module_imports,
-    resolve_imports_for_file, extract_python_imports, trace_reexport_with_cycle_detection,
+    augment_go_module_imports, build_import_map, extract_python_imports, resolve_imports_for_file,
+    trace_reexport_with_cycle_detection, ImportMap, ModuleImports,
 };
+pub use super::module_path::path_to_module;
 pub use super::resolution::{
-    ResolvedTarget, ResolutionContext, resolve_call, resolve_call_with_receiver, apply_type_resolution,
+    apply_type_resolution, resolve_call, resolve_call_with_receiver, ResolutionContext,
+    ResolvedTarget,
+};
+pub use super::scanner::{filter_tldrignored, scan_project_files, should_skip_path, ScannedFile};
+pub use super::types::{
+    BuildConfig, BuildDiagnostics, BuildError, BuildResult, ClassEntry, ClassIndex, FuncEntry,
+    FuncIndex, ParseDiagnostic, ResolutionWarning, SkipReason,
 };
 
 // --- Internal imports from sub-modules ---
-use super::types::PYTHON_BUILTINS;
-use super::var_types::FileParseResult;
-use super::scanner::{normalize_language_string, is_supported_language};
 use super::module_path::{extract_definitions, normalize_path_relative_to_root};
 use super::resolution::{
-    resolve_caller_name, compute_via_import, enclosing_class_for_call,
-    first_base_for_class, resolve_constructor_target, resolve_method_in_class,
-    resolve_method_in_bases,
+    compute_via_import, enclosing_class_for_call, first_base_for_class, resolve_caller_name,
+    resolve_constructor_target, resolve_method_in_bases, resolve_method_in_class,
 };
+use super::scanner::{is_supported_language, normalize_language_string};
+use super::types::PYTHON_BUILTINS;
+use super::var_types::FileParseResult;
 
 // =============================================================================
 // Parallel Index Building (Spec Section 14.5)
@@ -131,7 +131,8 @@ pub fn build_indices_parallel(
 
     for (abs_path, parse_result) in results {
         // P1: Compute relative path with normalization (parity-fix-plan.yaml)
-        let relative_path = normalize_path_relative_to_root(&abs_path, root, canonical_root.as_deref());
+        let relative_path =
+            normalize_path_relative_to_root(&abs_path, root, canonical_root.as_deref());
 
         // Compute module name from path (language-aware for ModuleIndex parity)
         let module = path_to_module(&relative_path, language);
@@ -260,12 +261,16 @@ pub fn extract_and_resolve_calls(
                 builder_context.resolution_context.class_index,
                 builder_context.resolution_context.func_index,
                 builder_context.resolution_context.language,
-            )
-            {
+            ) {
                 result.resolved.push((call_site.clone(), super_target));
                 continue;
             }
-            match resolve_call_site_for_builder(file_ir, call_site, &mut builder_context, &mut result) {
+            match resolve_call_site_for_builder(
+                file_ir,
+                call_site,
+                &mut builder_context,
+                &mut result,
+            ) {
                 CallSiteResolution::Handled => {}
                 CallSiteResolution::Resolved(target) => {
                     if PYTHON_BUILTINS.contains(&target.name.as_str()) {
@@ -281,7 +286,8 @@ pub fn extract_and_resolve_calls(
                             file: current_file.clone(),
                             line: call_site.line.unwrap_or(0),
                             target: call_site.target.clone(),
-                            reason: "Dynamic import pattern cannot be resolved statically".to_string(),
+                            reason: "Dynamic import pattern cannot be resolved statically"
+                                .to_string(),
                         });
                     }
                     result.unresolved.push(call_site.clone());
@@ -334,8 +340,15 @@ fn resolve_super_constructor_call(
 ) -> Option<ResolvedTarget> {
     let supports_super_ctor = matches!(
         language,
-        "java" | "kotlin" | "scala" | "swift" | "typescript" | "tsx" | "javascript"
-            | "js" | "csharp"
+        "java"
+            | "kotlin"
+            | "scala"
+            | "swift"
+            | "typescript"
+            | "tsx"
+            | "javascript"
+            | "js"
+            | "csharp"
     );
     if !supports_super_ctor
         || !matches!(call_site.call_type, CallType::Direct | CallType::Intra)
@@ -346,7 +359,8 @@ fn resolve_super_constructor_call(
     let class_name = enclosing_class_for_call(&file_ir.funcs, call_site)?;
     let base = first_base_for_class(&file_ir.classes, &class_name)?;
     let class_entry = class_index.get(&base)?;
-    if let Some(ctor_target) = resolve_constructor_target(&base, class_entry, func_index, language) {
+    if let Some(ctor_target) = resolve_constructor_target(&base, class_entry, func_index, language)
+    {
         return Some(ctor_target);
     }
     Some(ResolvedTarget {
@@ -441,22 +455,14 @@ fn resolve_static_call(
     let receiver_key = receiver.trim();
     if receiver_key == "self" || receiver_key == "static" {
         if let Some(class_name) = enclosing_class_for_call(&file_ir.funcs, call_site) {
-            if let Some(target) = resolve_method_in_class(
-                &class_name,
-                method,
-                class_index,
-                func_index,
-                language,
-            ) {
+            if let Some(target) =
+                resolve_method_in_class(&class_name, method, class_index, func_index, language)
+            {
                 return Some(target);
             }
-            if let Some(target) = resolve_method_in_bases(
-                &class_name,
-                method,
-                class_index,
-                func_index,
-                language,
-            ) {
+            if let Some(target) =
+                resolve_method_in_bases(&class_name, method, class_index, func_index, language)
+            {
                 return Some(target);
             }
         }
@@ -466,22 +472,14 @@ fn resolve_static_call(
     if receiver_key == "parent" || receiver_key == "base" || receiver_key == "super" {
         if let Some(class_name) = enclosing_class_for_call(&file_ir.funcs, call_site) {
             if let Some(base) = first_base_for_class(&file_ir.classes, &class_name) {
-                if let Some(target) = resolve_method_in_class(
-                    &base,
-                    method,
-                    class_index,
-                    func_index,
-                    language,
-                ) {
+                if let Some(target) =
+                    resolve_method_in_class(&base, method, class_index, func_index, language)
+                {
                     return Some(target);
                 }
-                if let Some(target) = resolve_method_in_bases(
-                    &base,
-                    method,
-                    class_index,
-                    func_index,
-                    language,
-                ) {
+                if let Some(target) =
+                    resolve_method_in_bases(&base, method, class_index, func_index, language)
+                {
                     return Some(target);
                 }
             }
@@ -538,7 +536,8 @@ fn resolve_method_or_attr_call(
                     file: context.resolution_context.current_file.to_path_buf(),
                     line: call_site.line.unwrap_or(0),
                     target: call_site.target.clone(),
-                    reason: "Union type too large to expand; skipping type-aware resolution".to_string(),
+                    reason: "Union type too large to expand; skipping type-aware resolution"
+                        .to_string(),
                 });
                 receiver_type_for_resolution = None;
             }
@@ -555,9 +554,6 @@ fn resolve_method_or_attr_call(
         None => CallSiteResolution::Unresolved,
     }
 }
-
-
-
 
 // =============================================================================
 // Main Entry Point (Spec Section 14.2)
@@ -615,16 +611,13 @@ pub fn build_project_call_graph_v2(
     let scanned_files = scan_project_files(root, &config.language, &config)?;
 
     // Step 3: Create IR with capacity hint
-    let mut ir = CallGraphIR::with_capacity(root.to_path_buf(), &config.language, scanned_files.len());
+    let mut ir =
+        CallGraphIR::with_capacity(root.to_path_buf(), &config.language, scanned_files.len());
 
     // Step 4: Build function and class indices in parallel (Phase 14c)
     // Per M1.9: Build indices completely before resolution phase
-    let (_func_index, _class_index, file_irs) = build_indices_parallel(
-        &scanned_files,
-        root,
-        &config.language,
-        &config,
-    );
+    let (_func_index, _class_index, file_irs) =
+        build_indices_parallel(&scanned_files, root, &config.language, &config);
 
     // Step 5: Add FileIRs to the CallGraphIR
     for file_ir in file_irs {
@@ -639,8 +632,8 @@ pub fn build_project_call_graph_v2(
     // Per M1.9: Build indices completely before resolution phase (done above)
     //
     // Step 7: Build ModuleIndex for import resolution
-    let module_index =
-        ModuleIndex::build(root, &config.language).map_err(|e| BuildError::Io(std::io::Error::other(e.to_string())))?;
+    let module_index = ModuleIndex::build(root, &config.language)
+        .map_err(|e| BuildError::Io(std::io::Error::other(e.to_string())))?;
 
     // Step 8: Create ImportResolver with LRU cache
     let mut import_resolver = ImportResolver::with_default_cache(&module_index);
@@ -671,7 +664,9 @@ pub fn build_project_call_graph_v2(
             // BUG FIX 2: Index BOTH simple AND full module name (CROSSFILE_SPEC.md Section 2.2)
             // Only for Python-style dot-separated modules (e.g., "pkg.helper" -> also index as "helper")
             // TS/JS use ./ prefix (not dot-separated), Go uses /, Rust uses ::
-            let is_python_style = !module.starts_with("./") && !module.starts_with("crate::") && !module.contains('/');
+            let is_python_style = !module.starts_with("./")
+                && !module.starts_with("crate::")
+                && !module.contains('/');
             let simple_module = if is_python_style {
                 module.split('.').next_back().unwrap_or(&module)
             } else {
@@ -714,7 +709,8 @@ pub fn build_project_call_graph_v2(
     // Interfaces have methods extracted from their type declaration AST (non-empty),
     // while structs have empty methods at this point (methods come from FuncDef merge below).
     let go_interface_names: HashSet<String> = if config.language == "go" {
-        class_index.iter()
+        class_index
+            .iter()
             .filter(|(_, entry)| !entry.methods.is_empty())
             .map(|(name, _)| name.to_string())
             .collect()
@@ -759,11 +755,12 @@ pub fn build_project_call_graph_v2(
     // calls to concrete implementations.
     if config.language == "go" && !go_interface_names.is_empty() {
         // Collect interface method sets
-        let interface_methods: Vec<(String, Vec<String>)> = go_interface_names.iter()
+        let interface_methods: Vec<(String, Vec<String>)> = go_interface_names
+            .iter()
             .filter_map(|name| {
-                class_index.get(name).map(|entry| {
-                    (name.clone(), entry.methods.clone())
-                })
+                class_index
+                    .get(name)
+                    .map(|entry| (name.clone(), entry.methods.clone()))
             })
             .collect();
 
@@ -779,7 +776,9 @@ pub fn build_project_call_graph_v2(
                     continue;
                 }
                 // Check if this struct has all methods of the interface
-                let has_all = iface_methods.iter().all(|m| class_entry.methods.contains(m));
+                let has_all = iface_methods
+                    .iter()
+                    .all(|m| class_entry.methods.contains(m));
                 if has_all {
                     implementors.push(class_name.to_string());
                 }
@@ -800,7 +799,8 @@ pub fn build_project_call_graph_v2(
     // Step 9b: Create type-aware resolver for chained calls and MRO-based resolution
     let func_path_map = func_index.to_path_map();
     let class_path_map = class_index.to_path_map();
-    let mut type_resolver = TypeAwareCallResolver::new(&module_index, &func_path_map, &class_path_map);
+    let mut type_resolver =
+        TypeAwareCallResolver::new(&module_index, &func_path_map, &class_path_map);
 
     // Feed all FileIRs and class defs into the resolver
     for (file_path, file_ir) in &ir.files {
@@ -938,7 +938,10 @@ def main():
         // Check that helper.py has the process function
         let helper_file = helper_ir.unwrap();
         let process_func = helper_file.funcs.iter().find(|f| f.name == "process");
-        assert!(process_func.is_some(), "helper.py should have process function");
+        assert!(
+            process_func.is_some(),
+            "helper.py should have process function"
+        );
 
         // Check that main.py has a call to process
         let main_calls = main_file.calls.get("main");
@@ -979,14 +982,18 @@ def main():
 
         // Import map: User is imported from models
         let mut import_map = ImportMap::new();
-        import_map.insert("User".to_string(), ("models".to_string(), "User".to_string()));
+        import_map.insert(
+            "User".to_string(),
+            ("models".to_string(), "User".to_string()),
+        );
 
         let module_imports = ModuleImports::new();
         let module_index = ModuleIndex::new(PathBuf::from("."), "python");
         let mut reexport_tracer = ReExportTracer::new(&module_index);
 
         // Create a CallSite for user.save() with known receiver type
-        let call_site = CallSite::method("main", "save", "user", Some("User".to_string()), Some(10));
+        let call_site =
+            CallSite::method("main", "save", "user", Some("User".to_string()), Some(10));
 
         // Resolve using the with_receiver function
         let mut resolution_context = ResolutionContext {
@@ -1007,7 +1014,10 @@ def main():
             &mut resolution_context,
         );
 
-        assert!(resolved.is_some(), "Should resolve user.save() to User.save");
+        assert!(
+            resolved.is_some(),
+            "Should resolve user.save() to User.save"
+        );
         let target = resolved.unwrap();
         assert_eq!(target.file, PathBuf::from("models.py"));
         assert_eq!(target.name, "save");
@@ -1081,11 +1091,17 @@ def main():
 
         // The helper call should be resolved (it's local)
         let helper_resolved = result.resolved.iter().find(|(cs, _)| cs.target == "helper");
-        assert!(helper_resolved.is_some(), "helper() call should be resolved");
+        assert!(
+            helper_resolved.is_some(),
+            "helper() call should be resolved"
+        );
 
         // The save call should also be resolved with type info
         let save_resolved = result.resolved.iter().find(|(cs, _)| cs.target == "save");
-        assert!(save_resolved.is_some(), "save() call should be resolved with type info");
+        assert!(
+            save_resolved.is_some(),
+            "save() call should be resolved with type info"
+        );
     }
     /// Test: Dynamic import pattern generates warning
     #[test]
@@ -1201,8 +1217,8 @@ def process():
     /// Test: build_project_call_graph_v2 resolves imports and calls across files
     #[test]
     fn test_build_resolves_cross_file_calls() {
-        use crate::callgraph::module_index::ModuleIndex;
         use crate::callgraph::import_resolver::ImportResolver;
+        use crate::callgraph::module_index::ModuleIndex;
 
         let dir = TempDir::new().unwrap();
 
@@ -1242,8 +1258,14 @@ def run():
         assert!(ir.function_count() >= 3, "Should have at least 3 functions");
 
         // Verify func_index has entries for all functions
-        assert!(ir.func_index.get("utils", "helper").is_some(), "func_index should have utils.helper");
-        assert!(ir.func_index.get("processor", "run").is_some(), "func_index should have processor.run");
+        assert!(
+            ir.func_index.get("utils", "helper").is_some(),
+            "func_index should have utils.helper"
+        );
+        assert!(
+            ir.func_index.get("processor", "run").is_some(),
+            "func_index should have processor.run"
+        );
 
         // Test that we can resolve calls using the built infrastructure
         let main_file = ir.get_file("main.py").unwrap();

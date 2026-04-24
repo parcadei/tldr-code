@@ -376,11 +376,8 @@ fn run_impact_analysis(
             let direct_count: usize = report.targets.values().map(|t| t.caller_count).sum();
 
             // Count transitive callers (all callers in the tree)
-            let transitive_count: usize = report
-                .targets
-                .values()
-                .map(count_transitive_callers)
-                .sum();
+            let transitive_count: usize =
+                report.targets.values().map(count_transitive_callers).sum();
 
             SubResult::success(
                 serde_json::json!({
@@ -779,10 +776,7 @@ mod tests {
 
     #[test]
     fn test_derive_module_name_with_path() {
-        assert_eq!(
-            derive_module_name("src/service.py"),
-            "src.service"
-        );
+        assert_eq!(derive_module_name("src/service.py"), "src.service");
     }
 
     // -------------------------------------------------------------------------

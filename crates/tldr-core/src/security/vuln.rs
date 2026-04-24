@@ -222,7 +222,10 @@ fn get_sources(language: Language) -> Vec<(&'static str, &'static str)> {
             ("request.query[", "Vapor query parameter"),
             ("request.headers.first", "Vapor header"),
             ("request.body.string", "HTTP request body"),
-            ("ProcessInfo.processInfo.environment", "Environment variable"),
+            (
+                "ProcessInfo.processInfo.environment",
+                "Environment variable",
+            ),
             ("CommandLine.arguments", "Command line arguments"),
             ("readLine()", "Standard input"),
         ],
@@ -230,7 +233,10 @@ fn get_sources(language: Language) -> Vec<(&'static str, &'static str)> {
             ("Request.Query", "ASP.NET query parameter"),
             ("Request.Form", "ASP.NET form parameter"),
             ("Request.Headers", "ASP.NET header"),
-            ("Environment.GetEnvironmentVariable(", "Environment variable"),
+            (
+                "Environment.GetEnvironmentVariable(",
+                "Environment variable",
+            ),
             ("args[", "Command line arguments"),
             ("Console.ReadLine()", "Standard input"),
         ],
@@ -471,10 +477,7 @@ fn get_sinks(vuln_type: VulnType, language: Language) -> Vec<(&'static str, &'st
                 ("Runtime.getRuntime().exec(", "Runtime exec"),
                 ("ProcessBuilder(", "Process builder"),
             ],
-            Language::Swift => vec![
-                ("system(", "Shell command"),
-                ("Process(", "Process spawn"),
-            ],
+            Language::Swift => vec![("system(", "Shell command"), ("Process(", "Process spawn")],
             Language::CSharp => vec![
                 ("Process.Start(", "Process start"),
                 ("new ProcessStartInfo(", "Process configuration"),
@@ -641,8 +644,14 @@ fn get_sinks(vuln_type: VulnType, language: Language) -> Vec<(&'static str, &'st
                 ("bincode::deserialize(", "Binary deserialization"),
             ],
             Language::Cpp => vec![
-                ("boost::archive::text_iarchive", "Boost text deserialization"),
-                ("cereal::BinaryInputArchive", "Cereal binary deserialization"),
+                (
+                    "boost::archive::text_iarchive",
+                    "Boost text deserialization",
+                ),
+                (
+                    "cereal::BinaryInputArchive",
+                    "Cereal binary deserialization",
+                ),
             ],
             Language::Ruby => vec![
                 ("Marshal.load(", "Marshal deserialization"),
@@ -654,8 +663,14 @@ fn get_sinks(vuln_type: VulnType, language: Language) -> Vec<(&'static str, &'st
                 ("readObject(", "Object deserialization"),
             ],
             Language::CSharp => vec![
-                ("BinaryFormatter.Deserialize(", "BinaryFormatter deserialize"),
-                ("NetDataContractSerializer.Deserialize(", "NetDataContract deserialize"),
+                (
+                    "BinaryFormatter.Deserialize(",
+                    "BinaryFormatter deserialize",
+                ),
+                (
+                    "NetDataContractSerializer.Deserialize(",
+                    "NetDataContract deserialize",
+                ),
             ],
             Language::Scala => vec![
                 ("ObjectInputStream(", "Java object deserialization"),
@@ -665,9 +680,7 @@ fn get_sinks(vuln_type: VulnType, language: Language) -> Vec<(&'static str, &'st
                 ("unserialize(", "PHP unserialize"),
                 ("yaml_parse(", "YAML parse"),
             ],
-            Language::Elixir => vec![
-                (":erlang.binary_to_term(", "Erlang term deserialization"),
-            ],
+            Language::Elixir => vec![(":erlang.binary_to_term(", "Erlang term deserialization")],
             Language::Ocaml => vec![
                 ("Marshal.from_channel", "Marshal deserialization"),
                 ("Marshal.from_string", "Marshal deserialization"),
@@ -935,10 +948,7 @@ fn extract_assigned_variable(line: &str) -> Option<String> {
         }
         // Handle typed declarations: "String id", "var id", "let id", "const id"
         // Take the last whitespace-separated token as the variable name
-        let var = lhs
-            .split_whitespace()
-            .next_back()
-            .unwrap_or(&lhs);
+        let var = lhs.split_whitespace().next_back().unwrap_or(&lhs);
         // Handle attribute access: self.var -> var
         let var = var.split('.').next_back().unwrap_or(var);
         // Strip pointer/reference markers: *ptr, &ref
@@ -948,9 +958,9 @@ fn extract_assigned_variable(line: &str) -> Option<String> {
         // Basic identifier validation
         if var.chars().all(|c| c.is_alphanumeric() || c == '_') && !var.is_empty() {
             return Some(var.to_string());
+        }
     }
-}
-None
+    None
 }
 
 /// Extract variable propagation (var2 = something(var1))
@@ -1038,9 +1048,7 @@ fn is_sanitized_sink(line: &str, _var: &str, vuln_type: &str) -> bool {
 /// present -- a placeholder alone does not indicate parameterization if
 /// the arguments are not passed separately.
 fn is_sanitized_sql(line: &str) -> bool {
-    let has_placeholder = line.contains('?')
-        || line.contains("%s")
-        || has_named_param(line);
+    let has_placeholder = line.contains('?') || line.contains("%s") || has_named_param(line);
 
     let has_args_tuple = line.contains(", (") || line.contains(", [") || line.contains(", {");
 
@@ -1159,7 +1167,9 @@ mod tests {
             Some("id".to_string())
         );
         assert_eq!(
-            extract_assigned_variable("        Connection conn = DriverManager.getConnection(\"url\");"),
+            extract_assigned_variable(
+                "        Connection conn = DriverManager.getConnection(\"url\");"
+            ),
             Some("conn".to_string())
         );
     }
@@ -1188,9 +1198,16 @@ func handler(w http.ResponseWriter, r *http.Request) {
         let result = scan_vulnerabilities(&tmp, None, None).unwrap();
         eprintln!("Go findings: {}", result.findings.len());
         for f in &result.findings {
-            eprintln!("  {:?} line {}: {} -> {}", f.vuln_type, f.sink.line, f.source.variable, f.sink.function);
+            eprintln!(
+                "  {:?} line {}: {} -> {}",
+                f.vuln_type, f.sink.line, f.source.variable, f.sink.function
+            );
         }
-        assert!(result.findings.len() >= 1, "Expected Go SQL injection finding, got {}", result.findings.len());
+        assert!(
+            result.findings.len() >= 1,
+            "Expected Go SQL injection finding, got {}",
+            result.findings.len()
+        );
         std::fs::remove_file(&tmp).ok();
     }
 
@@ -1258,47 +1275,32 @@ func handler(w http.ResponseWriter, r *http.Request) {
     #[test]
     fn test_type_coercion_int_breaks_taint() {
         // int() wrapping a tainted var should NOT propagate taint
-        let result = extract_propagation(
-            "    user_id = int(request.args.get(\"id\"))",
-            "request",
-        );
+        let result = extract_propagation("    user_id = int(request.args.get(\"id\"))", "request");
         assert_eq!(result, None, "int() should break taint propagation");
     }
 
     #[test]
     fn test_type_coercion_float_breaks_taint() {
-        let result = extract_propagation(
-            "    price = float(user_input)",
-            "user_input",
-        );
+        let result = extract_propagation("    price = float(user_input)", "user_input");
         assert_eq!(result, None, "float() should break taint propagation");
     }
 
     #[test]
     fn test_type_coercion_bool_breaks_taint() {
-        let result = extract_propagation(
-            "    flag = bool(user_input)",
-            "user_input",
-        );
+        let result = extract_propagation("    flag = bool(user_input)", "user_input");
         assert_eq!(result, None, "bool() should break taint propagation");
     }
 
     #[test]
     fn test_type_coercion_str_int_breaks_taint() {
         // str(int(x)) should also break taint
-        let result = extract_propagation(
-            "    safe_id = str(int(user_input))",
-            "user_input",
-        );
+        let result = extract_propagation("    safe_id = str(int(user_input))", "user_input");
         assert_eq!(result, None, "str(int()) should break taint propagation");
     }
 
     #[test]
     fn test_type_coercion_str_float_breaks_taint() {
-        let result = extract_propagation(
-            "    safe_val = str(float(user_input))",
-            "user_input",
-        );
+        let result = extract_propagation("    safe_val = str(float(user_input))", "user_input");
         assert_eq!(result, None, "str(float()) should break taint propagation");
     }
 
@@ -1319,10 +1321,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
     #[test]
     fn test_str_alone_does_not_break_taint() {
         // str(user_input) alone should NOT break taint (just converts to string)
-        let result = extract_propagation(
-            "    name_str = str(user_input)",
-            "user_input",
-        );
+        let result = extract_propagation("    name_str = str(user_input)", "user_input");
         assert_eq!(
             result,
             Some("name_str".to_string()),
@@ -1468,11 +1467,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
     fn test_non_sql_non_command_not_sanitized() {
         // For non-SQL, non-command vuln types, is_sanitized_sink should return false
         assert!(
-            !is_sanitized_sink(
-                "    open(user_path)",
-                "user_path",
-                "Path Traversal",
-            ),
+            !is_sanitized_sink("    open(user_path)", "user_path", "Path Traversal",),
             "Non-SQL/command sinks should not be treated as sanitized"
         );
     }
@@ -1483,12 +1478,16 @@ func handler(w http.ResponseWriter, r *http.Request) {
     fn test_e2e_parameterized_query_no_findings() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("safe_sql.py");
-        std::fs::write(&file, r#"
+        std::fs::write(
+            &file,
+            r#"
 from flask import request
 import sqlite3
 user_id = request.args.get("id")
 cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let findings = scan_file_vulns(&file, None).unwrap();
         assert!(
             findings.is_empty(),
@@ -1501,11 +1500,15 @@ cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
     fn test_e2e_subprocess_list_no_findings() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("safe_cmd.py");
-        std::fs::write(&file, r#"
+        std::fs::write(
+            &file,
+            r#"
 from flask import request
 filename = request.args.get("file")
 subprocess.run(["cat", filename])
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let findings = scan_file_vulns(&file, None).unwrap();
         assert!(
             findings.is_empty(),
@@ -1518,11 +1521,15 @@ subprocess.run(["cat", filename])
     fn test_e2e_type_coercion_no_findings() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("safe_int.py");
-        std::fs::write(&file, r#"
+        std::fs::write(
+            &file,
+            r#"
 from flask import request
 user_id = int(request.args.get("id"))
 cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let findings = scan_file_vulns(&file, None).unwrap();
         assert!(
             findings.is_empty(),
@@ -1535,11 +1542,15 @@ cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")
     fn test_e2e_real_sqli_still_detected() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("vuln_sql.py");
-        std::fs::write(&file, r#"
+        std::fs::write(
+            &file,
+            r#"
 from flask import request
 name = request.args.get("name")
 cursor.execute(f"SELECT * FROM users WHERE name = '{name}'")
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let findings = scan_file_vulns(&file, None).unwrap();
         assert!(
             !findings.is_empty(),
@@ -1551,11 +1562,15 @@ cursor.execute(f"SELECT * FROM users WHERE name = '{name}'")
     fn test_e2e_real_command_injection_still_detected() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("vuln_cmd.py");
-        std::fs::write(&file, r#"
+        std::fs::write(
+            &file,
+            r#"
 from flask import request
 filename = request.args.get("file")
 os.system("cat " + filename)
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let findings = scan_file_vulns(&file, None).unwrap();
         assert!(
             !findings.is_empty(),

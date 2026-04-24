@@ -73,7 +73,10 @@ static KNOWN_IMPORTS: &[(&str, &str)] = &[
     ("Pool", "import { Pool } from \"pg\";"),
     ("redis", "import { createClient } from \"redis\";"),
     ("supertest", "import supertest from \"supertest\";"),
-    ("jest", "import { describe, it, expect } from \"@jest/globals\";"),
+    (
+        "jest",
+        "import { describe, it, expect } from \"@jest/globals\";",
+    ),
     ("winston", "import winston from \"winston\";"),
     ("pino", "import pino from \"pino\";"),
 ];
@@ -219,7 +222,12 @@ fn analyze_ts2304(error: &ParsedError, source: &str) -> Option<Diagnosis> {
         .map(|(_, stmt)| stmt.to_string())
         .unwrap_or_else(|| {
             // Fallback: generate a default import
-            if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+            if name
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+            {
                 // PascalCase -> likely a named export
                 format!("import {{ {} }} from \"{}\";", name, name.to_lowercase())
             } else {
@@ -290,11 +298,7 @@ fn analyze_ts2322(error: &ParsedError, source: &str) -> Option<Diagnosis> {
                     if !after_eq.starts_with("==") {
                         let rhs = old_line[eq_idx + 1..].trim().trim_end_matches(';');
                         let new_rhs = format!("{} as {}", rhs, to_type);
-                        let new_line = format!(
-                            "{}= {};",
-                            &old_line[..eq_idx],
-                            new_rhs
-                        );
+                        let new_line = format!("{}= {};", &old_line[..eq_idx], new_rhs);
                         return Some(Diagnosis {
                             language: "typescript".to_string(),
                             error_code: "TS2322".to_string(),
@@ -332,11 +336,7 @@ fn analyze_ts2322(error: &ParsedError, source: &str) -> Option<Diagnosis> {
                     if !after_eq.starts_with("==") {
                         let rhs = old_line[eq_idx + 1..].trim().trim_end_matches(';');
                         let new_rhs = format!("{} as unknown as {}", rhs, to_type);
-                        let new_line = format!(
-                            "{}= {};",
-                            &old_line[..eq_idx],
-                            new_rhs
-                        );
+                        let new_line = format!("{}= {};", &old_line[..eq_idx], new_rhs);
                         return Some(Diagnosis {
                             language: "typescript".to_string(),
                             error_code: "TS2322".to_string(),
@@ -373,7 +373,10 @@ fn analyze_ts2322(error: &ParsedError, source: &str) -> Option<Diagnosis> {
     Some(Diagnosis {
         language: "typescript".to_string(),
         error_code: "TS2322".to_string(),
-        message: format!("Type '{}' is not assignable to type '{}'", from_type, to_type),
+        message: format!(
+            "Type '{}' is not assignable to type '{}'",
+            from_type, to_type
+        ),
         location: error.line.map(|l| FixLocation {
             file: error.file.clone().unwrap_or_default(),
             line: l,
@@ -409,10 +412,8 @@ fn analyze_ts2339(error: &ParsedError, source: &str) -> Option<Diagnosis> {
             let lines: Vec<&str> = source.lines().collect();
             if line_no > 0 && line_no <= lines.len() {
                 let old_line = lines[line_no - 1];
-                let new_line = old_line.replace(
-                    &format!(".{}", property),
-                    &format!(".{}", best_match),
-                );
+                let new_line =
+                    old_line.replace(&format!(".{}", property), &format!(".{}", best_match));
 
                 if new_line != old_line {
                     return Some(Diagnosis {
@@ -608,8 +609,7 @@ fn analyze_ts7006(error: &ParsedError, source: &str) -> Option<Diagnosis> {
                     // Check the character after the param name -- it should NOT be ':'
                     // (meaning it doesn't already have a type annotation)
                     if param_end < new_line.len() {
-                        let next_chars: String =
-                            new_line[param_end..].chars().take(2).collect();
+                        let next_chars: String = new_line[param_end..].chars().take(2).collect();
                         if !next_chars.starts_with(':') && !next_chars.starts_with(" :") {
                             new_line = format!(
                                 "{}{}: unknown{}",
@@ -659,10 +659,7 @@ fn analyze_ts7006(error: &ParsedError, source: &str) -> Option<Diagnosis> {
     Some(Diagnosis {
         language: "typescript".to_string(),
         error_code: "TS7006".to_string(),
-        message: format!(
-            "Parameter '{}' implicitly has an 'any' type",
-            param_name
-        ),
+        message: format!("Parameter '{}' implicitly has an 'any' type", param_name),
         location: error.line.map(|l| FixLocation {
             file: error.file.clone().unwrap_or_default(),
             line: l,
@@ -791,10 +788,7 @@ fn analyze_ts2307(error: &ParsedError, source: &str) -> Option<Diagnosis> {
     let module_name = extract_module_from_2307(msg)?;
 
     // Check for known typos
-    if let Some((typo, correction)) = KNOWN_MODULE_TYPOS
-        .iter()
-        .find(|(t, _)| *t == module_name)
-    {
+    if let Some((typo, correction)) = KNOWN_MODULE_TYPOS.iter().find(|(t, _)| *t == module_name) {
         if let Some(line_no) = error.line {
             let lines: Vec<&str> = source.lines().collect();
             if line_no > 0 && line_no <= lines.len() {
@@ -816,10 +810,7 @@ fn analyze_ts2307(error: &ParsedError, source: &str) -> Option<Diagnosis> {
                         }),
                         confidence: FixConfidence::Medium,
                         fix: Some(Fix {
-                            description: format!(
-                                "Fix typo: '{}' -> '{}'",
-                                typo, correction
-                            ),
+                            description: format!("Fix typo: '{}' -> '{}'", typo, correction),
                             edits: vec![TextEdit {
                                 line: line_no,
                                 column: None,
@@ -840,7 +831,10 @@ fn analyze_ts2307(error: &ParsedError, source: &str) -> Option<Diagnosis> {
     let suggestion = if is_relative {
         format!("Check that the file '{}' exists", module_name)
     } else {
-        format!("Run `npm install {}` or `npm install @types/{}`", module_name, module_name)
+        format!(
+            "Run `npm install {}` or `npm install @types/{}`",
+            module_name, module_name
+        )
     };
 
     Some(Diagnosis {
@@ -989,8 +983,17 @@ fn extract_type_pair(msg: &str) -> Option<(String, String)> {
 fn is_primitive_type(t: &str) -> bool {
     matches!(
         t,
-        "string" | "number" | "boolean" | "bigint" | "symbol" | "null" | "undefined" | "void"
-            | "never" | "any" | "unknown"
+        "string"
+            | "number"
+            | "boolean"
+            | "bigint"
+            | "symbol"
+            | "null"
+            | "undefined"
+            | "void"
+            | "never"
+            | "any"
+            | "unknown"
     )
 }
 
@@ -1006,8 +1009,7 @@ fn find_similar_properties(
     // Search for interface or type definition
     let interface_re =
         Regex::new(&format!(r"interface\s+{}\s*\{{", regex::escape(type_name))).ok()?;
-    let type_re =
-        Regex::new(&format!(r"type\s+{}\s*=\s*\{{", regex::escape(type_name))).ok()?;
+    let type_re = Regex::new(&format!(r"type\s+{}\s*=\s*\{{", regex::escape(type_name))).ok()?;
 
     let lines: Vec<&str> = source.lines().collect();
 
@@ -1113,7 +1115,9 @@ fn extract_argument_at_column(line: &str, col: usize) -> Option<String> {
     // Find word boundaries around the column
     let mut start = col;
     while start > 0
-        && (chars[start - 1].is_alphanumeric() || chars[start - 1] == '_' || chars[start - 1] == '"')
+        && (chars[start - 1].is_alphanumeric()
+            || chars[start - 1] == '_'
+            || chars[start - 1] == '"')
     {
         start -= 1;
     }
@@ -1182,7 +1186,11 @@ fn extract_arg_counts(msg: &str) -> Option<(usize, usize)> {
 }
 
 /// Find where a named member is used in source code (after a given line).
-fn find_member_usage(source: &str, member_name: &str, after_line: usize) -> Option<(usize, String)> {
+fn find_member_usage(
+    source: &str,
+    member_name: &str,
+    after_line: usize,
+) -> Option<(usize, String)> {
     let lines: Vec<&str> = source.lines().collect();
     let pattern = format!("{}(", member_name);
 
@@ -1309,7 +1317,9 @@ mod tests {
         assert_eq!(d.confidence, FixConfidence::High);
         assert!(d.fix.is_some());
         let fix = d.fix.unwrap();
-        assert!(fix.edits[0].new_text.contains("import { useState } from \"react\""));
+        assert!(fix.edits[0]
+            .new_text
+            .contains("import { useState } from \"react\""));
     }
 
     #[test]
@@ -1470,7 +1480,8 @@ mod tests {
         let source = "function add(a: number, b: number): number {\n    return a + b;\n}\nconst result = add(\"1\", 2);\n";
         let error = ParsedError {
             error_type: "TS2345".to_string(),
-            message: "Argument of type 'string' is not assignable to parameter of type 'number'.".to_string(),
+            message: "Argument of type 'string' is not assignable to parameter of type 'number'."
+                .to_string(),
             file: Some(PathBuf::from("app.ts")),
             line: Some(4),
             column: Some(20),
@@ -1498,7 +1509,8 @@ mod tests {
     fn test_ts2345_unrecognized_types() {
         let error = ParsedError {
             error_type: "TS2345".to_string(),
-            message: "Argument of type 'Foo' is not assignable to parameter of type 'Bar'.".to_string(),
+            message: "Argument of type 'Foo' is not assignable to parameter of type 'Bar'."
+                .to_string(),
             file: None,
             line: None,
             column: None,
@@ -1594,7 +1606,9 @@ mod tests {
         let fix = d.fix.unwrap();
         // Should switch to default import
         assert!(
-            fix.edits[0].new_text.contains("import express from \"express\""),
+            fix.edits[0]
+                .new_text
+                .contains("import express from \"express\""),
             "Fix should switch to default import, got: {}",
             fix.edits[0].new_text
         );
@@ -1636,7 +1650,8 @@ mod tests {
         let source = "import lodash from \"loadsh\";\nconst result = lodash.chunk([1, 2, 3], 2);\n";
         let error = ParsedError {
             error_type: "TS2307".to_string(),
-            message: "Cannot find module 'loadsh' or its corresponding type declarations.".to_string(),
+            message: "Cannot find module 'loadsh' or its corresponding type declarations."
+                .to_string(),
             file: Some(PathBuf::from("app.ts")),
             line: Some(1),
             column: Some(21),
@@ -1665,7 +1680,8 @@ mod tests {
         let source = "import foo from \"unknown-package\";\n";
         let error = ParsedError {
             error_type: "TS2307".to_string(),
-            message: "Cannot find module 'unknown-package' or its corresponding type declarations.".to_string(),
+            message: "Cannot find module 'unknown-package' or its corresponding type declarations."
+                .to_string(),
             file: None,
             line: Some(1),
             column: None,
@@ -1680,7 +1696,10 @@ mod tests {
         let d = diag.unwrap();
         assert_eq!(d.confidence, FixConfidence::Low);
         assert!(d.fix.is_none());
-        assert!(d.message.contains("npm install"), "Message should suggest npm install");
+        assert!(
+            d.message.contains("npm install"),
+            "Message should suggest npm install"
+        );
     }
 
     #[test]
@@ -1688,7 +1707,8 @@ mod tests {
         let source = "import foo from \"./utils/helper\";\n";
         let error = ParsedError {
             error_type: "TS2307".to_string(),
-            message: "Cannot find module './utils/helper' or its corresponding type declarations.".to_string(),
+            message: "Cannot find module './utils/helper' or its corresponding type declarations."
+                .to_string(),
             file: None,
             line: Some(1),
             column: None,
@@ -1701,7 +1721,10 @@ mod tests {
         let diag = analyze_ts2307(&error, source);
         assert!(diag.is_some());
         let d = diag.unwrap();
-        assert!(d.message.contains("file"), "Should suggest checking file exists for relative paths");
+        assert!(
+            d.message.contains("file"),
+            "Should suggest checking file exists for relative paths"
+        );
     }
 
     // ---- TS2554: Wrong argument count ----
@@ -1808,7 +1831,10 @@ mod tests {
             Some("express".to_string())
         );
         assert_eq!(
-            extract_ts_name("Parameter 'data' implicitly has an 'any' type.", "Parameter"),
+            extract_ts_name(
+                "Parameter 'data' implicitly has an 'any' type.",
+                "Parameter"
+            ),
             Some("data".to_string())
         );
         assert_eq!(extract_ts_name("random text", "Cannot find name"), None);
@@ -1903,7 +1929,10 @@ mod tests {
     fn test_inject_import_already_present() {
         let source = "import express from \"express\";\nconst app = express();\n";
         let result = inject_import_statement(source, "import express from \"express\";");
-        assert!(result.is_none(), "Should return None when import already present");
+        assert!(
+            result.is_none(),
+            "Should return None when import already present"
+        );
     }
 
     // ---- Fixture-based integration tests ----
@@ -1937,8 +1966,7 @@ mod tests {
     #[test]
     fn test_fixture_ts7006_implicit_any() {
         let source = include_str!("../../tests/fixtures/fix/typescript/implicit_any.ts");
-        let error_text =
-            include_str!("../../tests/fixtures/fix/typescript/implicit_any.error.txt");
+        let error_text = include_str!("../../tests/fixtures/fix/typescript/implicit_any.error.txt");
         let expected = include_str!("../../tests/fixtures/fix/typescript/implicit_any.fixed.ts");
 
         let parsed = crate::fix::error_parser::parse_error(error_text.trim(), Some("typescript"));
@@ -1965,7 +1993,8 @@ mod tests {
         let source = include_str!("../../tests/fixtures/fix/typescript/module_not_found.ts");
         let error_text =
             include_str!("../../tests/fixtures/fix/typescript/module_not_found.error.txt");
-        let expected = include_str!("../../tests/fixtures/fix/typescript/module_not_found.fixed.ts");
+        let expected =
+            include_str!("../../tests/fixtures/fix/typescript/module_not_found.fixed.ts");
 
         let parsed = crate::fix::error_parser::parse_error(error_text.trim(), Some("typescript"));
         assert!(parsed.is_some(), "Should parse TS error");
@@ -1999,7 +2028,10 @@ mod tests {
         let error = parsed.unwrap();
 
         let diag = analyze_ts2339(&error, source);
-        assert!(diag.is_some(), "Should diagnose property_not_exists fixture");
+        assert!(
+            diag.is_some(),
+            "Should diagnose property_not_exists fixture"
+        );
         let d = diag.unwrap();
         assert!(d.fix.is_some(), "Should produce a fix for TS2339");
 

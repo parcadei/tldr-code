@@ -230,9 +230,7 @@ fn find_function_in_ast(
 
         for func_name in functions.iter().chain(methods.iter()) {
             // Match: exact name or Class.method suffix
-            if func_name == target_func
-                || func_name.ends_with(&format!(".{}", target_func))
-            {
+            if func_name == target_func || func_name.ends_with(&format!(".{}", target_func)) {
                 found.push((func_name.clone(), file_path.clone()));
             }
         }

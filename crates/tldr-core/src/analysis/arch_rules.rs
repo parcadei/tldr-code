@@ -31,8 +31,8 @@ use crate::ast::imports::get_imports;
 use crate::fs::tree::{collect_files, get_file_tree};
 use crate::types::{
     ArchRule, ArchRuleType, ArchRulesFile, ArchitectureReport, IgnoreSpec, ImportInfo, Language,
-    LayerDefinition, LayerDefinitions, LayerType, RulesGenerationContext, Violation,
-    ViolationInfo, ViolationReport,
+    LayerDefinition, LayerDefinitions, LayerType, RulesGenerationContext, Violation, ViolationInfo,
+    ViolationReport,
 };
 use crate::TldrResult;
 
@@ -304,10 +304,7 @@ fn resolve_ts_import(
 }
 
 /// Resolve a Go import to a file path.
-fn resolve_go_import(
-    import: &ImportInfo,
-    all_files: &HashSet<PathBuf>,
-) -> Option<PathBuf> {
+fn resolve_go_import(import: &ImportInfo, all_files: &HashSet<PathBuf>) -> Option<PathBuf> {
     // Go imports are package paths; we look for the package directory
     // This is simplified - full Go import resolution requires go.mod parsing
 

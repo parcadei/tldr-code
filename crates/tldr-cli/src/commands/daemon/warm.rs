@@ -32,7 +32,7 @@ use std::process::Command as StdCommand;
 use clap::Args;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
+use tldr_core::walker::walk_project;
 
 use crate::output::OutputFormat;
 
@@ -337,26 +337,38 @@ fn should_skip_component(component: &str, ignore_patterns: &HashSet<String>) -> 
         || ignore_patterns.contains(component)
 }
 
+/// Check if any relative component of `path` (below `project` root) should
+/// be skipped per `should_skip_component` (hidden, `SKIP_DIRS`, or user
+/// `.tldrignore` patterns). Used as a post-walk filter: the shared walker
+/// already covers most of `SKIP_DIRS` (node_modules, target, etc.) plus
+/// hidden dirs, but `venv`/`.venv` and user patterns must still be checked
+/// here to match the historical behavior.
+fn path_has_ignored_component(
+    path: &Path,
+    project: &Path,
+    ignore_patterns: &HashSet<String>,
+) -> bool {
+    let rel = path.strip_prefix(project).unwrap_or(path);
+    rel.components().any(|c| {
+        c.as_os_str()
+            .to_str()
+            .map(|s| should_skip_component(s, ignore_patterns))
+            .unwrap_or(false)
+    })
+}
+
 /// Detect languages present in the project.
 fn detect_languages(project: &Path) -> anyhow::Result<Vec<String>> {
     let mut languages = HashSet::new();
     let ignore_patterns = load_tldrignore(project);
 
-    // Walk directory looking for language-specific files
-    for entry in WalkDir::new(project)
-        .follow_links(false)
-        .into_iter()
-        .filter_entry(|e| {
-            if e.file_type().is_dir() && e.depth() > 0 {
-                let name = e.file_name().to_string_lossy();
-                !should_skip_component(&name, &ignore_patterns)
-            } else {
-                true
-            }
-        })
-        .filter_map(|e| e.ok())
+    // Walk directory looking for language-specific files. The shared
+    // walker handles SKIP_DIRS + hidden dirs; we post-filter for
+    // `.tldrignore` patterns that aren't covered by the defaults.
+    for entry in walk_project(project)
+        .filter(|e| !path_has_ignored_component(e.path(), project, &ignore_patterns))
     {
-        if entry.file_type().is_file() {
+        if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
             if let Some(ext) = entry.path().extension() {
                 let ext_str = ext.to_string_lossy().to_lowercase();
                 match ext_str.as_str() {
@@ -430,22 +442,14 @@ fn build_call_graph(
         })
         .collect();
 
-    // Walk project and extract function definitions and calls, respecting .tldrignore
+    // Walk project and extract function definitions and calls. The
+    // shared walker handles SKIP_DIRS + hidden dirs; we post-filter
+    // for user-defined `.tldrignore` patterns.
     let ignore_patterns = load_tldrignore(project);
-    for entry in WalkDir::new(project)
-        .follow_links(false)
-        .into_iter()
-        .filter_entry(|e| {
-            if e.file_type().is_dir() && e.depth() > 0 {
-                let name = e.file_name().to_string_lossy();
-                !should_skip_component(&name, &ignore_patterns)
-            } else {
-                true
-            }
-        })
-        .filter_map(|e| e.ok())
+    for entry in walk_project(project)
+        .filter(|e| !path_has_ignored_component(e.path(), project, &ignore_patterns))
     {
-        if entry.file_type().is_file() {
+        if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
             let path = entry.path();
             if let Some(ext) = path.extension() {
                 let ext_str = ext.to_string_lossy().to_lowercase();
@@ -631,14 +635,12 @@ pub async fn cmd_warm(args: WarmArgs) -> DaemonResult<WarmOutput> {
     });
 
     // Auto-detect languages
-    let languages = detect_languages(&project).map_err(|e| {
-        DaemonError::Io(std::io::Error::other(e.to_string()))
-    })?;
+    let languages = detect_languages(&project)
+        .map_err(|e| DaemonError::Io(std::io::Error::other(e.to_string())))?;
 
     // Build call graph
-    let (files, edges) = build_call_graph(&project, &languages).map_err(|e| {
-        DaemonError::Io(std::io::Error::other(e.to_string()))
-    })?;
+    let (files, edges) = build_call_graph(&project, &languages)
+        .map_err(|e| DaemonError::Io(std::io::Error::other(e.to_string())))?;
 
     // Write cache file
     let cache_dir = project.join(".tldr/cache");
@@ -736,8 +738,7 @@ mod tests {
         )
         .unwrap();
 
-        let (files, edges) =
-            build_call_graph(temp.path(), &["python".to_string()]).unwrap();
+        let (files, edges) = build_call_graph(temp.path(), &["python".to_string()]).unwrap();
 
         assert_eq!(files, 1);
         assert!(!edges.is_empty());
@@ -797,8 +798,7 @@ mod tests {
 
         /// Generate a valid directory component name (no /, no NUL).
         fn arb_component() -> impl Strategy<Value = String> {
-            prop::string::string_regex("[a-zA-Z0-9_.][a-zA-Z0-9_.-]{0,15}")
-                .unwrap()
+            prop::string::string_regex("[a-zA-Z0-9_.][a-zA-Z0-9_.-]{0,15}").unwrap()
         }
 
         proptest! {

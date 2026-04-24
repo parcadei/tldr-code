@@ -700,10 +700,7 @@ impl CsharpHandler {
                         class,
                         prop_name: prop_name.as_deref(),
                     };
-                    self.handle_property_accessor_list_calls(
-                        child,
-                        &mut context,
-                    );
+                    self.handle_property_accessor_list_calls(child, &mut context);
                 }
                 "arrow_expression_clause" => {
                     let caller = if let Some(name) = prop_name.as_deref() {

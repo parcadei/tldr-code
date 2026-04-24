@@ -199,7 +199,11 @@ impl ModuleResolver {
                         return Some(module_path.clone());
                     }
                     // Fallback: try simple module name (last component)
-                    let simple = import.module.split('.').next_back().unwrap_or(&import.module);
+                    let simple = import
+                        .module
+                        .split('.')
+                        .next_back()
+                        .unwrap_or(&import.module);
                     if simple != import.module {
                         if let Some(module_path) = self.module_index.get(simple) {
                             return Some(module_path.clone());

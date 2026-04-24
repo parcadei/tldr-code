@@ -218,7 +218,6 @@ src/utils.ts(15,1): warning TS6385: 'x' is deprecated."#;
     }
   ]
 }"#;
-
 }
 
 // =============================================================================
@@ -599,7 +598,7 @@ mod severity_filtering_tests {
 
 #[cfg(test)]
 mod auto_detection_tests {
-    
+
     use crate::diagnostics::runner;
     use crate::types::Language;
 
@@ -652,8 +651,6 @@ mod auto_detection_tests {
 
 #[cfg(test)]
 mod parallel_execution_tests {
-    
-    
 
     /// Test tools run in parallel
     /// Contract: Total time < sum of individual tool times
@@ -702,7 +699,7 @@ mod parallel_execution_tests {
 
 #[cfg(test)]
 mod sarif_output_tests {
-    
+
     use super::*;
 
     /// Test SARIF output has valid schema
@@ -975,7 +972,8 @@ mod summary_tests {
     #[test]
     #[ignore = "Summary computation not yet implemented"]
     fn summary_counts_correct() {
-        let _diagnostics = [Diagnostic {
+        let _diagnostics = [
+            Diagnostic {
                 severity: Severity::Error,
                 ..Default::default()
             },
@@ -994,7 +992,8 @@ mod summary_tests {
             Diagnostic {
                 severity: Severity::Hint,
                 ..Default::default()
-            }];
+            },
+        ];
 
         // let summary = compute_summary(&diagnostics);
         //

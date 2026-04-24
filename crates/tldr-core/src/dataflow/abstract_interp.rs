@@ -3290,7 +3290,10 @@ mod tests {
         // Path inside string: slashes should be blanked
         let result = strip_strings("Path::new(\"src/main.rs\")", "rust");
         assert_eq!(result, "Path::new(\"           \")");
-        assert!(!result.contains('/'), "slashes inside strings must be blanked");
+        assert!(
+            !result.contains('/'),
+            "slashes inside strings must be blanked"
+        );
     }
 
     #[test]
@@ -3306,7 +3309,10 @@ mod tests {
         let result = strip_strings(r#"let s = "path/to/\"file\""; a / b"#, "rust");
         assert!(result.contains("a / b"), "code division must survive");
         // The path/to part inside the string should be blanked
-        assert!(!result[8..25].contains('/'), "slashes in string must be blanked");
+        assert!(
+            !result[8..25].contains('/'),
+            "slashes in string must be blanked"
+        );
     }
 
     #[test]
@@ -3321,8 +3327,14 @@ mod tests {
     fn test_strip_strings_rust_raw_string() {
         // r#"..."# raw strings: contents must be blanked
         let result = strip_strings(r##"let xml = r#"</coverage>"#;"##, "rust");
-        assert!(!result.contains('/'), "slashes inside raw strings must be blanked");
-        assert!(!result.contains("coverage"), "identifiers inside raw strings must be blanked");
+        assert!(
+            !result.contains('/'),
+            "slashes inside raw strings must be blanked"
+        );
+        assert!(
+            !result.contains("coverage"),
+            "identifiers inside raw strings must be blanked"
+        );
     }
 
     #[test]
@@ -3338,7 +3350,10 @@ mod tests {
     fn test_strip_strings_rust_raw_double_hash() {
         // r##"..."## raw strings
         let result = strip_strings(r###"let s = r##"a/b"##;"###, "rust");
-        assert!(!result.contains("a/b"), "contents of r##\"...\"## must be blanked");
+        assert!(
+            !result.contains("a/b"),
+            "contents of r##\"...\"## must be blanked"
+        );
     }
 
     #[test]
@@ -3594,9 +3609,7 @@ mod tests {
     // Phase 10 Tests: compute_abstract_interp Main Algorithm
     // =========================================================================
 
-    use crate::types::{
-        BlockType, CfgBlock, CfgEdge, CfgInfo, DfgInfo, EdgeType, VarRef,
-    };
+    use crate::types::{BlockType, CfgBlock, CfgEdge, CfgInfo, DfgInfo, EdgeType, VarRef};
 
     /// Helper to create a minimal CFG for testing
     fn make_test_cfg(function: &str, blocks: Vec<CfgBlock>, edges: Vec<CfgEdge>) -> CfgInfo {
@@ -3908,11 +3921,13 @@ mod tests {
             edges: vec![],
             variables: vec!["x".to_string()],
         };
-        let source = ["x = 0",
+        let source = [
+            "x = 0",
             "for i in range(n):",
             "  for j in range(m):",
             "    x = x + 1",
-            "return x"];
+            "return x",
+        ];
         let source_refs: Vec<&str> = source.to_vec();
 
         // Should not infinite loop - widening ensures termination
@@ -4227,8 +4242,7 @@ mod tests {
             edges: vec![],
             variables: vec!["root".to_string(), "child".to_string()],
         };
-        let source = ["root = \"/projects/myapp\"",
-            "child = \"/src/main.rs\""];
+        let source = ["root = \"/projects/myapp\"", "child = \"/src/main.rs\""];
         let source_refs: Vec<&str> = source.to_vec();
 
         let result = compute_abstract_interp(&cfg, &dfg, Some(&source_refs), "python").unwrap();
@@ -4264,21 +4278,25 @@ mod tests {
             edges: vec![],
             variables: vec!["path".to_string(), "x".to_string(), "y".to_string()],
         };
-        let source = ["path = \"/src/main.rs\"",
-            "x = foo()",
-            "y = 100 / x"];
+        let source = ["path = \"/src/main.rs\"", "x = foo()", "y = 100 / x"];
         let source_refs: Vec<&str> = source.to_vec();
 
         let result = compute_abstract_interp(&cfg, &dfg, Some(&source_refs), "python").unwrap();
 
         assert!(
-            result.potential_div_zero.iter().any(|(line, var)| *line == 3 && var == "x"),
+            result
+                .potential_div_zero
+                .iter()
+                .any(|(line, var)| *line == 3 && var == "x"),
             "Real division by unknown x should still be flagged; got: {:?}",
             result.potential_div_zero
         );
         // And no FP from the path string
         assert!(
-            !result.potential_div_zero.iter().any(|(_, var)| var == "main" || var == "src"),
+            !result
+                .potential_div_zero
+                .iter()
+                .any(|(_, var)| var == "main" || var == "src"),
             "Path components in strings must not be flagged; got: {:?}",
             result.potential_div_zero
         );

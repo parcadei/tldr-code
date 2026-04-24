@@ -8,17 +8,15 @@
 use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
-use super::cross_file_types::{
-    CallSite, CallType, ClassDef, FileIR, FuncDef, VarType,
-};
+use super::cross_file_types::{CallSite, CallType, ClassDef, FileIR, FuncDef, VarType};
 use super::import_resolver::{ReExportTracer, DEFAULT_MAX_DEPTH};
-use super::type_resolver::{resolve_receiver_type};
+use super::type_resolver::resolve_receiver_type;
 use crate::types::Language;
 
 // From new sibling modules:
-use super::types::{FuncIndex, ClassIndex, ClassEntry, capitalize_first};
-use super::module_path::path_to_module;
 use super::imports::{ImportMap, ModuleImports};
+use super::module_path::path_to_module;
+use super::types::{capitalize_first, ClassEntry, ClassIndex, FuncIndex};
 
 // =============================================================================
 // Phase 14e: Call Extraction and Resolution (Spec Section 14.6)
@@ -412,9 +410,7 @@ fn find_best_vartype(
     }
 
     // Scoped matches take priority over module-level
-    best_scoped
-        .or(best_module)
-        .map(|vt| vt.type_name.clone())
+    best_scoped.or(best_module).map(|vt| vt.type_name.clone())
 }
 
 /// Resolve the best caller name for a call site, qualifying methods with class names when possible.
@@ -476,12 +472,9 @@ fn resolve_reexported_name(
     }
 
     if let Some(class_entry) = class_index.get(&traced.qualified_name) {
-        if let Some(ctor_target) = resolve_constructor_target(
-            &traced.qualified_name,
-            class_entry,
-            func_index,
-            language,
-        ) {
+        if let Some(ctor_target) =
+            resolve_constructor_target(&traced.qualified_name, class_entry, func_index, language)
+        {
             return Some(ctor_target);
         }
         return Some(ResolvedTarget {
@@ -616,7 +609,9 @@ pub fn resolve_call(
             // Also check if it's a class name (calling constructor)
             if let Some(class_entry) = class_index.get(target) {
                 // Constructor call - resolve to the actual constructor method (__init__, initialize, etc.)
-                if let Some(ctor) = resolve_constructor_target(target, class_entry, func_index, language) {
+                if let Some(ctor) =
+                    resolve_constructor_target(target, class_entry, func_index, language)
+                {
                     return Some(ctor);
                 }
                 // Fallback: resolve to the class itself
@@ -722,7 +717,9 @@ pub fn resolve_call(
                 // It might be a class (constructor call via import)
                 if let Some(class_entry) = class_index.get(original_name) {
                     // Try resolving to actual constructor method (__init__, initialize, etc.)
-                    if let Some(ctor) = resolve_constructor_target(original_name, class_entry, func_index, language) {
+                    if let Some(ctor) =
+                        resolve_constructor_target(original_name, class_entry, func_index, language)
+                    {
                         return Some(ctor);
                     }
                     return Some(ResolvedTarget {
@@ -830,13 +827,9 @@ pub fn resolve_call(
                 let class_name = &target[..sep_pos];
                 let method_name = &target[sep_pos + 2..];
 
-                if let Some(resolved) = resolve_call_with_receiver(
-                    target,
-                    class_name,
-                    None,
-                    call_type,
-                    context,
-                ) {
+                if let Some(resolved) =
+                    resolve_call_with_receiver(target, class_name, None, call_type, context)
+                {
                     return Some(resolved);
                 }
 
@@ -869,7 +862,13 @@ pub fn resolve_call(
                     language,
                 )
                 .or_else(|| {
-                    resolve_method_in_bases(class_name, method_name, class_index, func_index, language)
+                    resolve_method_in_bases(
+                        class_name,
+                        method_name,
+                        class_index,
+                        func_index,
+                        language,
+                    )
                 }) {
                     return Some(resolved);
                 }
@@ -1193,7 +1192,9 @@ pub fn resolve_call_with_receiver(
     ) {
         return Some(resolved);
     }
-    if let Some(resolved) = resolve_global_fuzzy_match(bare_target, type_filter, func_index, class_index) {
+    if let Some(resolved) =
+        resolve_global_fuzzy_match(bare_target, type_filter, func_index, class_index)
+    {
         return Some(resolved);
     }
 
@@ -1364,9 +1365,9 @@ fn resolve_method_in_class_or_bases(
     func_index: &FuncIndex,
     language: &str,
 ) -> Option<ResolvedTarget> {
-    resolve_method_in_class(class_name, method_name, class_index, func_index, language).or_else(|| {
-        resolve_method_in_bases(class_name, method_name, class_index, func_index, language)
-    })
+    resolve_method_in_class(class_name, method_name, class_index, func_index, language).or_else(
+        || resolve_method_in_bases(class_name, method_name, class_index, func_index, language),
+    )
 }
 
 fn resolve_local_qualified_receiver(
@@ -1397,13 +1398,7 @@ fn resolve_capitalized_receiver(
     if capitalized == receiver {
         return None;
     }
-    resolve_method_in_class_or_bases(
-        &capitalized,
-        bare_target,
-        class_index,
-        func_index,
-        language,
-    )
+    resolve_method_in_class_or_bases(&capitalized, bare_target, class_index, func_index, language)
 }
 
 fn receiver_type_filter<'a>(
@@ -1548,16 +1543,14 @@ fn resolve_type_aware_fallback(
 mod tests {
     use super::*;
     // From new sibling modules:
-    use super::super::types::{FuncIndex, ClassIndex, FuncEntry, ClassEntry};
-    use super::super::imports::{ImportMap, ModuleImports, augment_go_module_imports};
+    use super::super::imports::{augment_go_module_imports, ImportMap, ModuleImports};
     use super::super::module_path::path_to_module;
+    use super::super::types::{ClassEntry, ClassIndex, FuncEntry, FuncIndex};
     // From existing sibling modules:
-    use crate::callgraph::cross_file_types::{
-        CallType, ImportDef,
-    };
+    use crate::callgraph::cross_file_types::{CallType, ImportDef};
     use crate::callgraph::import_resolver::ReExportTracer;
     use crate::callgraph::module_index::ModuleIndex;
-    
+
     use std::collections::HashMap;
     use std::path::{Path, PathBuf};
 
@@ -1626,11 +1619,7 @@ mod tests {
     /// Test: ResolvedTarget::function creates a function target
     #[test]
     fn test_resolved_target_function() {
-        let target = ResolvedTarget::function(
-            PathBuf::from("helper.py"),
-            "process",
-            Some(10),
-        );
+        let target = ResolvedTarget::function(PathBuf::from("helper.py"), "process", Some(10));
 
         assert_eq!(target.file, PathBuf::from("helper.py"));
         assert_eq!(target.name, "process");
@@ -1643,12 +1632,7 @@ mod tests {
     /// Test: ResolvedTarget::method creates a method target
     #[test]
     fn test_resolved_target_method() {
-        let target = ResolvedTarget::method(
-            PathBuf::from("models.py"),
-            "save",
-            "User",
-            Some(42),
-        );
+        let target = ResolvedTarget::method(PathBuf::from("models.py"), "save", "User", Some(42));
 
         assert_eq!(target.file, PathBuf::from("models.py"));
         assert_eq!(target.name, "save");
@@ -1708,7 +1692,10 @@ mod tests {
         );
 
         let mut import_map = ImportMap::new();
-        import_map.insert("process".to_string(), ("helper".to_string(), "process".to_string()));
+        import_map.insert(
+            "process".to_string(),
+            ("helper".to_string(), "process".to_string()),
+        );
 
         let module_imports = ModuleImports::new();
         let class_index = ClassIndex::new();
@@ -1729,7 +1716,10 @@ mod tests {
             "python",
         );
 
-        assert!(resolved.is_some(), "Should resolve direct call via import map");
+        assert!(
+            resolved.is_some(),
+            "Should resolve direct call via import map"
+        );
         let target = resolved.unwrap();
         assert_eq!(target.file, PathBuf::from("helper.py"));
         assert_eq!(target.name, "process");
@@ -1759,7 +1749,10 @@ mod tests {
             "python",
         );
 
-        assert!(resolved.is_none(), "External/stdlib calls should return None");
+        assert!(
+            resolved.is_none(),
+            "External/stdlib calls should return None"
+        );
     }
 
     /// Test: resolve_call detects dynamic imports (M2.4)
@@ -1891,7 +1884,10 @@ mod tests {
         );
 
         let mut import_map = ImportMap::new();
-        import_map.insert("transform".to_string(), ("utils".to_string(), "transform".to_string()));
+        import_map.insert(
+            "transform".to_string(),
+            ("utils".to_string(), "transform".to_string()),
+        );
 
         let module_imports = ModuleImports::new();
         let class_index = ClassIndex::new();
@@ -2030,7 +2026,10 @@ mod tests {
         );
 
         let mut import_map = ImportMap::new();
-        import_map.insert("User".to_string(), ("models".to_string(), "User".to_string()));
+        import_map.insert(
+            "User".to_string(),
+            ("models".to_string(), "User".to_string()),
+        );
 
         let module_imports = ModuleImports::new();
         let module_index = ModuleIndex::new(PathBuf::from("."), "python");
@@ -2068,14 +2067,19 @@ mod tests {
         // Simulate what build_indices_parallel does with the fixed path_to_module:
         // For a TS file "errors.ts", the module should be "./errors"
         let module = path_to_module(Path::new("errors.ts"), "typescript");
-        func_index.insert(&module, "ZodError", FuncEntry::function(
-            PathBuf::from("errors.ts"), 10, 20,
-        ));
+        func_index.insert(
+            &module,
+            "ZodError",
+            FuncEntry::function(PathBuf::from("errors.ts"), 10, 20),
+        );
 
         // Simulate what import_map contains (from ModuleIndex resolution):
         // import { ZodError } from "./errors"
         let mut import_map: ImportMap = HashMap::new();
-        import_map.insert("ZodError".to_string(), ("./errors".to_string(), "ZodError".to_string()));
+        import_map.insert(
+            "ZodError".to_string(),
+            ("./errors".to_string(), "ZodError".to_string()),
+        );
         let module_imports: ModuleImports = HashMap::new();
         let module_index = ModuleIndex::new(PathBuf::from("."), "typescript");
         let mut reexport_tracer = ReExportTracer::new(&module_index);
@@ -2111,9 +2115,11 @@ mod tests {
 
         // errors module has a createZodError function
         let module = path_to_module(Path::new("errors.ts"), "typescript");
-        func_index.insert(&module, "createZodError", FuncEntry::function(
-            PathBuf::from("errors.ts"), 5, 15,
-        ));
+        func_index.insert(
+            &module,
+            "createZodError",
+            FuncEntry::function(PathBuf::from("errors.ts"), 5, 15),
+        );
 
         let import_map: ImportMap = HashMap::new();
         let mut module_imports: ModuleImports = HashMap::new();
@@ -2171,12 +2177,19 @@ mod tests {
         func_index.insert(
             "cookies",
             "items",
-            FuncEntry::method(PathBuf::from("cookies.py"), 80, 90, "RequestsCookieJar".to_string()),
+            FuncEntry::method(
+                PathBuf::from("cookies.py"),
+                80,
+                90,
+                "RequestsCookieJar".to_string(),
+            ),
         );
         class_index.insert(
             "RequestsCookieJar",
             ClassEntry::new(
-                PathBuf::from("cookies.py"), 5, 200,
+                PathBuf::from("cookies.py"),
+                5,
+                200,
                 vec!["items".to_string(), "values".to_string()],
                 vec!["cookielib.CookieJar".to_string()],
             ),
@@ -2255,7 +2268,9 @@ mod tests {
         class_index.insert(
             "ClassA",
             ClassEntry::new(
-                PathBuf::from("module.py"), 5, 25,
+                PathBuf::from("module.py"),
+                5,
+                25,
                 vec!["process".to_string()],
                 vec![],
             ),
@@ -2263,7 +2278,9 @@ mod tests {
         class_index.insert(
             "ClassB",
             ClassEntry::new(
-                PathBuf::from("module.py"), 26, 45,
+                PathBuf::from("module.py"),
+                26,
+                45,
                 vec!["process".to_string()],
                 vec![],
             ),
@@ -2364,7 +2381,9 @@ mod tests {
         class_index.insert(
             "ChildClass",
             ClassEntry::new(
-                PathBuf::from("child.py"), 5, 50,
+                PathBuf::from("child.py"),
+                5,
+                50,
                 vec!["run".to_string()],
                 vec!["BaseClass".to_string()],
             ),
@@ -2372,7 +2391,9 @@ mod tests {
         class_index.insert(
             "BaseClass",
             ClassEntry::new(
-                PathBuf::from("base.py"), 1, 30,
+                PathBuf::from("base.py"),
+                1,
+                30,
                 vec!["save".to_string()],
                 vec![],
             ),
@@ -2382,12 +2403,19 @@ mod tests {
         func_index.insert(
             "other",
             "save",
-            FuncEntry::method(PathBuf::from("other.py"), 10, 20, "UnrelatedClass".to_string()),
+            FuncEntry::method(
+                PathBuf::from("other.py"),
+                10,
+                20,
+                "UnrelatedClass".to_string(),
+            ),
         );
         class_index.insert(
             "UnrelatedClass",
             ClassEntry::new(
-                PathBuf::from("other.py"), 1, 30,
+                PathBuf::from("other.py"),
+                1,
+                30,
                 vec!["save".to_string()],
                 vec![],
             ),
@@ -2446,12 +2474,19 @@ mod tests {
         func_index.insert(
             "cookies",
             "items",
-            FuncEntry::method(PathBuf::from("cookies.py"), 80, 90, "RequestsCookieJar".to_string()),
+            FuncEntry::method(
+                PathBuf::from("cookies.py"),
+                80,
+                90,
+                "RequestsCookieJar".to_string(),
+            ),
         );
         class_index.insert(
             "RequestsCookieJar",
             ClassEntry::new(
-                PathBuf::from("cookies.py"), 5, 200,
+                PathBuf::from("cookies.py"),
+                5,
+                200,
                 vec!["items".to_string()],
                 vec![],
             ),

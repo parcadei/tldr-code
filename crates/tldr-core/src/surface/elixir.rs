@@ -507,7 +507,10 @@ end
             surface
                 .apis
                 .iter()
-                .map(|api| (&api.qualified_name, api.location.as_ref().map(|loc| &loc.file)))
+                .map(|api| (
+                    &api.qualified_name,
+                    api.location.as_ref().map(|loc| &loc.file)
+                ))
                 .collect::<Vec<_>>()
         );
         assert!(
@@ -520,7 +523,10 @@ end
             surface
                 .apis
                 .iter()
-                .map(|api| (&api.qualified_name, api.location.as_ref().map(|loc| &loc.file)))
+                .map(|api| (
+                    &api.qualified_name,
+                    api.location.as_ref().map(|loc| &loc.file)
+                ))
                 .collect::<Vec<_>>()
         );
     }

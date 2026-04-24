@@ -12,9 +12,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use crate::diagnostics::parsers::*;
-use crate::diagnostics::{
-    Diagnostic, DiagnosticsReport, ToolConfig, ToolResult,
-};
+use crate::diagnostics::{Diagnostic, DiagnosticsReport, ToolConfig, ToolResult};
 use crate::error::TldrError;
 use crate::types::Language;
 

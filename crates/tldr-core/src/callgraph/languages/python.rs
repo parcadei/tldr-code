@@ -1389,8 +1389,7 @@ class Command:
         let command_methods: Vec<_> = funcs
             .iter()
             .filter(|f| {
-                f.name == "shell_complete"
-                    && f.class_name.as_ref().is_some_and(|n| n == "Command")
+                f.name == "shell_complete" && f.class_name.as_ref().is_some_and(|n| n == "Command")
             })
             .collect();
         let group_methods: Vec<_> = funcs

@@ -39,9 +39,9 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use crate::walker::walk_project;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
 
 use crate::ast::parser::parse;
 use crate::error::TldrError;
@@ -205,10 +205,7 @@ impl UnionFind {
         if n == 0 {
             return 0;
         }
-        (0..n)
-            .map(|i| self.find(i))
-            .collect::<HashSet<_>>()
-            .len()
+        (0..n).map(|i| self.find(i)).collect::<HashSet<_>>().len()
     }
 
     /// Get component ID for each node (after all unions)
@@ -295,10 +292,8 @@ pub fn analyze_cohesion_with_options(
     let file_paths: Vec<PathBuf> = if path.is_file() {
         vec![path.to_path_buf()]
     } else {
-        WalkDir::new(path)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
+        walk_project(path)
+            .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
             .filter(|e| {
                 let detected = Language::from_path(e.path());
                 match (detected, language) {
@@ -363,13 +358,15 @@ fn analyze_file_cohesion(
     options: &CohesionOptions,
 ) -> TldrResult<Vec<ClassCohesion>> {
     let source = std::fs::read_to_string(file_path)?;
-    let language = Language::from_path(file_path)
-        .ok_or_else(|| TldrError::UnsupportedLanguage(
-            file_path.extension()
+    let language = Language::from_path(file_path).ok_or_else(|| {
+        TldrError::UnsupportedLanguage(
+            file_path
+                .extension()
                 .and_then(|e| e.to_str())
                 .unwrap_or("unknown")
-                .to_string()
-        ))?;
+                .to_string(),
+        )
+    })?;
 
     // Parse the file using the global parser pool
     let tree = parse(&source, language)?;
@@ -381,12 +378,7 @@ fn analyze_file_cohesion(
     // Compute LCOM4 for each class
     let mut results = Vec::new();
     for class_info in class_infos {
-        let cohesion = compute_class_cohesion(
-            &class_info,
-            &source,
-            file_path,
-            options,
-        );
+        let cohesion = compute_class_cohesion(&class_info, &source, file_path, options);
         results.push(cohesion);
     }
 
@@ -394,11 +386,7 @@ fn analyze_file_cohesion(
 }
 
 /// Extract classes from the AST based on language
-fn extract_classes(
-    root: tree_sitter::Node,
-    source: &str,
-    language: Language,
-) -> Vec<ClassInfo> {
+fn extract_classes(root: tree_sitter::Node, source: &str, language: Language) -> Vec<ClassInfo> {
     match language {
         Language::Python => extract_python_classes(root, source),
         Language::TypeScript | Language::JavaScript => extract_typescript_classes(root, source),
@@ -472,7 +460,11 @@ fn extract_python_class_info(node: &tree_sitter::Node, source: &str) -> Option<C
     let body = node.child_by_field_name("body")?;
     let methods = extract_python_methods(&body, source);
 
-    Some(ClassInfo { name, line, methods })
+    Some(ClassInfo {
+        name,
+        line,
+        methods,
+    })
 }
 
 fn extract_python_methods(body: &tree_sitter::Node, source: &str) -> Vec<MethodInfo> {
@@ -550,7 +542,11 @@ fn extract_typescript_class_info(node: &tree_sitter::Node, source: &str) -> Opti
     let body = node.child_by_field_name("body")?;
     let methods = extract_typescript_methods(&body, source);
 
-    Some(ClassInfo { name, line, methods })
+    Some(ClassInfo {
+        name,
+        line,
+        methods,
+    })
 }
 
 fn extract_typescript_methods(body: &tree_sitter::Node, source: &str) -> Vec<MethodInfo> {
@@ -623,7 +619,11 @@ fn extract_java_class_info(node: &tree_sitter::Node, source: &str) -> Option<Cla
     let body = node.child_by_field_name("body")?;
     let methods = extract_java_methods(&body, source);
 
-    Some(ClassInfo { name, line, methods })
+    Some(ClassInfo {
+        name,
+        line,
+        methods,
+    })
 }
 
 fn extract_java_methods(body: &tree_sitter::Node, source: &str) -> Vec<MethodInfo> {
@@ -745,10 +745,16 @@ fn extract_go_receiver_type(receiver: &tree_sitter::Node, source: &str) -> Optio
                 // Handle pointer receiver (*Type)
                 if type_node.kind() == "pointer_type" {
                     if let Some(elem) = type_node.named_child(0) {
-                        return elem.utf8_text(source.as_bytes()).ok().map(|s| s.to_string());
+                        return elem
+                            .utf8_text(source.as_bytes())
+                            .ok()
+                            .map(|s| s.to_string());
                     }
                 } else {
-                    return type_node.utf8_text(source.as_bytes()).ok().map(|s| s.to_string());
+                    return type_node
+                        .utf8_text(source.as_bytes())
+                        .ok()
+                        .map(|s| s.to_string());
                 }
             }
         }
@@ -829,7 +835,8 @@ fn collect_rust_impl_methods(
                                     continue;
                                 }
                                 if let Some(name_node) = body_child.child_by_field_name("name") {
-                                    if let Ok(method_name) = name_node.utf8_text(source.as_bytes()) {
+                                    if let Ok(method_name) = name_node.utf8_text(source.as_bytes())
+                                    {
                                         if let Some(class_info) = structs.get_mut(&type_name) {
                                             class_info.methods.push(MethodInfo {
                                                 name: method_name.to_string(),
@@ -911,7 +918,11 @@ fn extract_ruby_class_info(node: &tree_sitter::Node, source: &str) -> Option<Cla
     let body = node.child_by_field_name("body")?;
     let methods = extract_ruby_methods(&body, source);
 
-    Some(ClassInfo { name, line, methods })
+    Some(ClassInfo {
+        name,
+        line,
+        methods,
+    })
 }
 
 /// Extract methods from a Ruby class body (body_statement node).
@@ -984,7 +995,11 @@ fn extract_csharp_class_info(node: &tree_sitter::Node, source: &str) -> Option<C
     let body = node.child_by_field_name("body")?;
     let methods = extract_csharp_methods(&body, source);
 
-    Some(ClassInfo { name, line, methods })
+    Some(ClassInfo {
+        name,
+        line,
+        methods,
+    })
 }
 
 /// Extract methods from a C# class body (declaration_list node).
@@ -1062,7 +1077,10 @@ fn extract_scala_class_info(node: &tree_sitter::Node, source: &str) -> Option<Cl
             let mut cursor = node.walk();
             for child in node.children(&mut cursor) {
                 if child.kind() == "identifier" {
-                    return child.utf8_text(source.as_bytes()).ok().map(|s| s.to_string());
+                    return child
+                        .utf8_text(source.as_bytes())
+                        .ok()
+                        .map(|s| s.to_string());
                 }
             }
             None
@@ -1071,7 +1089,11 @@ fn extract_scala_class_info(node: &tree_sitter::Node, source: &str) -> Option<Cl
     let line = node.start_position().row + 1;
     let methods = extract_scala_methods(node, source);
 
-    Some(ClassInfo { name, line, methods })
+    Some(ClassInfo {
+        name,
+        line,
+        methods,
+    })
 }
 
 /// Extract methods from a Scala class/object/trait.
@@ -1150,7 +1172,11 @@ fn extract_php_class_info(node: &tree_sitter::Node, source: &str) -> Option<Clas
     let body = node.child_by_field_name("body")?;
     let methods = extract_php_methods(&body, source);
 
-    Some(ClassInfo { name, line, methods })
+    Some(ClassInfo {
+        name,
+        line,
+        methods,
+    })
 }
 
 /// Extract methods from a PHP class body (declaration_list node).
@@ -1226,7 +1252,10 @@ fn extract_go_receiver_accesses(method_source: &str, receiver_name: &str) -> Has
     let mut fields = HashSet::new();
 
     // Match receiver.field patterns
-    let pattern_str = format!(r"{}\.([a-zA-Z_][a-zA-Z0-9_]*)", regex::escape(receiver_name));
+    let pattern_str = format!(
+        r"{}\.([a-zA-Z_][a-zA-Z0-9_]*)",
+        regex::escape(receiver_name)
+    );
     if let Ok(pattern) = Regex::new(&pattern_str) {
         for cap in pattern.captures_iter(method_source) {
             if let Some(field) = cap.get(1) {
@@ -1427,7 +1456,9 @@ fn compute_class_cohesion(
     let mut component_map: HashMap<usize, (Vec<String>, HashSet<String>)> = HashMap::new();
 
     for (i, &comp_id) in component_ids.iter().enumerate() {
-        let entry = component_map.entry(comp_id).or_insert_with(|| (Vec::new(), HashSet::new()));
+        let entry = component_map
+            .entry(comp_id)
+            .or_insert_with(|| (Vec::new(), HashSet::new()));
         entry.0.push(methods[i].name.clone());
         entry.1.extend(method_fields[i].iter().cloned());
     }
@@ -1476,9 +1507,7 @@ fn extract_field_accesses(method_source: &str, file_path: &Path) -> HashSet<Stri
     let lang = Language::from_path(file_path);
 
     match lang {
-        Some(language) => {
-            extract_field_accesses_ast(method_source, language, None)
-        }
+        Some(language) => extract_field_accesses_ast(method_source, language, None),
         None => {
             // Unknown language: try regex fallback based on extension
             let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
@@ -1567,9 +1596,9 @@ fn walk_and_extract_fields(
                 continue;
             }
 
-            if let Some(field_name) = extract_field_from_pattern(
-                node, source, language, receiver_name, pattern,
-            ) {
+            if let Some(field_name) =
+                extract_field_from_pattern(node, source, language, receiver_name, pattern)
+            {
                 fields.insert(field_name);
             }
         }
@@ -1741,11 +1770,7 @@ fn is_go_receiver_match(operand_text: &str, receiver_name: Option<&str>) -> bool
 }
 
 fn is_single_lowercase_identifier(text: &str) -> bool {
-    text.len() == 1
-        && text
-            .chars()
-            .next()
-            .is_some_and(|c| c.is_ascii_lowercase())
+    text.len() == 1 && text.chars().next().is_some_and(|c| c.is_ascii_lowercase())
 }
 
 fn extract_c_field_access(node: &tree_sitter::Node, source: &[u8]) -> Option<String> {
@@ -2007,10 +2032,7 @@ getValue() {
         let cohesive = CohesionVerdict::Cohesive;
         let split = CohesionVerdict::SplitCandidate;
 
-        assert_eq!(
-            serde_json::to_string(&cohesive).unwrap(),
-            "\"cohesive\""
-        );
+        assert_eq!(serde_json::to_string(&cohesive).unwrap(), "\"cohesive\"");
         assert_eq!(
             serde_json::to_string(&split).unwrap(),
             "\"split_candidate\""
@@ -2027,7 +2049,12 @@ getValue() {
         let fields = extract_field_accesses_ast(source, Language::Python, None);
         assert!(fields.contains("name"), "Expected 'name' in {:?}", fields);
         assert!(fields.contains("age"), "Expected 'age' in {:?}", fields);
-        assert_eq!(fields.len(), 2, "Expected 2 unique fields, got {:?}", fields);
+        assert_eq!(
+            fields.len(),
+            2,
+            "Expected 2 unique fields, got {:?}",
+            fields
+        );
     }
 
     #[test]
@@ -2036,7 +2063,11 @@ getValue() {
         let fields = extract_field_accesses_ast(source, Language::Python, None);
         assert!(fields.contains("name"), "Expected 'name' in {:?}", fields);
         // do_thing is a method call, not a field access
-        assert!(!fields.contains("do_thing"), "Should not contain method call 'do_thing': {:?}", fields);
+        assert!(
+            !fields.contains("do_thing"),
+            "Should not contain method call 'do_thing': {:?}",
+            fields
+        );
     }
 
     #[test]
@@ -2045,16 +2076,32 @@ getValue() {
     x = "self.fake_field"
     y = self.real_field"#;
         let fields = extract_field_accesses_ast(source, Language::Python, None);
-        assert!(fields.contains("real_field"), "Expected 'real_field' in {:?}", fields);
-        assert!(!fields.contains("fake_field"), "Should not detect field in string literal: {:?}", fields);
+        assert!(
+            fields.contains("real_field"),
+            "Expected 'real_field' in {:?}",
+            fields
+        );
+        assert!(
+            !fields.contains("fake_field"),
+            "Should not detect field in string literal: {:?}",
+            fields
+        );
     }
 
     #[test]
     fn test_ast_python_comment_not_detected() {
         let source = "def method(self):\n    # self.commented_field\n    x = self.real_field";
         let fields = extract_field_accesses_ast(source, Language::Python, None);
-        assert!(fields.contains("real_field"), "Expected 'real_field' in {:?}", fields);
-        assert!(!fields.contains("commented_field"), "Should not detect field in comment: {:?}", fields);
+        assert!(
+            fields.contains("real_field"),
+            "Expected 'real_field' in {:?}",
+            fields
+        );
+        assert!(
+            !fields.contains("commented_field"),
+            "Should not detect field in comment: {:?}",
+            fields
+        );
     }
 
     #[test]
@@ -2204,7 +2251,11 @@ getValue() {
         let fields = extract_field_accesses_ast(source, Language::Ocaml, None);
         // OCaml has no self/this - should return empty or record field accesses
         // For LCOM4 purposes, OCaml classes are rare, so empty is fine
-        assert!(fields.is_empty(), "OCaml should return empty set for LCOM4: {:?}", fields);
+        assert!(
+            fields.is_empty(),
+            "OCaml should return empty set for LCOM4: {:?}",
+            fields
+        );
     }
 
     #[test]
@@ -2213,8 +2264,16 @@ getValue() {
         // Python regex should still work even with invalid syntax wrapping
         let source = "self.name = 1\nself.age = 2";
         let fields = extract_field_accesses_regex(source, Language::Python, None);
-        assert!(fields.contains("name"), "Regex fallback should find 'name': {:?}", fields);
-        assert!(fields.contains("age"), "Regex fallback should find 'age': {:?}", fields);
+        assert!(
+            fields.contains("name"),
+            "Regex fallback should find 'name': {:?}",
+            fields
+        );
+        assert!(
+            fields.contains("age"),
+            "Regex fallback should find 'age': {:?}",
+            fields
+        );
     }
 
     // =========================================================================
@@ -2242,11 +2301,29 @@ public class MyService {
 "#;
         let tree = parse(source, Language::Java).unwrap();
         let classes = extract_classes(tree.root_node(), source, Language::Java);
-        assert_eq!(classes.len(), 1, "Expected 1 class, got {:?}", classes.iter().map(|c| &c.name).collect::<Vec<_>>());
+        assert_eq!(
+            classes.len(),
+            1,
+            "Expected 1 class, got {:?}",
+            classes.iter().map(|c| &c.name).collect::<Vec<_>>()
+        );
         assert_eq!(classes[0].name, "MyService");
         // constructor should be excluded, leaving getName and setName
-        let non_ctor_methods: Vec<_> = classes[0].methods.iter().filter(|m| m.name != "MyService").collect();
-        assert_eq!(non_ctor_methods.len(), 2, "Expected 2 non-constructor methods, got {:?}", classes[0].methods.iter().map(|m| &m.name).collect::<Vec<_>>());
+        let non_ctor_methods: Vec<_> = classes[0]
+            .methods
+            .iter()
+            .filter(|m| m.name != "MyService")
+            .collect();
+        assert_eq!(
+            non_ctor_methods.len(),
+            2,
+            "Expected 2 non-constructor methods, got {:?}",
+            classes[0]
+                .methods
+                .iter()
+                .map(|m| &m.name)
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -2262,10 +2339,19 @@ class Second {
 "#;
         let tree = parse(source, Language::Java).unwrap();
         let classes = extract_classes(tree.root_node(), source, Language::Java);
-        assert_eq!(classes.len(), 2, "Expected 2 classes, got {:?}", classes.iter().map(|c| &c.name).collect::<Vec<_>>());
+        assert_eq!(
+            classes.len(),
+            2,
+            "Expected 2 classes, got {:?}",
+            classes.iter().map(|c| &c.name).collect::<Vec<_>>()
+        );
         let names: Vec<&str> = classes.iter().map(|c| c.name.as_str()).collect();
         assert!(names.contains(&"First"), "Expected 'First' in {:?}", names);
-        assert!(names.contains(&"Second"), "Expected 'Second' in {:?}", names);
+        assert!(
+            names.contains(&"Second"),
+            "Expected 'Second' in {:?}",
+            names
+        );
     }
 
     #[test]
@@ -2287,7 +2373,11 @@ enum Color {
         let classes = extract_classes(tree.root_node(), source, Language::Java);
         // Should find at least Color enum (has a method), and possibly Describable interface
         let names: Vec<&str> = classes.iter().map(|c| c.name.as_str()).collect();
-        assert!(names.contains(&"Color"), "Expected 'Color' enum in {:?}", names);
+        assert!(
+            names.contains(&"Color"),
+            "Expected 'Color' enum in {:?}",
+            names
+        );
     }
 
     #[test]
@@ -2318,9 +2408,17 @@ public class Widget {
         // method_declaration: getSize; constructor_declaration: Widget(), Widget(int)
         // We expect only getSize from method_declaration
         let method_names: Vec<&str> = widget.methods.iter().map(|m| m.name.as_str()).collect();
-        assert!(method_names.contains(&"getSize"), "Expected 'getSize' in {:?}", method_names);
+        assert!(
+            method_names.contains(&"getSize"),
+            "Expected 'getSize' in {:?}",
+            method_names
+        );
         // Constructors are separate AST nodes (constructor_declaration) -- we don't extract them
-        assert!(!method_names.contains(&"Widget"), "Constructors should not be extracted: {:?}", method_names);
+        assert!(
+            !method_names.contains(&"Widget"),
+            "Constructors should not be extracted: {:?}",
+            method_names
+        );
     }
 
     // =========================================================================
@@ -2352,10 +2450,15 @@ impl Foo {
         assert_eq!(classes.len(), 1, "Expected 1 struct, got {}", classes.len());
         assert_eq!(classes[0].name, "Foo");
         assert_eq!(
-            classes[0].methods.len(), 3,
+            classes[0].methods.len(),
+            3,
             "Expected 3 methods, got {}: {:?}",
             classes[0].methods.len(),
-            classes[0].methods.iter().map(|m| &m.name).collect::<Vec<_>>()
+            classes[0]
+                .methods
+                .iter()
+                .map(|m| &m.name)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -2388,13 +2491,25 @@ impl Foo {
         let results = analyze_file_cohesion(&file_path, &options).unwrap();
         assert!(!results.is_empty(), "Expected at least 1 class in results");
         let foo = results.iter().find(|c| c.name == "Foo").unwrap();
-        assert_eq!(foo.method_count, 3, "Expected 3 methods, got {}", foo.method_count);
-        assert!(foo.field_count > 0, "Expected fields to be detected, got {}", foo.field_count);
+        assert_eq!(
+            foo.method_count, 3,
+            "Expected 3 methods, got {}",
+            foo.method_count
+        );
+        assert!(
+            foo.field_count > 0,
+            "Expected fields to be detected, got {}",
+            foo.field_count
+        );
         // get_bar accesses bar, get_baz accesses baz, set_bar accesses bar
         // bar connects get_bar and set_bar; they're in one component
         // baz is only in get_baz => separate component
         // So LCOM4 should be 2 (two components: {get_bar, set_bar} and {get_baz})
-        assert_eq!(foo.lcom4, 2, "Expected LCOM4=2 (two components), got {}", foo.lcom4);
+        assert_eq!(
+            foo.lcom4, 2,
+            "Expected LCOM4=2 (two components), got {}",
+            foo.lcom4
+        );
     }
 
     #[test]
@@ -2426,8 +2541,16 @@ impl Counter {
         assert!(!results.is_empty(), "Expected at least 1 class in results");
         let counter = results.iter().find(|c| c.name == "Counter").unwrap();
         assert_eq!(counter.method_count, 3);
-        assert_eq!(counter.field_count, 1, "Expected 1 field (count), got {}", counter.field_count);
-        assert_eq!(counter.lcom4, 1, "Fully cohesive class should have LCOM4=1, got {}", counter.lcom4);
+        assert_eq!(
+            counter.field_count, 1,
+            "Expected 1 field (count), got {}",
+            counter.field_count
+        );
+        assert_eq!(
+            counter.lcom4, 1,
+            "Fully cohesive class should have LCOM4=1, got {}",
+            counter.lcom4
+        );
     }
 
     #[test]
@@ -2455,7 +2578,12 @@ impl Beta {
 "#;
         let tree = parse(source, Language::Rust).unwrap();
         let classes = extract_classes(tree.root_node(), source, Language::Rust);
-        assert_eq!(classes.len(), 2, "Expected 2 structs, got {}", classes.len());
+        assert_eq!(
+            classes.len(),
+            2,
+            "Expected 2 structs, got {}",
+            classes.len()
+        );
         let names: Vec<&str> = classes.iter().map(|c| c.name.as_str()).collect();
         assert!(names.contains(&"Alpha"), "Expected 'Alpha' in {:?}", names);
         assert!(names.contains(&"Beta"), "Expected 'Beta' in {:?}", names);
@@ -2483,10 +2611,16 @@ impl MyType {
 "#;
         let tree = parse(source, Language::Rust).unwrap();
         let classes = extract_classes(tree.root_node(), source, Language::Rust);
-        assert_eq!(classes.len(), 1, "Expected 1 struct (merged impl blocks), got {}", classes.len());
+        assert_eq!(
+            classes.len(),
+            1,
+            "Expected 1 struct (merged impl blocks), got {}",
+            classes.len()
+        );
         let my_type = &classes[0];
         assert_eq!(
-            my_type.methods.len(), 2,
+            my_type.methods.len(),
+            2,
             "Expected 2 methods from merged impl blocks, got {}: {:?}",
             my_type.methods.len(),
             my_type.methods.iter().map(|m| &m.name).collect::<Vec<_>>()
@@ -2524,18 +2658,22 @@ impl Default for Config {
         let method_names: Vec<&str> = config.methods.iter().map(|m| m.name.as_str()).collect();
         assert!(
             method_names.contains(&"get_name"),
-            "Expected 'get_name' in methods: {:?}", method_names
+            "Expected 'get_name' in methods: {:?}",
+            method_names
         );
         // default() from impl Default is a static/associated function (no self parameter),
         // so it should NOT be included in instance methods for LCOM4 analysis.
         assert!(
             !method_names.contains(&"default"),
-            "Static 'default()' should be excluded from instance methods: {:?}", method_names
+            "Static 'default()' should be excluded from instance methods: {:?}",
+            method_names
         );
         assert_eq!(
-            config.methods.len(), 1,
+            config.methods.len(),
+            1,
             "Expected 1 instance method (get_name only, default() excluded), got {}: {:?}",
-            config.methods.len(), method_names
+            config.methods.len(),
+            method_names
         );
     }
 
@@ -2611,8 +2749,8 @@ impl Builder {
         // but they are data-only structs with impl Default (a static method).
         // After the self-filtering fix, these structs have 0 instance methods,
         // which is correct since they have no self-accessing methods.
-        let coupling_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("src/quality/coupling.rs");
+        let coupling_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/quality/coupling.rs");
         if coupling_path.exists() {
             let options = CohesionOptions::default();
             let results = analyze_file_cohesion(&coupling_path, &options).unwrap();
@@ -2681,14 +2819,27 @@ impl Report {
 
         let options = CohesionOptions::default();
         let results = analyze_file_cohesion(&file_path, &options).unwrap();
-        assert!(!results.is_empty(), "Expected structs to be found in realistic Rust file");
-        let report = results.iter().find(|c| c.name == "Report")
+        assert!(
+            !results.is_empty(),
+            "Expected structs to be found in realistic Rust file"
+        );
+        let report = results
+            .iter()
+            .find(|c| c.name == "Report")
             .expect("Expected 'Report' struct to be found");
         // new() is a static method (no self), add_item uses self.items,
         // get_title uses self.title, item_count uses self.items,
         // set_metadata uses self.metadata
-        assert!(report.method_count >= 4, "Expected at least 4 methods, got {}", report.method_count);
-        assert!(report.field_count >= 2, "Expected at least 2 fields, got {}", report.field_count);
+        assert!(
+            report.method_count >= 4,
+            "Expected at least 4 methods, got {}",
+            report.method_count
+        );
+        assert!(
+            report.field_count >= 2,
+            "Expected at least 2 fields, got {}",
+            report.field_count
+        );
     }
 
     // =========================================================================
@@ -2715,13 +2866,23 @@ end
 "#;
         let tree = parse(source, Language::Ruby).unwrap();
         let classes = extract_classes(tree.root_node(), source, Language::Ruby);
-        assert_eq!(classes.len(), 1, "Expected 1 class, got {:?}", classes.iter().map(|c| &c.name).collect::<Vec<_>>());
+        assert_eq!(
+            classes.len(),
+            1,
+            "Expected 1 class, got {:?}",
+            classes.iter().map(|c| &c.name).collect::<Vec<_>>()
+        );
         assert_eq!(classes[0].name, "Dog");
         // initialize, bark, age = 3 methods
         assert_eq!(
-            classes[0].methods.len(), 3,
+            classes[0].methods.len(),
+            3,
             "Expected 3 methods, got {:?}",
-            classes[0].methods.iter().map(|m| &m.name).collect::<Vec<_>>()
+            classes[0]
+                .methods
+                .iter()
+                .map(|m| &m.name)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -2742,9 +2903,18 @@ end
 "#;
         let tree = parse(source, Language::Ruby).unwrap();
         let classes = extract_classes(tree.root_node(), source, Language::Ruby);
-        assert_eq!(classes.len(), 2, "Expected 2 classes, got {:?}", classes.iter().map(|c| &c.name).collect::<Vec<_>>());
+        assert_eq!(
+            classes.len(),
+            2,
+            "Expected 2 classes, got {:?}",
+            classes.iter().map(|c| &c.name).collect::<Vec<_>>()
+        );
         let names: Vec<&str> = classes.iter().map(|c| c.name.as_str()).collect();
-        assert!(names.contains(&"Animal"), "Expected 'Animal' in {:?}", names);
+        assert!(
+            names.contains(&"Animal"),
+            "Expected 'Animal' in {:?}",
+            names
+        );
         assert!(names.contains(&"Cat"), "Expected 'Cat' in {:?}", names);
     }
 
@@ -2778,8 +2948,16 @@ end
         let results = analyze_file_cohesion(&file_path, &options).unwrap();
         assert!(!results.is_empty(), "Expected at least 1 class in results");
         let counter = results.iter().find(|c| c.name == "Counter").unwrap();
-        assert_eq!(counter.method_count, 4, "Expected 4 methods, got {}", counter.method_count);
-        assert_eq!(counter.lcom4, 1, "Fully cohesive class should have LCOM4=1, got {}", counter.lcom4);
+        assert_eq!(
+            counter.method_count, 4,
+            "Expected 4 methods, got {}",
+            counter.method_count
+        );
+        assert_eq!(
+            counter.lcom4, 1,
+            "Fully cohesive class should have LCOM4=1, got {}",
+            counter.lcom4
+        );
     }
 
     #[test]
@@ -2812,9 +2990,17 @@ end
         let results = analyze_file_cohesion(&file_path, &options).unwrap();
         assert!(!results.is_empty(), "Expected at least 1 class in results");
         let mixed = results.iter().find(|c| c.name == "Mixed").unwrap();
-        assert_eq!(mixed.method_count, 4, "Expected 4 methods, got {}", mixed.method_count);
+        assert_eq!(
+            mixed.method_count, 4,
+            "Expected 4 methods, got {}",
+            mixed.method_count
+        );
         // name group: {get_name, set_name}, age group: {get_age, set_age}
-        assert_eq!(mixed.lcom4, 2, "Expected LCOM4=2 (two components), got {}", mixed.lcom4);
+        assert_eq!(
+            mixed.lcom4, 2,
+            "Expected LCOM4=2 (two components), got {}",
+            mixed.lcom4
+        );
     }
 
     // =========================================================================
@@ -2838,12 +3024,22 @@ class UserService {
 "#;
         let tree = parse(source, Language::CSharp).unwrap();
         let classes = extract_classes(tree.root_node(), source, Language::CSharp);
-        assert_eq!(classes.len(), 1, "Expected 1 class, got {:?}", classes.iter().map(|c| &c.name).collect::<Vec<_>>());
+        assert_eq!(
+            classes.len(),
+            1,
+            "Expected 1 class, got {:?}",
+            classes.iter().map(|c| &c.name).collect::<Vec<_>>()
+        );
         assert_eq!(classes[0].name, "UserService");
         assert_eq!(
-            classes[0].methods.len(), 2,
+            classes[0].methods.len(),
+            2,
             "Expected 2 methods, got {:?}",
-            classes[0].methods.iter().map(|m| &m.name).collect::<Vec<_>>()
+            classes[0]
+                .methods
+                .iter()
+                .map(|m| &m.name)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -2860,10 +3056,19 @@ class Second {
 "#;
         let tree = parse(source, Language::CSharp).unwrap();
         let classes = extract_classes(tree.root_node(), source, Language::CSharp);
-        assert_eq!(classes.len(), 2, "Expected 2 classes, got {:?}", classes.iter().map(|c| &c.name).collect::<Vec<_>>());
+        assert_eq!(
+            classes.len(),
+            2,
+            "Expected 2 classes, got {:?}",
+            classes.iter().map(|c| &c.name).collect::<Vec<_>>()
+        );
         let names: Vec<&str> = classes.iter().map(|c| c.name.as_str()).collect();
         assert!(names.contains(&"First"), "Expected 'First' in {:?}", names);
-        assert!(names.contains(&"Second"), "Expected 'Second' in {:?}", names);
+        assert!(
+            names.contains(&"Second"),
+            "Expected 'Second' in {:?}",
+            names
+        );
     }
 
     #[test]
@@ -2893,8 +3098,16 @@ class Counter {
         let results = analyze_file_cohesion(&file_path, &options).unwrap();
         assert!(!results.is_empty(), "Expected at least 1 class in results");
         let counter = results.iter().find(|c| c.name == "Counter").unwrap();
-        assert_eq!(counter.method_count, 3, "Expected 3 methods, got {}", counter.method_count);
-        assert_eq!(counter.lcom4, 1, "Fully cohesive class should have LCOM4=1, got {}", counter.lcom4);
+        assert_eq!(
+            counter.method_count, 3,
+            "Expected 3 methods, got {}",
+            counter.method_count
+        );
+        assert_eq!(
+            counter.lcom4, 1,
+            "Fully cohesive class should have LCOM4=1, got {}",
+            counter.lcom4
+        );
     }
 
     #[test]
@@ -2929,8 +3142,16 @@ class Mixed {
         let results = analyze_file_cohesion(&file_path, &options).unwrap();
         assert!(!results.is_empty(), "Expected at least 1 class in results");
         let mixed = results.iter().find(|c| c.name == "Mixed").unwrap();
-        assert_eq!(mixed.method_count, 4, "Expected 4 methods, got {}", mixed.method_count);
-        assert_eq!(mixed.lcom4, 2, "Expected LCOM4=2 (two components), got {}", mixed.lcom4);
+        assert_eq!(
+            mixed.method_count, 4,
+            "Expected 4 methods, got {}",
+            mixed.method_count
+        );
+        assert_eq!(
+            mixed.lcom4, 2,
+            "Expected LCOM4=2 (two components), got {}",
+            mixed.lcom4
+        );
     }
 
     // =========================================================================
@@ -2952,12 +3173,22 @@ class UserService {
 "#;
         let tree = parse(source, Language::Scala).unwrap();
         let classes = extract_classes(tree.root_node(), source, Language::Scala);
-        assert_eq!(classes.len(), 1, "Expected 1 class, got {:?}", classes.iter().map(|c| &c.name).collect::<Vec<_>>());
+        assert_eq!(
+            classes.len(),
+            1,
+            "Expected 1 class, got {:?}",
+            classes.iter().map(|c| &c.name).collect::<Vec<_>>()
+        );
         assert_eq!(classes[0].name, "UserService");
         assert_eq!(
-            classes[0].methods.len(), 2,
+            classes[0].methods.len(),
+            2,
             "Expected 2 methods, got {:?}",
-            classes[0].methods.iter().map(|m| &m.name).collect::<Vec<_>>()
+            classes[0]
+                .methods
+                .iter()
+                .map(|m| &m.name)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -2977,8 +3208,16 @@ trait Describable {
         let tree = parse(source, Language::Scala).unwrap();
         let classes = extract_classes(tree.root_node(), source, Language::Scala);
         let names: Vec<&str> = classes.iter().map(|c| c.name.as_str()).collect();
-        assert!(names.contains(&"Config"), "Expected 'Config' object in {:?}", names);
-        assert!(names.contains(&"Describable"), "Expected 'Describable' trait in {:?}", names);
+        assert!(
+            names.contains(&"Config"),
+            "Expected 'Config' object in {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"Describable"),
+            "Expected 'Describable' trait in {:?}",
+            names
+        );
     }
 
     #[test]
@@ -3006,8 +3245,16 @@ class Counter {
         let results = analyze_file_cohesion(&file_path, &options).unwrap();
         assert!(!results.is_empty(), "Expected at least 1 class in results");
         let counter = results.iter().find(|c| c.name == "Counter").unwrap();
-        assert_eq!(counter.method_count, 3, "Expected 3 methods, got {}", counter.method_count);
-        assert_eq!(counter.lcom4, 1, "Fully cohesive class should have LCOM4=1, got {}", counter.lcom4);
+        assert_eq!(
+            counter.method_count, 3,
+            "Expected 3 methods, got {}",
+            counter.method_count
+        );
+        assert_eq!(
+            counter.lcom4, 1,
+            "Fully cohesive class should have LCOM4=1, got {}",
+            counter.lcom4
+        );
     }
 
     #[test]
@@ -3039,8 +3286,16 @@ class Mixed {
         let results = analyze_file_cohesion(&file_path, &options).unwrap();
         assert!(!results.is_empty(), "Expected at least 1 class in results");
         let mixed = results.iter().find(|c| c.name == "Mixed").unwrap();
-        assert_eq!(mixed.method_count, 4, "Expected 4 methods, got {}", mixed.method_count);
-        assert_eq!(mixed.lcom4, 2, "Expected LCOM4=2 (two components), got {}", mixed.lcom4);
+        assert_eq!(
+            mixed.method_count, 4,
+            "Expected 4 methods, got {}",
+            mixed.method_count
+        );
+        assert_eq!(
+            mixed.lcom4, 2,
+            "Expected LCOM4=2 (two components), got {}",
+            mixed.lcom4
+        );
     }
 
     // =========================================================================
@@ -3064,12 +3319,22 @@ class UserService {
 "#;
         let tree = parse(source, Language::Php).unwrap();
         let classes = extract_classes(tree.root_node(), source, Language::Php);
-        assert_eq!(classes.len(), 1, "Expected 1 class, got {:?}", classes.iter().map(|c| &c.name).collect::<Vec<_>>());
+        assert_eq!(
+            classes.len(),
+            1,
+            "Expected 1 class, got {:?}",
+            classes.iter().map(|c| &c.name).collect::<Vec<_>>()
+        );
         assert_eq!(classes[0].name, "UserService");
         assert_eq!(
-            classes[0].methods.len(), 2,
+            classes[0].methods.len(),
+            2,
             "Expected 2 methods, got {:?}",
-            classes[0].methods.iter().map(|m| &m.name).collect::<Vec<_>>()
+            classes[0]
+                .methods
+                .iter()
+                .map(|m| &m.name)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -3086,10 +3351,19 @@ class Second {
 "#;
         let tree = parse(source, Language::Php).unwrap();
         let classes = extract_classes(tree.root_node(), source, Language::Php);
-        assert_eq!(classes.len(), 2, "Expected 2 classes, got {:?}", classes.iter().map(|c| &c.name).collect::<Vec<_>>());
+        assert_eq!(
+            classes.len(),
+            2,
+            "Expected 2 classes, got {:?}",
+            classes.iter().map(|c| &c.name).collect::<Vec<_>>()
+        );
         let names: Vec<&str> = classes.iter().map(|c| c.name.as_str()).collect();
         assert!(names.contains(&"First"), "Expected 'First' in {:?}", names);
-        assert!(names.contains(&"Second"), "Expected 'Second' in {:?}", names);
+        assert!(
+            names.contains(&"Second"),
+            "Expected 'Second' in {:?}",
+            names
+        );
     }
 
     #[test]
@@ -3119,8 +3393,16 @@ class Counter {
         let results = analyze_file_cohesion(&file_path, &options).unwrap();
         assert!(!results.is_empty(), "Expected at least 1 class in results");
         let counter = results.iter().find(|c| c.name == "Counter").unwrap();
-        assert_eq!(counter.method_count, 3, "Expected 3 methods, got {}", counter.method_count);
-        assert_eq!(counter.lcom4, 1, "Fully cohesive class should have LCOM4=1, got {}", counter.lcom4);
+        assert_eq!(
+            counter.method_count, 3,
+            "Expected 3 methods, got {}",
+            counter.method_count
+        );
+        assert_eq!(
+            counter.lcom4, 1,
+            "Fully cohesive class should have LCOM4=1, got {}",
+            counter.lcom4
+        );
     }
 
     #[test]
@@ -3155,8 +3437,16 @@ class Mixed {
         let results = analyze_file_cohesion(&file_path, &options).unwrap();
         assert!(!results.is_empty(), "Expected at least 1 class in results");
         let mixed = results.iter().find(|c| c.name == "Mixed").unwrap();
-        assert_eq!(mixed.method_count, 4, "Expected 4 methods, got {}", mixed.method_count);
-        assert_eq!(mixed.lcom4, 2, "Expected LCOM4=2 (two components), got {}", mixed.lcom4);
+        assert_eq!(
+            mixed.method_count, 4,
+            "Expected 4 methods, got {}",
+            mixed.method_count
+        );
+        assert_eq!(
+            mixed.lcom4, 2,
+            "Expected LCOM4=2 (two components), got {}",
+            mixed.lcom4
+        );
     }
 
     #[test]
@@ -3167,7 +3457,11 @@ class Mixed {
         assert!(fields.contains("name"), "Expected 'name' in {:?}", fields);
         assert!(fields.contains("age"), "Expected 'age' in {:?}", fields);
         // @@class_var should NOT produce a match for "class_var" as an instance var
-        assert!(!fields.contains("class_var"), "@@class_var should not be matched as instance var, got {:?}", fields);
+        assert!(
+            !fields.contains("class_var"),
+            "@@class_var should not be matched as instance var, got {:?}",
+            fields
+        );
     }
 
     #[test]
@@ -3176,6 +3470,10 @@ class Mixed {
         let source = "puts @value + @@counter";
         let fields = extract_ruby_instance_var_accesses(source);
         assert!(fields.contains("value"), "Expected 'value' in {:?}", fields);
-        assert!(!fields.contains("counter"), "@@counter should not match as instance var, got {:?}", fields);
+        assert!(
+            !fields.contains("counter"),
+            "@@counter should not match as instance var, got {:?}",
+            fields
+        );
     }
 }

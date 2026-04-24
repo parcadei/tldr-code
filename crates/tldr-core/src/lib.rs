@@ -39,6 +39,7 @@ pub mod error;
 pub mod git;
 pub mod types;
 pub mod validation;
+pub mod walker;
 
 // Phase 10: Robustness (A32, A33, A34)
 pub mod encoding;
@@ -145,7 +146,8 @@ pub mod patterns;
 
 // Re-export Quality module functions
 pub use quality::{
-    analyze_smells_aggregated, detect_smells, SmellFinding, SmellType, SmellsReport,
+    analyze_smells_aggregated, analyze_smells_aggregated_with_walker_opts, detect_smells,
+    detect_smells_with_walker_opts, SmellFinding, SmellType, SmellsReport, SmellsWalkerOpts,
     ThresholdPreset,
 };
 pub use quality::{

@@ -20,8 +20,8 @@ use crate::ast::parser::parse;
 use crate::types::{ClassInfo, Language};
 use crate::TldrResult;
 
-use super::resolve::public_entry_files_for_resolved_package;
 use super::language_profile::{is_noise_dir, is_noise_file, strip_layout_segments};
+use super::resolve::public_entry_files_for_resolved_package;
 use super::sort_apis_by_static_preference;
 use super::triggers::extract_triggers;
 use super::types::{ApiEntry, ApiKind, ApiSurface, Location, Param, ResolvedPackage, Signature};
@@ -57,12 +57,20 @@ pub fn extract_javascript_api_surface(
         apis.extend(file_apis);
     }
 
-    let mut local_alias_apis =
-        synthesize_js_local_export_aliases(&apis, &js_files, &resolved.root_dir, &resolved.package_name);
+    let mut local_alias_apis = synthesize_js_local_export_aliases(
+        &apis,
+        &js_files,
+        &resolved.root_dir,
+        &resolved.package_name,
+    );
     apis.append(&mut local_alias_apis);
 
-    let mut alias_apis =
-        synthesize_js_reexport_aliases(&apis, &js_files, &resolved.root_dir, &resolved.package_name);
+    let mut alias_apis = synthesize_js_reexport_aliases(
+        &apis,
+        &js_files,
+        &resolved.root_dir,
+        &resolved.package_name,
+    );
     apis.append(&mut alias_apis);
 
     if !resolved.is_pure_source {
@@ -110,13 +118,7 @@ fn extract_from_javascript_file(
 
     let parse_language = javascript_parse_language(file_path);
     let tree = parse(&source, parse_language)?;
-    let module_info = extract_from_tree(
-        &tree,
-        &source,
-        parse_language,
-        file_path,
-        Some(root_dir),
-    )?;
+    let module_info = extract_from_tree(&tree, &source, parse_language, file_path, Some(root_dir))?;
 
     let module_path = compute_js_module_path(file_path, root_dir, package_name);
     let relative_path = file_path
@@ -332,7 +334,8 @@ fn synthesize_js_local_export_aliases(
     package_name: &str,
 ) -> Vec<ApiEntry> {
     let mut aliases = Vec::new();
-    let mut seen_names: HashSet<String> = apis.iter().map(|api| api.qualified_name.clone()).collect();
+    let mut seen_names: HashSet<String> =
+        apis.iter().map(|api| api.qualified_name.clone()).collect();
 
     for file_path in js_files {
         let Ok(source) = std::fs::read_to_string(file_path) else {
@@ -375,7 +378,10 @@ fn synthesize_js_local_export_aliases(
                     .map_or((specifier, specifier), |(left, right)| {
                         (left.trim(), right.trim())
                     });
-                let Some(binding) = import_bindings.iter().find(|binding| binding.local_name == local_name) else {
+                let Some(binding) = import_bindings
+                    .iter()
+                    .find(|binding| binding.local_name == local_name)
+                else {
                     continue;
                 };
 
@@ -418,7 +424,8 @@ fn synthesize_js_reexport_aliases(
     package_name: &str,
 ) -> Vec<ApiEntry> {
     let mut aliases = Vec::new();
-    let mut seen_names: HashSet<String> = apis.iter().map(|api| api.qualified_name.clone()).collect();
+    let mut seen_names: HashSet<String> =
+        apis.iter().map(|api| api.qualified_name.clone()).collect();
 
     for file_path in js_files {
         if compute_js_module_path(file_path, root_dir, package_name) != package_name {
@@ -471,12 +478,9 @@ fn synthesize_js_reexport_aliases(
             }
         }
 
-        for from_module in parse_js_commonjs_entrypoint_forwarders(
-            &source,
-            file_path,
-            root_dir,
-            package_name,
-        ) {
+        for from_module in
+            parse_js_commonjs_entrypoint_forwarders(&source, file_path, root_dir, package_name)
+        {
             append_js_module_forward_aliases(
                 &mut aliases,
                 &mut seen_names,
@@ -511,10 +515,7 @@ fn parse_js_reexports(
                 root_dir,
                 package_name,
             ) {
-                reexports.push(JsReexport::All {
-                    from_module,
-                    line,
-                });
+                reexports.push(JsReexport::All { from_module, line });
             }
             continue;
         }
@@ -584,7 +585,9 @@ fn collect_js_export_statements(source: &str) -> Vec<(String, usize)> {
         index += 1;
 
         while index < lines.len()
-            && !(statement.contains(" from ") || statement.contains(" from'") || statement.contains(" from\""))
+            && !(statement.contains(" from ")
+                || statement.contains(" from'")
+                || statement.contains(" from\""))
         {
             let next = strip_js_line_comment(lines[index]).trim();
             if !next.is_empty() {
@@ -667,12 +670,17 @@ fn parse_js_import_bindings(
             continue;
         };
         let specifier = rest.trim().trim_matches('"').trim_matches('\'');
-        let Some(from_module) = resolve_js_reexport_module(file_path, root_dir, package_name, specifier) else {
+        let Some(from_module) =
+            resolve_js_reexport_module(file_path, root_dir, package_name, specifier)
+        else {
             continue;
         };
 
         let imports = imports.trim();
-        if let Some(named) = imports.strip_prefix('{').and_then(|body| body.strip_suffix('}')) {
+        if let Some(named) = imports
+            .strip_prefix('{')
+            .and_then(|body| body.strip_suffix('}'))
+        {
             for item in named.split(',') {
                 let item = item.trim();
                 if item.is_empty() {
@@ -743,7 +751,10 @@ fn parse_js_commonjs_entrypoint_forwarders(
     let mut modules = Vec::new();
 
     for line in source.lines() {
-        let trimmed = strip_js_line_comment(line).trim().trim_end_matches(';').trim();
+        let trimmed = strip_js_line_comment(line)
+            .trim()
+            .trim_end_matches(';')
+            .trim();
         let rhs = trimmed
             .strip_prefix("module.exports = ")
             .or_else(|| trimmed.strip_prefix("exports = module.exports = "));
@@ -783,16 +794,17 @@ fn resolve_js_reexport_module(
 }
 
 fn normalize_js_reexport_path(path: &Path) -> PathBuf {
-    path.components().fold(PathBuf::new(), |mut normalized, component| {
-        match component {
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                normalized.pop();
+    path.components()
+        .fold(PathBuf::new(), |mut normalized, component| {
+            match component {
+                std::path::Component::CurDir => {}
+                std::path::Component::ParentDir => {
+                    normalized.pop();
+                }
+                _ => normalized.push(component.as_os_str()),
             }
-            _ => normalized.push(component.as_os_str()),
-        }
-        normalized
-    })
+            normalized
+        })
 }
 
 fn resolve_existing_js_reexport_path(base_dir: &Path, specifier: &str) -> Option<PathBuf> {
@@ -900,7 +912,8 @@ fn append_js_module_forward_aliases(
         let mut alias = api.clone();
         alias.qualified_name = aliased_name;
         alias.module = package_name.to_string();
-        alias.example = rewrite_js_alias_example(alias.example.as_deref(), from_module, package_name);
+        alias.example =
+            rewrite_js_alias_example(alias.example.as_deref(), from_module, package_name);
         alias.location = Some(Location {
             file: entrypoint_relative_path.to_path_buf(),
             line: 1,
@@ -919,7 +932,10 @@ fn synthesize_commonjs_exports(
     let mut seen: HashSet<String> = apis.iter().map(|api| api.qualified_name.clone()).collect();
 
     for (index, line) in source.lines().enumerate() {
-        let trimmed = strip_js_line_comment(line).trim().trim_end_matches(';').trim();
+        let trimmed = strip_js_line_comment(line)
+            .trim()
+            .trim_end_matches(';')
+            .trim();
         let line_number = index + 1;
 
         if let Some(rhs) = trimmed
@@ -1023,7 +1039,11 @@ fn parse_local_require_target(rhs: &str) -> Option<String> {
     specifier.starts_with('.').then(|| specifier.to_string())
 }
 
-fn find_top_level_js_api<'a>(apis: &'a [ApiEntry], module_path: &str, name: &str) -> Option<&'a ApiEntry> {
+fn find_top_level_js_api<'a>(
+    apis: &'a [ApiEntry],
+    module_path: &str,
+    name: &str,
+) -> Option<&'a ApiEntry> {
     let qualified_name = format!("{module_path}.{name}");
     apis.iter().find(|api| api.qualified_name == qualified_name)
 }
@@ -1038,24 +1058,22 @@ fn clone_js_api_alias(
     let mut alias = api.clone();
     alias.qualified_name = qualified_name.clone();
     alias.module = module.clone();
-    alias.example = rewrite_js_alias_example(alias.example.as_deref(), &api.module, &qualified_name);
+    alias.example =
+        rewrite_js_alias_example(alias.example.as_deref(), &api.module, &qualified_name);
     alias.location = Some(Location {
         file: relative_path.to_path_buf(),
         line: line_number,
         column: None,
     });
     if qualified_name == module && alias.kind == ApiKind::Function {
-        alias.example = alias
-            .signature
-            .as_ref()
-            .map(|signature| {
-                let args: Vec<String> = signature
-                    .params
-                    .iter()
-                    .map(|param| js_example_for_type(param.type_annotation.as_deref()))
-                    .collect();
-                format!("const result = {}({});", module, args.join(", "))
-            });
+        alias.example = alias.signature.as_ref().map(|signature| {
+            let args: Vec<String> = signature
+                .params
+                .iter()
+                .map(|param| js_example_for_type(param.type_annotation.as_deref()))
+                .collect();
+            format!("const result = {}({});", module, args.join(", "))
+        });
     }
     alias
 }
@@ -1975,7 +1993,11 @@ export const VERSION = "1.0.0";
         ));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(tmp.join("foo.js"), "export function greet(name) { return name; }\n").unwrap();
+        std::fs::write(
+            tmp.join("foo.js"),
+            "export function greet(name) { return name; }\n",
+        )
+        .unwrap();
         std::fs::write(tmp.join("index.js"), "export { greet } from './foo.js';\n").unwrap();
 
         let resolved = ResolvedPackage {
@@ -1986,7 +2008,11 @@ export const VERSION = "1.0.0";
         };
 
         let surface = extract_javascript_api_surface(&resolved, false, None).unwrap();
-        let names: Vec<&str> = surface.apis.iter().map(|api| api.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|api| api.qualified_name.as_str())
+            .collect();
 
         assert!(
             names.contains(&"pkg.greet"),
@@ -2032,12 +2058,26 @@ export const VERSION = "1.0.0";
         };
 
         let surface = extract_javascript_api_surface(&resolved, false, None).unwrap();
-        let names: Vec<&str> = surface.apis.iter().map(|api| api.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|api| api.qualified_name.as_str())
+            .collect();
 
-        assert!(names.contains(&"pkg.createThing"), "missing root alias: {:?}", names);
-        assert!(names.contains(&"pkg.useThing"), "missing root alias: {:?}", names);
         assert!(
-            !names.iter().any(|name| name == &"pkg.src.client.createThing"),
+            names.contains(&"pkg.createThing"),
+            "missing root alias: {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"pkg.useThing"),
+            "missing root alias: {:?}",
+            names
+        );
+        assert!(
+            !names
+                .iter()
+                .any(|name| name == &"pkg.src.client.createThing"),
             "deep module alias should be pruned: {:?}",
             names
         );
@@ -2075,7 +2115,11 @@ export const VERSION = "1.0.0";
         };
 
         let surface = extract_javascript_api_surface(&resolved, false, None).unwrap();
-        let names: Vec<&str> = surface.apis.iter().map(|api| api.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|api| api.qualified_name.as_str())
+            .collect();
 
         assert!(
             names.contains(&"react.createElement"),
@@ -2112,7 +2156,11 @@ export const VERSION = "1.0.0";
         ));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(tmp.join("lib")).unwrap();
-        std::fs::write(tmp.join("index.js"), "module.exports = require('./lib/express');\n").unwrap();
+        std::fs::write(
+            tmp.join("index.js"),
+            "module.exports = require('./lib/express');\n",
+        )
+        .unwrap();
         std::fs::write(
             tmp.join("lib").join("express.js"),
             "function createApplication() {\n  return {};\n}\nexports = module.exports = createApplication;\nexports.Router = Router;\nexports.json = bodyParser.json;\n",
@@ -2127,11 +2175,27 @@ export const VERSION = "1.0.0";
         };
 
         let surface = extract_javascript_api_surface(&resolved, false, None).unwrap();
-        let names: Vec<&str> = surface.apis.iter().map(|api| api.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|api| api.qualified_name.as_str())
+            .collect();
 
-        assert!(names.contains(&"express"), "missing callable root export: {:?}", names);
-        assert!(names.contains(&"express.Router"), "missing forwarded Router export: {:?}", names);
-        assert!(names.contains(&"express.json"), "missing forwarded json export: {:?}", names);
+        assert!(
+            names.contains(&"express"),
+            "missing callable root export: {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"express.Router"),
+            "missing forwarded Router export: {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"express.json"),
+            "missing forwarded json export: {:?}",
+            names
+        );
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
@@ -2158,7 +2222,11 @@ export const VERSION = "1.0.0";
             }"#,
         )
         .unwrap();
-        std::fs::write(tmp.join("index.js"), "export function rootApi() { return 1; }\n").unwrap();
+        std::fs::write(
+            tmp.join("index.js"),
+            "export function rootApi() { return 1; }\n",
+        )
+        .unwrap();
         std::fs::write(
             tmp.join("runtime.js"),
             "export function runtimeApi() { return 2; }\n",
@@ -2178,9 +2246,17 @@ export const VERSION = "1.0.0";
         };
 
         let surface = extract_javascript_api_surface(&resolved, false, None).unwrap();
-        let names: Vec<&str> = surface.apis.iter().map(|api| api.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|api| api.qualified_name.as_str())
+            .collect();
 
-        assert!(names.contains(&"pkg.rootApi"), "missing root export: {:?}", names);
+        assert!(
+            names.contains(&"pkg.rootApi"),
+            "missing root export: {:?}",
+            names
+        );
         assert!(
             names.iter().any(|name| name.contains("runtimeApi")),
             "missing exported subpath API: {:?}",
@@ -2229,7 +2305,11 @@ export const VERSION = "1.0.0";
         };
 
         let surface = extract_javascript_api_surface(&resolved, false, None).unwrap();
-        let names: Vec<&str> = surface.apis.iter().map(|api| api.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|api| api.qualified_name.as_str())
+            .collect();
 
         assert!(
             names.contains(&"mitt-like.emit"),
@@ -2272,7 +2352,11 @@ export function createElement(type, props) {
         };
 
         let surface = extract_javascript_api_surface(&resolved, false, None).unwrap();
-        let names: Vec<&str> = surface.apis.iter().map(|api| api.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|api| api.qualified_name.as_str())
+            .collect();
 
         assert!(names.contains(&"react-like.createElement"));
         assert!(!names.contains(&"react-like.ElementType"));
@@ -2319,7 +2403,11 @@ export {useState};
         };
 
         let surface = extract_javascript_api_surface(&resolved, false, None).unwrap();
-        let names: Vec<&str> = surface.apis.iter().map(|api| api.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|api| api.qualified_name.as_str())
+            .collect();
 
         assert!(
             names.contains(&"react-like.useState"),

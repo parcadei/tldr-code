@@ -694,10 +694,7 @@ impl CallGraphLanguageSupport for ScalaHandler {
                     );
 
                     if !calls.is_empty() {
-                        calls_by_func
-                            .entry(caller)
-                            .or_default()
-                            .extend(calls);
+                        calls_by_func.entry(caller).or_default().extend(calls);
                     }
                 }
                 _ => {

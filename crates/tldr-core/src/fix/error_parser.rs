@@ -120,9 +120,9 @@ fn strip_pytest_decoration(raw: &str) -> String {
 /// Handles the format:
 /// `FAILED test_app.py::test_foo - NameError: name 'x' is not defined`
 fn parse_pytest_summary_line(raw: &str) -> Option<ParsedError> {
-    let summary_re = Regex::new(
-        r"FAILED\s+([^:]+)::(\w+)\s+-\s+([A-Z]\w*(?:Error|Exception|Warning)):\s*(.*)"
-    ).ok()?;
+    let summary_re =
+        Regex::new(r"FAILED\s+([^:]+)::(\w+)\s+-\s+([A-Z]\w*(?:Error|Exception|Warning)):\s*(.*)")
+            .ok()?;
 
     for line in raw.lines() {
         let trimmed = line.trim();
@@ -193,8 +193,7 @@ fn parse_python_traceback(raw: &str) -> Option<ParsedError> {
     let lines: Vec<&str> = raw.lines().collect();
 
     // Extract file, line, function from the LAST `File "...", line N, in func` entry
-    let file_line_re =
-        Regex::new(r#"^\s*File "([^"]+)", line (\d+)(?:, in (\w+))?"#).ok()?;
+    let file_line_re = Regex::new(r#"^\s*File "([^"]+)", line (\d+)(?:, in (\w+))?"#).ok()?;
 
     let mut file: Option<PathBuf> = None;
     let mut line_num: Option<usize> = None;
@@ -430,13 +429,11 @@ pub fn detect_language(error_text: &str) -> &'static str {
         // the field_not_found path below
         return "go";
     }
-    if error_text.contains("declared but not used")
-        || error_text.contains("declared and not used")
+    if error_text.contains("declared but not used") || error_text.contains("declared and not used")
     {
         return "go";
     }
-    if error_text.contains("imported and not used")
-        || error_text.contains("imported but not used")
+    if error_text.contains("imported and not used") || error_text.contains("imported but not used")
     {
         return "go";
     }
@@ -494,9 +491,10 @@ pub fn parse_js_error(raw: &str) -> Option<ParsedError> {
     let lines: Vec<&str> = raw.lines().collect();
 
     // Strategy 1: Look for the error type line (ReferenceError, TypeError, SyntaxError)
-    let error_line_re =
-        Regex::new(r"^(ReferenceError|TypeError|SyntaxError|RangeError|URIError|EvalError):\s*(.+)$")
-            .ok()?;
+    let error_line_re = Regex::new(
+        r"^(ReferenceError|TypeError|SyntaxError|RangeError|URIError|EvalError):\s*(.+)$",
+    )
+    .ok()?;
 
     let mut error_type = String::new();
     let mut message = String::new();
@@ -553,7 +551,8 @@ pub fn parse_js_error(raw: &str) -> Option<ParsedError> {
     if let Some(header_idx) = lines.iter().position(|l| header_re.is_match(l.trim())) {
         if header_idx + 1 < lines.len() {
             let candidate = lines[header_idx + 1].trim();
-            if !candidate.is_empty() && !candidate.starts_with('^') && !candidate.starts_with("at ") {
+            if !candidate.is_empty() && !candidate.starts_with('^') && !candidate.starts_with("at ")
+            {
                 offending_line = Some(candidate.to_string());
             }
         }
@@ -633,7 +632,9 @@ fn parse_rustc_json(json_str: &str) -> Option<ParsedError> {
             if c.is_string() {
                 c.as_str().map(|s| s.to_string())
             } else {
-                c.get("code").and_then(|cc| cc.as_str()).map(|s| s.to_string())
+                c.get("code")
+                    .and_then(|cc| cc.as_str())
+                    .map(|s| s.to_string())
             }
         })
         .unwrap_or_default();
@@ -711,12 +712,8 @@ fn parse_rustc_rendered(raw: &str) -> Option<ParsedError> {
     let (file, line, column) = if let Some(loc_caps) = loc_re.captures(raw) {
         (
             Some(PathBuf::from(loc_caps.get(1).unwrap().as_str())),
-            loc_caps
-                .get(2)
-                .and_then(|m| m.as_str().parse().ok()),
-            loc_caps
-                .get(3)
-                .and_then(|m| m.as_str().parse().ok()),
+            loc_caps.get(2).and_then(|m| m.as_str().parse().ok()),
+            loc_caps.get(3).and_then(|m| m.as_str().parse().ok()),
         )
     } else {
         (None, None, None)
@@ -747,9 +744,7 @@ fn parse_rustc_rendered(raw: &str) -> Option<ParsedError> {
 /// Also handles multi-line tsc output by extracting the first error line.
 pub fn parse_tsc_error(raw: &str) -> Option<ParsedError> {
     // Try each line for a tsc error pattern
-    let tsc_re = Regex::new(
-        r"([^\s(]+\.tsx?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.*)"
-    ).ok()?;
+    let tsc_re = Regex::new(r"([^\s(]+\.tsx?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.*)").ok()?;
 
     for line in raw.lines() {
         let trimmed = line.trim();
@@ -889,14 +884,12 @@ fn classify_go_error(message: &str) -> String {
         "type_mismatch".to_string()
     } else if message.contains("has no field or method") {
         "field_not_found".to_string()
-    } else if message.contains("imported and not used")
-        || message.contains("imported but not used")
+    } else if message.contains("imported and not used") || message.contains("imported but not used")
     {
         // Both "imported and not used" and "imported but not used"
         // are valid Go compiler phrasings for unused imports.
         "unused_import".to_string()
-    } else if message.contains("declared but not used")
-        || message.contains("declared and not used")
+    } else if message.contains("declared but not used") || message.contains("declared and not used")
     {
         // Both "x declared but not used" and "declared and not used: x"
         // are valid Go compiler phrasings for the same diagnostic.
@@ -931,10 +924,7 @@ static INFERENCE_TABLE: &[(&str, &str)] = &[
     ("unhashable type", "TypeError"),
     ("argument of type", "TypeError"),
     // Tier 0 (compile-time) -- must come after "has no attribute"
-    (
-        "inconsistent use of tabs and spaces",
-        "IndentationError",
-    ),
+    ("inconsistent use of tabs and spaces", "IndentationError"),
     ("expected an indented block", "IndentationError"),
     ("unexpected indent", "IndentationError"),
     ("unindent does not match", "IndentationError"),
@@ -957,10 +947,7 @@ static INFERENCE_TABLE: &[(&str, &str)] = &[
     ("codec can't decode", "UnicodeError"),
     ("codec can't encode", "UnicodeError"),
     ("float division by zero", "ZeroDivisionError"),
-    (
-        "integer division or modulo by zero",
-        "ZeroDivisionError",
-    ),
+    ("integer division or modulo by zero", "ZeroDivisionError"),
     ("division by zero", "ZeroDivisionError"),
     // Tier 6 (runtime / control flow)
     ("maximum recursion depth exceeded", "RecursionError"),
@@ -1067,14 +1054,8 @@ mod tests {
             extract_error_type("TypeError: 'dict' object is not callable"),
             "TypeError"
         );
-        assert_eq!(
-            extract_error_type("KeyError: 'name'"),
-            "KeyError"
-        );
-        assert_eq!(
-            extract_error_type("StopIteration: "),
-            "StopIteration"
-        );
+        assert_eq!(extract_error_type("KeyError: 'name'"), "KeyError");
+        assert_eq!(extract_error_type("StopIteration: "), "StopIteration");
     }
 
     #[test]
@@ -1083,22 +1064,13 @@ mod tests {
             extract_error_type("referenced before assignment"),
             "UnboundLocalError"
         );
-        assert_eq!(
-            extract_error_type("name 'os' is not defined"),
-            "NameError"
-        );
-        assert_eq!(
-            extract_error_type("division by zero"),
-            "ZeroDivisionError"
-        );
+        assert_eq!(extract_error_type("name 'os' is not defined"), "NameError");
+        assert_eq!(extract_error_type("division by zero"), "ZeroDivisionError");
         assert_eq!(
             extract_error_type("maximum recursion depth exceeded"),
             "RecursionError"
         );
-        assert_eq!(
-            extract_error_type("list index out of range"),
-            "IndexError"
-        );
+        assert_eq!(extract_error_type("list index out of range"), "IndexError");
     }
 
     #[test]
@@ -1161,10 +1133,7 @@ UnboundLocalError: cannot access local variable 'counter'";
             detect_language("Traceback (most recent call last):"),
             "python"
         );
-        assert_eq!(
-            detect_language("UnboundLocalError: something"),
-            "python"
-        );
+        assert_eq!(detect_language("UnboundLocalError: something"), "python");
     }
 
     #[test]
@@ -1254,7 +1223,8 @@ KeyError: 'name'";
 
     #[test]
     fn test_parse_error_auto_detect_rust() {
-        let json = r#"{"code":"E0425","message":"cannot find type `HashMap`","level":"error","spans":[]}"#;
+        let json =
+            r#"{"code":"E0425","message":"cannot find type `HashMap`","level":"error","spans":[]}"#;
         let parsed = parse_error(json, None);
         assert!(parsed.is_some());
         let p = parsed.unwrap();
@@ -1297,7 +1267,8 @@ KeyError: 'name'";
 
     #[test]
     fn test_parse_tsc_error_tsx_file() {
-        let err = "components/App.tsx(42,10): error TS2339: Property 'foo' does not exist on type 'Bar'.";
+        let err =
+            "components/App.tsx(42,10): error TS2339: Property 'foo' does not exist on type 'Bar'.";
         let parsed = parse_tsc_error(err);
         assert!(parsed.is_some(), "Should parse tsc error for .tsx files");
         let p = parsed.unwrap();
@@ -1312,7 +1283,10 @@ KeyError: 'name'";
     fn test_parse_tsc_error_multiline() {
         let err = "some warning output\napp.ts(10,5): error TS2322: Type 'string' is not assignable to type 'number'.\nmore output";
         let parsed = parse_tsc_error(err);
-        assert!(parsed.is_some(), "Should parse tsc error from multiline output");
+        assert!(
+            parsed.is_some(),
+            "Should parse tsc error from multiline output"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "TS2322");
         assert_eq!(p.line, Some(10));
@@ -1423,10 +1397,7 @@ KeyError: 'name'";
 
     #[test]
     fn test_detect_language_go() {
-        assert_eq!(
-            detect_language("./main.go:4:7: undefined: fmt"),
-            "go"
-        );
+        assert_eq!(detect_language("./main.go:4:7: undefined: fmt"), "go");
         assert_eq!(
             detect_language("./pkg/handler.go:10:5: x declared but not used"),
             "go"
@@ -1475,23 +1446,14 @@ KeyError: 'name'";
             classify_go_error("\"os\" imported and not used"),
             "unused_import"
         );
-        assert_eq!(
-            classify_go_error("x declared but not used"),
-            "unused_var"
-        );
+        assert_eq!(classify_go_error("x declared but not used"), "unused_var");
         // Alternate phrasing: "declared and not used: x"
-        assert_eq!(
-            classify_go_error("declared and not used: x"),
-            "unused_var"
-        );
+        assert_eq!(classify_go_error("declared and not used: x"), "unused_var");
         assert_eq!(
             classify_go_error("missing return at end of function"),
             "missing_return"
         );
-        assert_eq!(
-            classify_go_error("some other error"),
-            "go_error"
-        );
+        assert_eq!(classify_go_error("some other error"), "go_error");
     }
 
     #[test]
@@ -1499,7 +1461,10 @@ KeyError: 'name'";
         // Alternate Go compiler phrasing: "declared and not used: x"
         let err = "./main.go:4:2: declared and not used: x";
         let parsed = parse_go_error(err);
-        assert!(parsed.is_some(), "Should parse Go unused var (alternate format)");
+        assert!(
+            parsed.is_some(),
+            "Should parse Go unused var (alternate format)"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "unused_var");
         assert_eq!(p.file, Some(PathBuf::from("./main.go")));
@@ -1522,7 +1487,10 @@ KeyError: 'name'";
         // End-to-end: auto-detect + parse for alternate unused-var phrasing
         let err = "./cmd/main.go:8:5: declared and not used: cfg";
         let parsed = parse_error(err, None);
-        assert!(parsed.is_some(), "Should auto-detect and parse alternate Go unused var");
+        assert!(
+            parsed.is_some(),
+            "Should auto-detect and parse alternate Go unused var"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.language, "go");
         assert_eq!(p.error_type, "unused_var");
@@ -1615,7 +1583,8 @@ KeyError: 'name'";
 
     #[test]
     fn test_parse_error_explicit_lang_javascript() {
-        let err = "ReferenceError: path is not defined\n    at Object.<anonymous> (/app/app.js:1:14)";
+        let err =
+            "ReferenceError: path is not defined\n    at Object.<anonymous> (/app/app.js:1:14)";
         let parsed = parse_error(err, Some("javascript"));
         assert!(parsed.is_some());
         let p = parsed.unwrap();
@@ -1649,7 +1618,10 @@ KeyError: 'name'";
         );
         // parse_error with auto-detection must produce a JS ParsedError
         let parsed = parse_error(err, None);
-        assert!(parsed.is_some(), "Should parse Node.js error with auto-detection");
+        assert!(
+            parsed.is_some(),
+            "Should parse Node.js error with auto-detection"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.language, "javascript");
         assert_eq!(p.error_type, "ReferenceError");
@@ -1701,7 +1673,10 @@ KeyError: 'name'";
     fn test_bug2_rust_rendered_parse_error_auto() {
         let err = "error[E0425]: cannot find value `HashMap` in this scope\n  --> src/main.rs:2:12";
         let parsed = parse_error(err, None);
-        assert!(parsed.is_some(), "Should auto-detect and parse rendered Rust error");
+        assert!(
+            parsed.is_some(),
+            "Should auto-detect and parse rendered Rust error"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.language, "rust");
         assert_eq!(p.error_type, "E0425");
@@ -1716,7 +1691,10 @@ KeyError: 'name'";
     fn test_bug2_rust_rendered_parse_error_explicit_lang() {
         let err = "error[E0425]: cannot find value `HashMap` in this scope\n  --> src/main.rs:2:12";
         let parsed = parse_error(err, Some("rust"));
-        assert!(parsed.is_some(), "Should parse rendered Rust error with explicit lang");
+        assert!(
+            parsed.is_some(),
+            "Should parse rendered Rust error with explicit lang"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.language, "rust");
         assert_eq!(p.error_type, "E0425");
@@ -1744,7 +1722,10 @@ KeyError: 'name'";
     fn test_bug3_go_unused_import_quoted_package() {
         let err = "./main.go:5:2: \"fmt\" imported and not used";
         let parsed = parse_go_error(err);
-        assert!(parsed.is_some(), "Should parse Go unused import with quoted package name");
+        assert!(
+            parsed.is_some(),
+            "Should parse Go unused import with quoted package name"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "unused_import");
         assert_eq!(p.file, Some(PathBuf::from("./main.go")));
@@ -1760,7 +1741,10 @@ KeyError: 'name'";
         let err = "./main.go:5:2: \"fmt\" imported and not used";
         assert_eq!(detect_language(err), "go");
         let parsed = parse_error(err, None);
-        assert!(parsed.is_some(), "Should auto-detect Go unused import with quotes");
+        assert!(
+            parsed.is_some(),
+            "Should auto-detect Go unused import with quotes"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.language, "go");
         assert_eq!(p.error_type, "unused_import");
@@ -1788,7 +1772,10 @@ KeyError: 'name'";
     fn test_parse_tsc_error_simplified_ts2304() {
         let err = "error TS2304: Cannot find name 'express'.";
         let parsed = parse_tsc_error(err);
-        assert!(parsed.is_some(), "Should parse simplified tsc error without file prefix");
+        assert!(
+            parsed.is_some(),
+            "Should parse simplified tsc error without file prefix"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "TS2304");
         assert_eq!(p.message, "Cannot find name 'express'");
@@ -1802,7 +1789,10 @@ KeyError: 'name'";
     fn test_parse_tsc_error_simplified_ts2339() {
         let err = "error TS2339: Property 'foo' does not exist on type 'Bar'.";
         let parsed = parse_tsc_error(err);
-        assert!(parsed.is_some(), "Should parse simplified tsc property error");
+        assert!(
+            parsed.is_some(),
+            "Should parse simplified tsc property error"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "TS2339");
         assert!(p.message.contains("foo"));
@@ -1825,7 +1815,10 @@ KeyError: 'name'";
     fn test_parse_tsc_error_simplified_no_trailing_dot() {
         let err = "error TS7006: Parameter 'x' implicitly has an 'any' type";
         let parsed = parse_tsc_error(err);
-        assert!(parsed.is_some(), "Should parse simplified tsc error without trailing dot");
+        assert!(
+            parsed.is_some(),
+            "Should parse simplified tsc error without trailing dot"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "TS7006");
         assert!(p.message.contains("implicitly"));
@@ -1834,9 +1827,13 @@ KeyError: 'name'";
     #[test]
     fn test_parse_tsc_error_simplified_multiline_input() {
         // A multi-line input where one line is simplified TS error
-        let err = "Some preamble output\nerror TS2304: Cannot find name 'React'.\nSome trailing output";
+        let err =
+            "Some preamble output\nerror TS2304: Cannot find name 'React'.\nSome trailing output";
         let parsed = parse_tsc_error(err);
-        assert!(parsed.is_some(), "Should parse simplified tsc error from multiline input");
+        assert!(
+            parsed.is_some(),
+            "Should parse simplified tsc error from multiline input"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "TS2304");
         assert!(p.message.contains("React"));
@@ -1848,7 +1845,10 @@ KeyError: 'name'";
         // End-to-end: auto-detect + parse for simplified TS
         let err = "error TS2304: Cannot find name 'express'.";
         let parsed = parse_error(err, None);
-        assert!(parsed.is_some(), "Should auto-detect and parse simplified TS error");
+        assert!(
+            parsed.is_some(),
+            "Should auto-detect and parse simplified TS error"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.language, "typescript");
         assert_eq!(p.error_type, "TS2304");
@@ -1858,7 +1858,10 @@ KeyError: 'name'";
     fn test_parse_tsc_error_simplified_explicit_lang() {
         let err = "error TS2339: Property 'x' does not exist on type 'Y'.";
         let parsed = parse_error(err, Some("typescript"));
-        assert!(parsed.is_some(), "Should parse simplified TS error with explicit lang");
+        assert!(
+            parsed.is_some(),
+            "Should parse simplified TS error with explicit lang"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "TS2339");
         assert_eq!(p.language, "typescript");
@@ -1871,7 +1874,10 @@ KeyError: 'name'";
     fn test_parse_go_error_simplified_undefined() {
         let err = "undefined: fmt";
         let parsed = parse_go_error(err);
-        assert!(parsed.is_some(), "Should parse simplified Go undefined error");
+        assert!(
+            parsed.is_some(),
+            "Should parse simplified Go undefined error"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "undefined");
         assert_eq!(p.message, "undefined: fmt");
@@ -1885,7 +1891,10 @@ KeyError: 'name'";
     fn test_parse_go_error_simplified_unused_var() {
         let err = "x declared but not used";
         let parsed = parse_go_error(err);
-        assert!(parsed.is_some(), "Should parse simplified Go unused var error");
+        assert!(
+            parsed.is_some(),
+            "Should parse simplified Go unused var error"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "unused_var");
         assert_eq!(p.file, None);
@@ -1897,7 +1906,10 @@ KeyError: 'name'";
     fn test_parse_go_error_simplified_unused_var_alt() {
         let err = "declared and not used: cfg";
         let parsed = parse_go_error(err);
-        assert!(parsed.is_some(), "Should parse simplified Go unused var (alt format)");
+        assert!(
+            parsed.is_some(),
+            "Should parse simplified Go unused var (alt format)"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "unused_var");
         assert_eq!(p.file, None);
@@ -1919,7 +1931,10 @@ KeyError: 'name'";
     fn test_parse_go_error_simplified_unused_import_quoted() {
         let err = "\"fmt\" imported and not used";
         let parsed = parse_go_error(err);
-        assert!(parsed.is_some(), "Should parse simplified Go unused import (quoted)");
+        assert!(
+            parsed.is_some(),
+            "Should parse simplified Go unused import (quoted)"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "unused_import");
         assert_eq!(p.file, None);
@@ -1929,7 +1944,10 @@ KeyError: 'name'";
     fn test_parse_go_error_simplified_missing_return() {
         let err = "missing return at end of function";
         let parsed = parse_go_error(err);
-        assert!(parsed.is_some(), "Should parse simplified Go missing return");
+        assert!(
+            parsed.is_some(),
+            "Should parse simplified Go missing return"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "missing_return");
         assert_eq!(p.file, None);
@@ -1952,7 +1970,10 @@ KeyError: 'name'";
     fn test_parse_go_error_simplified_field_not_found() {
         let err = "strings.Contians undefined (type strings has no field or method Contians)";
         let parsed = parse_go_error(err);
-        assert!(parsed.is_some(), "Should parse simplified Go field not found");
+        assert!(
+            parsed.is_some(),
+            "Should parse simplified Go field not found"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "field_not_found");
         assert_eq!(p.file, None);
@@ -1963,7 +1984,10 @@ KeyError: 'name'";
         // End-to-end: auto-detect + parse for simplified Go
         let err = "undefined: fmt";
         let parsed = parse_error(err, None);
-        assert!(parsed.is_some(), "Should auto-detect and parse simplified Go error");
+        assert!(
+            parsed.is_some(),
+            "Should auto-detect and parse simplified Go error"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.language, "go");
         assert_eq!(p.error_type, "undefined");
@@ -1973,7 +1997,10 @@ KeyError: 'name'";
     fn test_parse_go_error_simplified_explicit_lang() {
         let err = "x declared but not used";
         let parsed = parse_error(err, Some("go"));
-        assert!(parsed.is_some(), "Should parse simplified Go error with explicit lang");
+        assert!(
+            parsed.is_some(),
+            "Should parse simplified Go error with explicit lang"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "unused_var");
         assert_eq!(p.language, "go");
@@ -2005,34 +2032,22 @@ KeyError: 'name'";
 
     #[test]
     fn test_detect_language_go_simplified_unused_var() {
-        assert_eq!(
-            detect_language("x declared but not used"),
-            "go"
-        );
+        assert_eq!(detect_language("x declared but not used"), "go");
     }
 
     #[test]
     fn test_detect_language_go_simplified_unused_var_alt() {
-        assert_eq!(
-            detect_language("declared and not used: x"),
-            "go"
-        );
+        assert_eq!(detect_language("declared and not used: x"), "go");
     }
 
     #[test]
     fn test_detect_language_go_simplified_unused_import() {
-        assert_eq!(
-            detect_language("imported and not used: \"os\""),
-            "go"
-        );
+        assert_eq!(detect_language("imported and not used: \"os\""), "go");
     }
 
     #[test]
     fn test_detect_language_go_simplified_missing_return() {
-        assert_eq!(
-            detect_language("missing return at end of function"),
-            "go"
-        );
+        assert_eq!(detect_language("missing return at end of function"), "go");
     }
 
     #[test]
@@ -2097,7 +2112,10 @@ KeyError: 'name'";
     fn test_bug4_js_typeerror_parse_error_autodetect() {
         let err = "TypeError: Cannot read properties of undefined (reading 'name')";
         let parsed = parse_error(err, None);
-        assert!(parsed.is_some(), "Should parse JS TypeError with auto-detection");
+        assert!(
+            parsed.is_some(),
+            "Should parse JS TypeError with auto-detection"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.language, "javascript");
         assert_eq!(p.error_type, "TypeError");
@@ -2109,7 +2127,10 @@ KeyError: 'name'";
     fn test_bug4_js_typeerror_not_a_function_parse() {
         let err = "TypeError: myCallback is not a function";
         let parsed = parse_error(err, None);
-        assert!(parsed.is_some(), "Should parse JS 'not a function' TypeError");
+        assert!(
+            parsed.is_some(),
+            "Should parse JS 'not a function' TypeError"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.language, "javascript");
         assert_eq!(p.error_type, "TypeError");
@@ -2202,7 +2223,10 @@ FAILED test_app.py::test_gamma - AttributeError: 'NoneType' object has no attrib
 1 failed, 2 passed in 0.45s";
 
         let parsed = parse_error(pytest_output, Some("python"));
-        assert!(parsed.is_some(), "Should parse verbose pytest output with captured stdout");
+        assert!(
+            parsed.is_some(),
+            "Should parse verbose pytest output with captured stdout"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "AttributeError");
         assert!(p.message.contains("has no attribute 'transform'"));
@@ -2228,7 +2252,10 @@ FAILED test_app.py::test_something - TypeError: do_thing() missing 1 required po
 1 failed in 0.05s";
 
         let parsed = parse_python_error(pytest_output);
-        assert!(parsed.is_some(), "Should parse traceback followed by pytest decoration");
+        assert!(
+            parsed.is_some(),
+            "Should parse traceback followed by pytest decoration"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "TypeError");
         assert!(p.message.contains("missing 1 required positional argument"));
@@ -2294,10 +2321,7 @@ FAILED test_app.py::test_something - TypeError: do_thing() missing 1 required po
             "go",
             "detect_language must recognise bare 'imported but not used' as Go"
         );
-        assert_eq!(
-            detect_language("imported but not used: \"os\""),
-            "go"
-        );
+        assert_eq!(detect_language("imported but not used: \"os\""), "go");
     }
 
     #[test]
@@ -2317,7 +2341,10 @@ FAILED test_app.py::test_something - TypeError: do_thing() missing 1 required po
         // Bare "imported but not used" without file prefix
         let err = "\"fmt\" imported but not used";
         let parsed = parse_go_error(err);
-        assert!(parsed.is_some(), "Should parse bare 'imported but not used'");
+        assert!(
+            parsed.is_some(),
+            "Should parse bare 'imported but not used'"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "unused_import");
     }
@@ -2327,7 +2354,10 @@ FAILED test_app.py::test_something - TypeError: do_thing() missing 1 required po
         // Alternate bare format: "imported but not used: \"os\""
         let err = "imported but not used: \"os\"";
         let parsed = parse_go_error(err);
-        assert!(parsed.is_some(), "Should parse bare 'imported but not used: \"os\"'");
+        assert!(
+            parsed.is_some(),
+            "Should parse bare 'imported but not used: \"os\"'"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.error_type, "unused_import");
     }
@@ -2336,7 +2366,10 @@ FAILED test_app.py::test_something - TypeError: do_thing() missing 1 required po
     fn test_parse_error_autodetect_imported_but_not_used() {
         let err = "./main.go:3:8: \"fmt\" imported but not used";
         let parsed = parse_error(err, None);
-        assert!(parsed.is_some(), "Should auto-detect 'imported but not used' as Go");
+        assert!(
+            parsed.is_some(),
+            "Should auto-detect 'imported but not used' as Go"
+        );
         let p = parsed.unwrap();
         assert_eq!(p.language, "go");
         assert_eq!(p.error_type, "unused_import");

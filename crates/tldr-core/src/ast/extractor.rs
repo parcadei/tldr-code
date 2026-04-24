@@ -1699,11 +1699,7 @@ fn collect_definitions(
 /// Returns `Some(DefinitionInfo)` with `kind: "constant"` if the node represents a
 /// module-level constant. Uses explicit `const`/`static`/`final` keywords for languages
 /// that have them, and UPPER_CASE naming convention for Python/JS/TS/Ruby/C/C++.
-fn try_constant_definition(
-    node: Node,
-    source: &str,
-    language: Language,
-) -> Option<DefinitionInfo> {
+fn try_constant_definition(node: Node, source: &str, language: Language) -> Option<DefinitionInfo> {
     let kind = node.kind();
 
     match language {
@@ -1794,8 +1790,7 @@ fn try_constant_definition(
                             return false;
                         }
                         let text = get_node_text(&c, source);
-                        text == "const"
-                            || (language == Language::Cpp && text == "constexpr")
+                        text == "const" || (language == Language::Cpp && text == "constexpr")
                     });
                     if !has_const {
                         return None;
@@ -1927,9 +1922,9 @@ fn try_constant_definition(
                 return None;
             }
             let mut cursor = node.walk();
-            let has_const = node.children(&mut cursor).any(|c| {
-                c.kind() == "modifier" && get_node_text(&c, source) == "const"
-            });
+            let has_const = node
+                .children(&mut cursor)
+                .any(|c| c.kind() == "modifier" && get_node_text(&c, source) == "const");
             if !has_const {
                 return None;
             }
@@ -2072,7 +2067,7 @@ fn try_field_definition(
             | "enum_body"      // Java / Swift
             | "annotation_type_body" // Java
             | "protocol_body"  // Swift
-            | "struct_body"    // (reserved)
+            | "struct_body" // (reserved)
     );
     if !parent_is_class_body {
         return None;
@@ -2295,7 +2290,7 @@ fn classify_definition_node(kind: &str, _language: Language) -> (bool, bool) {
             | "interface_declaration"
             | "type_definition"    // OCaml type definition
             | "module_definition"  // OCaml module definition
-            | "companion_object"   // Kotlin companion object (name: "Companion" by convention)
+            | "companion_object" // Kotlin companion object (name: "Companion" by convention)
     );
 
     (is_func, is_class)
@@ -2379,9 +2374,7 @@ fn get_definition_node_name(node: Node, source: &str) -> Option<String> {
 /// Handles function_declarator, pointer_declarator, reference_declarator, etc.
 fn extract_name_from_declarator(node: Node, source: &str) -> Option<String> {
     match node.kind() {
-        "identifier" | "field_identifier" | "destructor_name" => {
-            Some(get_node_text(&node, source))
-        }
+        "identifier" | "field_identifier" | "destructor_name" => Some(get_node_text(&node, source)),
         "function_declarator" | "pointer_declarator" | "reference_declarator" => {
             let inner = node.child_by_field_name("declarator")?;
             extract_name_from_declarator(inner, source)
@@ -2433,7 +2426,8 @@ fn is_inside_class_or_impl(node: &Node, language: Language) -> bool {
                 | "interface_body"         // TS body wrapper (VAL-001)
                 | "companion_object"  // Kotlin
                 | "object_declaration" // Kotlin
-        ) || (kind == "module" && module_is_class) // Ruby module
+        ) || (kind == "module" && module_is_class)
+        // Ruby module
         {
             return true;
         }
@@ -3393,7 +3387,8 @@ fn top_level() {}
 
     #[test]
     fn test_rust_constant_definitions() {
-        let source = "const MAX_SIZE: usize = 100;\npub static GLOBAL: &str = \"hello\";\nlet x = 5;\n";
+        let source =
+            "const MAX_SIZE: usize = 100;\npub static GLOBAL: &str = \"hello\";\nlet x = 5;\n";
         let consts = get_constants(source, Language::Rust);
         assert_eq!(consts.len(), 2);
         assert_eq!(consts[0].name, "MAX_SIZE");
@@ -3652,7 +3647,9 @@ public class Store {
             .map(|d| (d.name.clone(), d.kind.clone()))
             .collect();
 
-        let ctor = defs.iter().find(|d| d.name == "Store" && d.kind == "method");
+        let ctor = defs
+            .iter()
+            .find(|d| d.name == "Store" && d.kind == "method");
         assert!(
             ctor.is_some(),
             "VAL-003: Java constructor `Store` must be in definitions with \
@@ -3702,9 +3699,7 @@ public class Store {
                      got fields={:?}, all defs={:?}",
                     expected,
                     fields,
-                    defs.iter()
-                        .map(|d| (&d.name, &d.kind))
-                        .collect::<Vec<_>>()
+                    defs.iter().map(|d| (&d.name, &d.kind)).collect::<Vec<_>>()
                 );
             }
         }

@@ -144,7 +144,9 @@ pub fn diagnose_python(
     }
 
     // 4. NameError
-    if error_type == "NameError" || (error_type != "UnboundLocalError" && message.contains("is not defined")) {
+    if error_type == "NameError"
+        || (error_type != "UnboundLocalError" && message.contains("is not defined"))
+    {
         if let Some(d) = analyze_name_error(error, source, tree) {
             return Some(d);
         }
@@ -202,9 +204,7 @@ pub fn diagnose_python(
     }
 
     // 10. ZeroDivisionError
-    if error_type == "ZeroDivisionError"
-        || message.contains("division by zero")
-    {
+    if error_type == "ZeroDivisionError" || message.contains("division by zero") {
         if let Some(d) = analyze_zero_division(error, source, tree) {
             return Some(d);
         }
@@ -238,7 +238,10 @@ pub fn diagnose_python(
     }
 
     // 17. SyntaxError
-    if error_type == "SyntaxError" || message.contains("invalid syntax") || message.contains("expected ':'") {
+    if error_type == "SyntaxError"
+        || message.contains("invalid syntax")
+        || message.contains("expected ':'")
+    {
         if let Some(d) = analyze_syntax_error(error, source, tree) {
             return Some(d);
         }
@@ -497,11 +500,7 @@ fn has_global_in_node(node: tree_sitter::Node, source: &str, var_name: &str) -> 
 
 /// Check if a variable is assigned in the direct body of a function
 /// (excluding nested function definitions).
-fn var_assigned_in_function(
-    node: tree_sitter::Node,
-    source: &str,
-    var_name: &str,
-) -> bool {
+fn var_assigned_in_function(node: tree_sitter::Node, source: &str, var_name: &str) -> bool {
     let kind = node.kind();
 
     // Direct assignment: x = ...
@@ -593,17 +592,13 @@ fn find_function_assigning_var_recursive(
             }
             // Also check nested functions inside this one
             if let Some(body) = func.child_by_field_name("body") {
-                if let Some(inner) =
-                    find_function_assigning_var_recursive(body, source, var_name)
-                {
+                if let Some(inner) = find_function_assigning_var_recursive(body, source, var_name) {
                     return Some(inner);
                 }
             }
         } else {
             // Recurse into other nodes (e.g., class bodies, if blocks)
-            if let Some(found) =
-                find_function_assigning_var_recursive(child, source, var_name)
-            {
+            if let Some(found) = find_function_assigning_var_recursive(child, source, var_name) {
                 return Some(found);
             }
         }
@@ -662,10 +657,7 @@ fn has_import(source: &str, import_line: &str) -> bool {
 
 /// Find subscript usage of a variable (e.g., `d[key]`) and return the
 /// dict variable name and the subscript expression text.
-fn find_dict_subscript(
-    node: tree_sitter::Node,
-    source: &str,
-) -> Option<(String, String, usize)> {
+fn find_dict_subscript(node: tree_sitter::Node, source: &str) -> Option<(String, String, usize)> {
     if node.kind() == "subscript" {
         if let Some(value) = node.child_by_field_name("value") {
             if value.kind() == "identifier" {
@@ -689,10 +681,7 @@ fn find_dict_subscript(
 }
 
 /// Find `next(...)` calls inside a function.
-fn find_next_call(
-    node: tree_sitter::Node,
-    source: &str,
-) -> Option<usize> {
+fn find_next_call(node: tree_sitter::Node, source: &str) -> Option<usize> {
     if node.kind() == "call" {
         if let Some(func) = node.child_by_field_name("function") {
             let text = &source[func.byte_range()];
@@ -748,10 +737,7 @@ fn has_return_statement(node: tree_sitter::Node) -> bool {
 }
 
 /// Check if a function has an `open()` call without `encoding=` kwarg.
-fn find_bare_open_call(
-    node: tree_sitter::Node,
-    source: &str,
-) -> Option<usize> {
+fn find_bare_open_call(node: tree_sitter::Node, source: &str) -> Option<usize> {
     if node.kind() == "call" {
         if let Some(func) = node.child_by_field_name("function") {
             let text = &source[func.byte_range()];
@@ -779,10 +765,7 @@ fn find_bare_open_call(
 ///
 /// Returns the 1-indexed line number of the open call if found.
 /// Write modes are any mode string containing 'w', 'a', or 'x'.
-fn find_write_mode_open_call(
-    node: tree_sitter::Node,
-    source: &str,
-) -> Option<usize> {
+fn find_write_mode_open_call(node: tree_sitter::Node, source: &str) -> Option<usize> {
     if node.kind() == "call" {
         if let Some(func) = node.child_by_field_name("function") {
             let text = &source[func.byte_range()];
@@ -805,8 +788,12 @@ fn find_write_mode_open_call(
                                 if kw_name == "mode" {
                                     if let Some(val) = child.child_by_field_name("value") {
                                         let val_text = &source[val.byte_range()];
-                                        let unquoted = val_text.trim_matches('\'').trim_matches('"');
-                                        if unquoted.contains('w') || unquoted.contains('a') || unquoted.contains('x') {
+                                        let unquoted =
+                                            val_text.trim_matches('\'').trim_matches('"');
+                                        if unquoted.contains('w')
+                                            || unquoted.contains('a')
+                                            || unquoted.contains('x')
+                                        {
                                             has_write_mode = true;
                                         }
                                     }
@@ -818,7 +805,10 @@ fn find_write_mode_open_call(
                         if positional_idx == 1 {
                             let arg_text = &source[child.byte_range()];
                             let unquoted = arg_text.trim_matches('\'').trim_matches('"');
-                            if unquoted.contains('w') || unquoted.contains('a') || unquoted.contains('x') {
+                            if unquoted.contains('w')
+                                || unquoted.contains('a')
+                                || unquoted.contains('x')
+                            {
                                 has_write_mode = true;
                             }
                         }
@@ -881,7 +871,8 @@ fn find_function_using_name_recursive(
                     if node_contains_identifier(body, source, target_name) {
                         // Find the first body statement line
                         let mut body_cursor = body.walk();
-                        let body_start = body.children(&mut body_cursor)
+                        let body_start = body
+                            .children(&mut body_cursor)
                             .filter(|c| c.is_named())
                             .map(|c| c.start_position().row + 1)
                             .next()
@@ -928,7 +919,12 @@ fn node_contains_identifier(node: tree_sitter::Node, source: &str, target_name: 
 ///
 /// Searches for `from <module> import <name>` or `import <module>` at the
 /// module level. Returns the 1-indexed line number if found.
-fn find_top_level_import_line(source: &str, tree: &Tree, module: &str, name: &str) -> Option<usize> {
+fn find_top_level_import_line(
+    source: &str,
+    tree: &Tree,
+    module: &str,
+    name: &str,
+) -> Option<usize> {
     let root = tree.root_node();
     let mut cursor = root.walk();
 
@@ -943,10 +939,7 @@ fn find_top_level_import_line(source: &str, tree: &Tree, module: &str, name: &st
             }
             // Also check without spaces variations
             let trimmed = text.trim();
-            if trimmed.starts_with("from ")
-                && trimmed.contains(module)
-                && trimmed.contains(name)
-            {
+            if trimmed.starts_with("from ") && trimmed.contains(module) && trimmed.contains(name) {
                 return Some(child.start_position().row + 1);
             }
         }
@@ -962,10 +955,7 @@ fn find_top_level_import_line(source: &str, tree: &Tree, module: &str, name: &st
 }
 
 /// Find assert statements in a function.
-fn find_assert_statement(
-    node: tree_sitter::Node,
-    source: &str,
-) -> Option<(usize, String)> {
+fn find_assert_statement(node: tree_sitter::Node, source: &str) -> Option<(usize, String)> {
     if node.kind() == "assert_statement" {
         let line = node.start_position().row + 1;
         let text = source[node.byte_range()].to_string();
@@ -1056,11 +1046,7 @@ fn make_unbound_local_fallback(var_name: &str, error: &ParsedError) -> Diagnosis
 /// When a variable is defined at module scope and modified inside a function
 /// without a `global` declaration, Python raises UnboundLocalError.
 /// Fix: inject `global <var>` at the top of the function body.
-fn analyze_unbound_local(
-    error: &ParsedError,
-    source: &str,
-    tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_unbound_local(error: &ParsedError, source: &str, tree: &Tree) -> Option<Diagnosis> {
     let var_name = extract_variable_name(&error.message)?;
 
     // Resolve the function name: use the one from the error if available,
@@ -1093,15 +1079,14 @@ fn analyze_unbound_local(
     }
 
     // Build the fix
-    let body_start = find_function_body_start(source, tree, func_name)
-        .or_else(|| {
-            // Secondary fallback: if find_function_body_start failed entirely
-            // (e.g., function node not found by name after rename), compute from
-            // the function node we already resolved.
-            func_node.map(|n| n.start_position().row + 2) // def line (0-indexed) + 2 = next line (1-indexed)
-        });
-    let indent = get_function_body_indent(source, tree, func_name)
-        .unwrap_or_else(|| "    ".to_string());
+    let body_start = find_function_body_start(source, tree, func_name).or_else(|| {
+        // Secondary fallback: if find_function_body_start failed entirely
+        // (e.g., function node not found by name after rename), compute from
+        // the function node we already resolved.
+        func_node.map(|n| n.start_position().row + 2) // def line (0-indexed) + 2 = next line (1-indexed)
+    });
+    let indent =
+        get_function_body_indent(source, tree, func_name).unwrap_or_else(|| "    ".to_string());
 
     let confidence = if var_at_module && assigned_in_func {
         FixConfidence::High
@@ -1202,9 +1187,7 @@ fn analyze_type_error_callable(
         None
     };
 
-    let type_desc = type_name
-        .as_deref()
-        .unwrap_or("object");
+    let type_desc = type_name.as_deref().unwrap_or("object");
 
     Some(Diagnosis {
         language: "python".to_string(),
@@ -1271,8 +1254,10 @@ fn analyze_type_error_serialization(
                 if matches!(arg, "True" | "False" | "None" | "dict" | "list") {
                     continue;
                 }
-                let new_line =
-                    line.replace(&format!("{}({})", func, arg), &format!("{}(asdict({}))", func, arg));
+                let new_line = line.replace(
+                    &format!("{}({})", func, arg),
+                    &format!("{}(asdict({}))", func, arg),
+                );
                 edits.push(TextEdit {
                     line: idx + 1,
                     column: None,
@@ -1284,14 +1269,14 @@ fn analyze_type_error_serialization(
 
         // Ensure asdict import exists
         if !source.contains("asdict") {
-            if let Some(import_caps) =
-                Regex::new(r"from\s+dataclasses\s+import\s+(.+)")
-                    .ok()
-                    .and_then(|re| {
-                        source.lines().enumerate().find_map(|(idx, line)| {
-                            re.captures(line).map(|c| (idx, c))
-                        })
-                    })
+            if let Some(import_caps) = Regex::new(r"from\s+dataclasses\s+import\s+(.+)")
+                .ok()
+                .and_then(|re| {
+                    source
+                        .lines()
+                        .enumerate()
+                        .find_map(|(idx, line)| re.captures(line).map(|c| (idx, c)))
+                })
             {
                 let (idx, caps) = import_caps;
                 let m = caps.get(1).unwrap();
@@ -1364,11 +1349,7 @@ fn analyze_type_error_serialization(
 /// Analyze NameError: name not defined.
 ///
 /// Fix: inject the missing import statement from stdlib table or api-surface.
-fn analyze_name_error(
-    error: &ParsedError,
-    source: &str,
-    _tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_name_error(error: &ParsedError, source: &str, _tree: &Tree) -> Option<Diagnosis> {
     if !error.message.contains("is not defined") {
         return None;
     }
@@ -1385,9 +1366,7 @@ fn analyze_name_error(
         if has_import(source, imp) {
             None
         } else {
-            let insert_line = find_last_import_line(source)
-                .map(|l| l + 1)
-                .unwrap_or(1);
+            let insert_line = find_last_import_line(source).map(|l| l + 1).unwrap_or(1);
             Some(Fix {
                 description: format!("Add `{}` (stdlib auto-import)", imp),
                 edits: vec![TextEdit {
@@ -1439,11 +1418,7 @@ fn analyze_name_error(
 /// Handles:
 /// - `cannot import name 'X' from 'Y'`: suggests correct module
 /// - `No module named 'X'`: suggests installation or stdlib import
-fn analyze_import_error(
-    error: &ParsedError,
-    source: &str,
-    _tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_import_error(error: &ParsedError, source: &str, _tree: &Tree) -> Option<Diagnosis> {
     let msg = &error.message;
 
     // Sub-pattern: cannot import name 'X' from 'Y'
@@ -1478,8 +1453,12 @@ fn analyze_import_error(
                         let remaining: Vec<&str> =
                             names.iter().filter(|n| **n != bad_name).copied().collect();
                         let indent = get_line_indent(source, idx + 1);
-                        let new_line =
-                            format!("{}from {} import {}", indent, wrong_module, remaining.join(", "));
+                        let new_line = format!(
+                            "{}from {} import {}",
+                            indent,
+                            wrong_module,
+                            remaining.join(", ")
+                        );
                         edits.push(TextEdit {
                             line: idx + 1,
                             column: None,
@@ -1578,11 +1557,7 @@ fn analyze_import_error(
 ///
 /// Without an api-surface, provides a diagnostic hint.
 /// With api-surface (future), does fuzzy matching to suggest correct name.
-fn analyze_attribute_error(
-    error: &ParsedError,
-    _source: &str,
-    _tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_attribute_error(error: &ParsedError, _source: &str, _tree: &Tree) -> Option<Diagnosis> {
     if !error.message.contains("has no attribute") {
         return None;
     }
@@ -1644,11 +1619,7 @@ fn analyze_attribute_error(
 /// - invalid literal for int()
 /// - not enough / too many values to unpack
 /// - substring not found
-fn analyze_value_error(
-    error: &ParsedError,
-    _source: &str,
-    _tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_value_error(error: &ParsedError, _source: &str, _tree: &Tree) -> Option<Diagnosis> {
     let msg = &error.message;
     let func = error.function_name.as_deref().unwrap_or("unknown");
 
@@ -1705,11 +1676,7 @@ fn analyze_value_error(
 ///
 /// Provides a hint to add bounds checking. The fix is semantic (requires
 /// understanding the intent), so no auto-fix.
-fn analyze_index_error(
-    error: &ParsedError,
-    _source: &str,
-    _tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_index_error(error: &ParsedError, _source: &str, _tree: &Tree) -> Option<Diagnosis> {
     let msg = &error.message;
     let func = error.function_name.as_deref().unwrap_or("unknown");
 
@@ -1748,17 +1715,12 @@ fn analyze_index_error(
 ///
 /// Fix: rewrite `d[key]` to `d.get(key)` when the dict is a known literal
 /// and the subscript is a variable (runtime key).
-fn analyze_key_error(
-    error: &ParsedError,
-    source: &str,
-    tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_key_error(error: &ParsedError, source: &str, tree: &Tree) -> Option<Diagnosis> {
     let func = error.function_name.as_deref().unwrap_or("");
 
     // Try to find dict subscript in the function
     let subscript_info = if !func.is_empty() {
-        find_function_node(tree, source, func)
-            .and_then(|node| find_dict_subscript(node, source))
+        find_function_node(tree, source, func).and_then(|node| find_dict_subscript(node, source))
     } else {
         find_dict_subscript(tree.root_node(), source)
     };
@@ -1832,11 +1794,7 @@ fn analyze_key_error(
 ///
 /// Provides a hint to guard the denominator. Identifying the exact division
 /// expression requires semantic analysis, so the fix is hint-only.
-fn analyze_zero_division(
-    error: &ParsedError,
-    _source: &str,
-    _tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_zero_division(error: &ParsedError, _source: &str, _tree: &Tree) -> Option<Diagnosis> {
     let func = error.function_name.as_deref().unwrap_or("unknown");
 
     Some(Diagnosis {
@@ -1867,11 +1825,7 @@ fn analyze_zero_division(
 /// Checks for:
 /// - Recursive self-call in the function
 /// - Whether a base case (return before recursion) exists
-fn analyze_recursion_error(
-    error: &ParsedError,
-    source: &str,
-    tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_recursion_error(error: &ParsedError, source: &str, tree: &Tree) -> Option<Diagnosis> {
     let func = error.function_name.as_deref().unwrap_or("");
 
     let (has_recursion, missing_base) = if !func.is_empty() {
@@ -1922,16 +1876,11 @@ fn analyze_recursion_error(
 ///
 /// Locates the `next()` call site in the function and suggests using
 /// `next(it, default)` with a default value.
-fn analyze_stop_iteration(
-    error: &ParsedError,
-    source: &str,
-    tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_stop_iteration(error: &ParsedError, source: &str, tree: &Tree) -> Option<Diagnosis> {
     let func = error.function_name.as_deref().unwrap_or("");
 
     let call_site = if !func.is_empty() {
-        find_function_node(tree, source, func)
-            .and_then(|node| find_next_call(node, source))
+        find_function_node(tree, source, func).and_then(|node| find_next_call(node, source))
     } else {
         find_next_call(tree.root_node(), source)
     };
@@ -1968,11 +1917,7 @@ fn analyze_stop_iteration(
 ///
 /// Filters out test_ functions (those are test failures, not production bugs).
 /// For production asserts, surfaces the invariant as a hint.
-fn analyze_assertion_error(
-    error: &ParsedError,
-    source: &str,
-    tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_assertion_error(error: &ParsedError, source: &str, tree: &Tree) -> Option<Diagnosis> {
     let func = error.function_name.as_deref().unwrap_or("");
 
     // Filter out test assertions
@@ -1982,8 +1927,7 @@ fn analyze_assertion_error(
 
     // Try to find the assert statement in the function
     let assert_info = if !func.is_empty() {
-        find_function_node(tree, source, func)
-            .and_then(|node| find_assert_statement(node, source))
+        find_function_node(tree, source, func).and_then(|node| find_assert_statement(node, source))
     } else {
         None
     };
@@ -2011,7 +1955,11 @@ fn analyze_assertion_error(
         ),
         location: error.file.as_ref().map(|f| FixLocation {
             file: f.clone(),
-            line: assert_info.as_ref().map(|(l, _)| *l).or(error.line).unwrap_or(0),
+            line: assert_info
+                .as_ref()
+                .map(|(l, _)| *l)
+                .or(error.line)
+                .unwrap_or(0),
             column: None,
         }),
         confidence: FixConfidence::Low,
@@ -2026,11 +1974,7 @@ fn analyze_assertion_error(
 /// Analyze NotImplementedError: function is still a stub.
 ///
 /// This signals that the function body was left as a TODO. Hint-only.
-fn analyze_not_implemented(
-    error: &ParsedError,
-    source: &str,
-    tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_not_implemented(error: &ParsedError, source: &str, tree: &Tree) -> Option<Diagnosis> {
     let func = error.function_name.as_deref().unwrap_or("");
 
     // Verify the function has a `raise NotImplementedError`
@@ -2074,11 +2018,7 @@ fn analyze_not_implemented(
 /// For FileNotFoundError on write operations, injects `os.makedirs()` before
 /// the `open()` call and adds `import os` if missing.
 /// For other OSError subtypes, provides hints.
-fn analyze_os_error(
-    error: &ParsedError,
-    source: &str,
-    tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_os_error(error: &ParsedError, source: &str, tree: &Tree) -> Option<Diagnosis> {
     let func = error.function_name.as_deref().unwrap_or("unknown");
     let msg = &error.message;
 
@@ -2108,9 +2048,7 @@ fn analyze_os_error(
 
             // Edit 1: Add `import os` if not present
             if !has_import(source, "import os") {
-                let insert_line = find_last_import_line(source)
-                    .map(|l| l + 1)
-                    .unwrap_or(1);
+                let insert_line = find_last_import_line(source).map(|l| l + 1).unwrap_or(1);
                 edits.push(TextEdit {
                     line: insert_line,
                     column: None,
@@ -2145,10 +2083,7 @@ fn analyze_os_error(
                 }),
                 confidence: FixConfidence::Medium,
                 fix: Some(Fix {
-                    description: format!(
-                        "Create parent directory for '{}' before writing",
-                        path
-                    ),
+                    description: format!("Create parent directory for '{}' before writing", path),
                     edits,
                 }),
             });
@@ -2196,17 +2131,12 @@ fn analyze_os_error(
 /// Analyze UnicodeError / UnicodeDecodeError / UnicodeEncodeError.
 ///
 /// Fix: add `encoding='utf-8'` to bare `open()` calls in the function.
-fn analyze_unicode_error(
-    error: &ParsedError,
-    source: &str,
-    tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_unicode_error(error: &ParsedError, source: &str, tree: &Tree) -> Option<Diagnosis> {
     let func = error.function_name.as_deref().unwrap_or("");
 
     // Check for bare open() calls without encoding=
     let open_line = if !func.is_empty() {
-        find_function_node(tree, source, func)
-            .and_then(|node| find_bare_open_call(node, source))
+        find_function_node(tree, source, func).and_then(|node| find_bare_open_call(node, source))
     } else {
         find_bare_open_call(tree.root_node(), source)
     };
@@ -2342,11 +2272,7 @@ fn insert_encoding_into_open(line: &str) -> String {
 /// Analyze SyntaxError: detect missing colons, unclosed parens, etc.
 ///
 /// Fix: insert missing `:` on compound statement headers.
-fn analyze_syntax_error(
-    error: &ParsedError,
-    source: &str,
-    _tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_syntax_error(error: &ParsedError, source: &str, _tree: &Tree) -> Option<Diagnosis> {
     let msg = &error.message;
 
     // Sub-pattern: global-after-use ("name 'X' is used prior to global declaration")
@@ -2497,11 +2423,7 @@ fn brackets_balanced(s: &str) -> bool {
 /// Analyze IndentationError and TabError.
 ///
 /// Fix: normalize mixed tabs/spaces, fix off-by-one indentation.
-fn analyze_indentation_error(
-    error: &ParsedError,
-    source: &str,
-    _tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_indentation_error(error: &ParsedError, source: &str, _tree: &Tree) -> Option<Diagnosis> {
     let msg = &error.message;
 
     // Sub-pattern: tabs/spaces mixture
@@ -2616,18 +2538,15 @@ fn analyze_indentation_error(
 /// Fix: when the offending top-level import and a function that uses the
 /// imported name can both be found, produce a fix that deletes the
 /// top-level import and inserts it inside the function body.
-fn analyze_circular_import(
-    error: &ParsedError,
-    source: &str,
-    tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_circular_import(error: &ParsedError, source: &str, tree: &Tree) -> Option<Diagnosis> {
     if !error.message.contains("partially initialized module") {
         return None;
     }
 
-    let caps = Regex::new(r"cannot import name '(\w+)' from partially initialized module '([\w.]+)'")
-        .ok()
-        .and_then(|re| re.captures(&error.message));
+    let caps =
+        Regex::new(r"cannot import name '(\w+)' from partially initialized module '([\w.]+)'")
+            .ok()
+            .and_then(|re| re.captures(&error.message));
 
     let (name, module) = if let Some(c) = caps {
         (
@@ -2748,10 +2667,9 @@ fn analyze_type_error_general(
     }
 
     // missing required argument
-    if let Some(caps) =
-        Regex::new(r"(\w+)\(\) missing (\d+) required positional arguments?: (.+)")
-            .ok()
-            .and_then(|re| re.captures(msg))
+    if let Some(caps) = Regex::new(r"(\w+)\(\) missing (\d+) required positional arguments?: (.+)")
+        .ok()
+        .and_then(|re| re.captures(msg))
     {
         let called_func = caps.get(1).unwrap().as_str();
         let missing_args = caps.get(3).unwrap().as_str().trim();
@@ -2892,11 +2810,7 @@ fn analyze_type_error_general(
 // ============================================================================
 
 /// Analyze RuntimeError: generic runtime error handling.
-fn analyze_runtime_error(
-    error: &ParsedError,
-    _source: &str,
-    _tree: &Tree,
-) -> Option<Diagnosis> {
+fn analyze_runtime_error(error: &ParsedError, _source: &str, _tree: &Tree) -> Option<Diagnosis> {
     let func = error.function_name.as_deref().unwrap_or("unknown");
 
     Some(Diagnosis {
@@ -2946,10 +2860,7 @@ fn analyze_generic_exception(
         message: format!(
             "{} in '{}()': {}.{} No deterministic fix available -- \
              re-prompt the model with the exception class and message as context.",
-            error.error_type,
-            func,
-            error.message,
-            offending,
+            error.error_type, func, error.message, offending,
         ),
         location: error.file.as_ref().map(|f| FixLocation {
             file: f.clone(),
@@ -2968,7 +2879,6 @@ fn analyze_generic_exception(
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     /// Helper to parse Python source and create a tree for testing.
     fn parse_python(source: &str) -> Tree {
@@ -2986,17 +2896,41 @@ mod tests {
         // This test verifies that all 22 error types dispatch to a real analyzer.
         // Each tuple is (error_type, sample_message, expected_error_code_in_diagnosis).
         let test_cases: Vec<(&str, &str, &str)> = vec![
-            ("UnboundLocalError", "cannot access local variable 'x'", "UnboundLocalError"),
+            (
+                "UnboundLocalError",
+                "cannot access local variable 'x'",
+                "UnboundLocalError",
+            ),
             ("TypeError", "'dict' object is not callable", "TypeError"),
-            ("TypeError", "Object of type Foo is not JSON serializable", "TypeError"),
+            (
+                "TypeError",
+                "Object of type Foo is not JSON serializable",
+                "TypeError",
+            ),
             ("NameError", "name 'os' is not defined", "NameError"),
-            ("ImportError", "cannot import name 'Foo' from 'bar'", "ImportError"),
-            ("AttributeError", "'str' object has no attribute 'foo'", "AttributeError"),
-            ("ValueError", "invalid literal for int() with base 10", "ValueError"),
+            (
+                "ImportError",
+                "cannot import name 'Foo' from 'bar'",
+                "ImportError",
+            ),
+            (
+                "AttributeError",
+                "'str' object has no attribute 'foo'",
+                "AttributeError",
+            ),
+            (
+                "ValueError",
+                "invalid literal for int() with base 10",
+                "ValueError",
+            ),
             ("IndexError", "list index out of range", "IndexError"),
             ("KeyError", "'name'", "KeyError"),
             ("ZeroDivisionError", "division by zero", "ZeroDivisionError"),
-            ("RecursionError", "maximum recursion depth exceeded", "RecursionError"),
+            (
+                "RecursionError",
+                "maximum recursion depth exceeded",
+                "RecursionError",
+            ),
             ("StopIteration", "", "StopIteration"),
             ("AssertionError", "", "AssertionError"),
             ("NotImplementedError", "", "NotImplementedError"),
@@ -3004,8 +2938,16 @@ mod tests {
             ("UnicodeError", "codec can't decode byte", "UnicodeError"),
             ("SyntaxError", "expected ':'", "SyntaxError"),
             ("IndentationError", "unexpected indent", "IndentationError"),
-            ("ImportError", "cannot import name 'x' from partially initialized module 'y'", "ImportError"),
-            ("TypeError", "'int' object is not subscriptable", "TypeError"),
+            (
+                "ImportError",
+                "cannot import name 'x' from partially initialized module 'y'",
+                "ImportError",
+            ),
+            (
+                "TypeError",
+                "'int' object is not subscriptable",
+                "TypeError",
+            ),
             ("RuntimeError", "something went wrong", "RuntimeError"),
             ("CustomException", "some custom error", "CustomException"),
         ];
@@ -3166,7 +3108,10 @@ mod tests {
         assert_eq!(diag.error_code, "TypeError");
         assert!(diag.fix.is_some());
         let fix = diag.fix.unwrap();
-        assert!(fix.edits[0].new_text.contains("foo.bar") && !fix.edits[0].new_text.contains("foo.bar()"));
+        assert!(
+            fix.edits[0].new_text.contains("foo.bar")
+                && !fix.edits[0].new_text.contains("foo.bar()")
+        );
     }
 
     #[test]
@@ -3180,8 +3125,7 @@ mod tests {
             line: Some(3),
             column: None,
             language: "python".to_string(),
-            raw_text: "TabError: inconsistent use of tabs and spaces in indentation"
-                .to_string(),
+            raw_text: "TabError: inconsistent use of tabs and spaces in indentation".to_string(),
             function_name: None,
             offending_line: None,
         };
@@ -3366,7 +3310,8 @@ mod tests {
 
     #[test]
     fn test_python_os_error() {
-        let source = "def save():\n    with open('/tmp/data/out.txt', 'w') as f:\n        f.write('hi')\n";
+        let source =
+            "def save():\n    with open('/tmp/data/out.txt', 'w') as f:\n        f.write('hi')\n";
         let tree = parse_python(source);
         let error = ParsedError {
             error_type: "FileNotFoundError".to_string(),
@@ -3663,7 +3608,7 @@ mod tests {
             error_type: "UnboundLocalError".to_string(),
             message: "cannot access local variable 'counter'".to_string(),
             file: Some(std::path::PathBuf::from("test_scope.py")),
-            line: None,       // No line number (single-line error)
+            line: None, // No line number (single-line error)
             column: None,
             language: "python".to_string(),
             raw_text: "UnboundLocalError: cannot access local variable 'counter'".to_string(),
@@ -3953,7 +3898,8 @@ mod tests {
     #[test]
     fn test_unicode_error_no_fix_when_encoding_present() {
         // Already has encoding= -> no fix needed, should still get diagnosis
-        let source = "def read():\n    f = open('data.txt', encoding='latin-1')\n    return f.read()\n";
+        let source =
+            "def read():\n    f = open('data.txt', encoding='latin-1')\n    return f.read()\n";
         let tree = parse_python(source);
         let error = ParsedError {
             error_type: "UnicodeDecodeError".to_string(),
@@ -3970,7 +3916,10 @@ mod tests {
         let diag = diagnose_python(&error, source, &tree, None).unwrap();
         assert_eq!(diag.error_code, "UnicodeError");
         // No bare open found, so no fix -- just the fallback hint
-        assert!(diag.fix.is_none(), "Should not produce a fix when encoding= is already present");
+        assert!(
+            diag.fix.is_none(),
+            "Should not produce a fix when encoding= is already present"
+        );
     }
 
     // ================================================================
@@ -3989,7 +3938,9 @@ mod tests {
             line: Some(2),
             column: None,
             language: "python".to_string(),
-            raw_text: "FileNotFoundError: [Errno 2] No such file or directory: '/tmp/subdir/out.txt'".to_string(),
+            raw_text:
+                "FileNotFoundError: [Errno 2] No such file or directory: '/tmp/subdir/out.txt'"
+                    .to_string(),
             function_name: Some("save".to_string()),
             offending_line: None,
         };
@@ -4002,10 +3953,7 @@ mod tests {
         );
         let fix = diag.fix.unwrap();
         // Should have at least 1 edit: the makedirs insertion
-        assert!(
-            !fix.edits.is_empty(),
-            "Fix should have at least one edit"
-        );
+        assert!(!fix.edits.is_empty(), "Fix should have at least one edit");
         // Check that one edit inserts os.makedirs
         assert!(
             fix.edits.iter().any(|e| e.new_text.contains("os.makedirs")),
@@ -4023,7 +3971,8 @@ mod tests {
     #[test]
     fn test_os_error_fix_adds_import_os() {
         // When source has no `import os`, the fix should add it
-        let source = "def save(data):\n    f = open('/tmp/subdir/out.txt', 'w')\n    f.write(data)\n";
+        let source =
+            "def save(data):\n    f = open('/tmp/subdir/out.txt', 'w')\n    f.write(data)\n";
         let tree = parse_python(source);
         let error = ParsedError {
             error_type: "FileNotFoundError".to_string(),
@@ -4032,7 +3981,8 @@ mod tests {
             line: Some(2),
             column: None,
             language: "python".to_string(),
-            raw_text: "FileNotFoundError: No such file or directory: '/tmp/subdir/out.txt'".to_string(),
+            raw_text: "FileNotFoundError: No such file or directory: '/tmp/subdir/out.txt'"
+                .to_string(),
             function_name: Some("save".to_string()),
             offending_line: None,
         };
@@ -4060,7 +4010,8 @@ mod tests {
             line: Some(2),
             column: None,
             language: "python".to_string(),
-            raw_text: "FileNotFoundError: No such file or directory: '/tmp/missing.txt'".to_string(),
+            raw_text: "FileNotFoundError: No such file or directory: '/tmp/missing.txt'"
+                .to_string(),
             function_name: Some("load".to_string()),
             offending_line: None,
         };
@@ -4068,7 +4019,10 @@ mod tests {
         let diag = diagnose_python(&error, source, &tree, None).unwrap();
         assert_eq!(diag.error_code, "OSError");
         // Read context: cannot invent a missing file, so no fix
-        assert!(diag.fix.is_none(), "Should not produce a fix for read-context FileNotFoundError");
+        assert!(
+            diag.fix.is_none(),
+            "Should not produce a fix for read-context FileNotFoundError"
+        );
     }
 
     // ================================================================
@@ -4087,7 +4041,8 @@ mod tests {
             line: Some(2),
             column: None,
             language: "python".to_string(),
-            raw_text: "IndentationError: inconsistent use of tabs and spaces in indentation".to_string(),
+            raw_text: "IndentationError: inconsistent use of tabs and spaces in indentation"
+                .to_string(),
             function_name: None,
             offending_line: Some("\tx = 1".to_string()),
         };
@@ -4133,7 +4088,10 @@ mod tests {
         };
 
         let diag = diagnose_python(&error, source, &tree, None).unwrap();
-        assert!(diag.fix.is_some(), "Fix should be present for mixed tabs/spaces");
+        assert!(
+            diag.fix.is_some(),
+            "Fix should be present for mixed tabs/spaces"
+        );
         let fix = diag.fix.unwrap();
         // Only the tab-containing line should be in the edits
         assert!(
@@ -4186,7 +4144,9 @@ mod tests {
         );
         // One edit should delete the top-level import line
         assert!(
-            fix.edits.iter().any(|e| e.kind == EditKind::DeleteLine && e.line == 1),
+            fix.edits
+                .iter()
+                .any(|e| e.kind == EditKind::DeleteLine && e.line == 1),
             "Fix should delete the top-level import at line 1, got edits: {:?}",
             fix.edits
         );

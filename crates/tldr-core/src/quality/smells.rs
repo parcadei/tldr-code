@@ -15,20 +15,19 @@
 //! }
 //! ```
 
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::collections::HashMap;
 
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
 
 use crate::ast::extract::extract_file;
 use crate::ast::parser::ParserPool;
 use crate::callgraph::cross_file_types::{CallGraphIR, CallSite, CallType, FileIR, FuncDef};
 use crate::metrics::calculate_all_complexities_file;
-use crate::types::Language;
 use crate::types::inheritance::InheritanceReport;
+use crate::types::Language;
 use crate::TldrResult;
 
 // =============================================================================
@@ -284,6 +283,22 @@ pub struct SmellsSummary {
     pub avg_smells_per_file: f64,
 }
 
+/// Optional walker overrides for smell detection.
+///
+/// Passed to [`detect_smells_with_walker_opts`] to control how project
+/// files are discovered. The defaults match the shared
+/// [`crate::walker::ProjectWalker`] behavior: skip `node_modules`,
+/// `target`, hidden dirs, and honor `.gitignore`.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SmellsWalkerOpts {
+    /// If `true`, walk vendored/build directories (e.g. `node_modules`,
+    /// `target`) that are normally skipped by default.
+    pub no_default_ignore: bool,
+    /// If `Some(lang)`, only scan files matching that language; if
+    /// `None`, scan every supported language (historical behavior).
+    pub lang: Option<Language>,
+}
+
 // =============================================================================
 // Main API
 // =============================================================================
@@ -321,6 +336,26 @@ pub fn detect_smells(
     smell_type: Option<SmellType>,
     suggest: bool,
 ) -> TldrResult<SmellsReport> {
+    detect_smells_with_walker_opts(
+        path,
+        threshold,
+        smell_type,
+        suggest,
+        SmellsWalkerOpts::default(),
+    )
+}
+
+/// Detect code smells with explicit walker options.
+///
+/// Same as [`detect_smells`] but accepts a [`SmellsWalkerOpts`] to control
+/// which directories are walked (e.g. disable vendor-dir skipping).
+pub fn detect_smells_with_walker_opts(
+    path: &Path,
+    threshold: ThresholdPreset,
+    smell_type: Option<SmellType>,
+    suggest: bool,
+    walker_opts: SmellsWalkerOpts,
+) -> TldrResult<SmellsReport> {
     let thresholds = Thresholds::from_preset(threshold);
     // Max file size to analyze (500KB) - skip minified/generated files
     const MAX_FILE_SIZE: u64 = 500 * 1024;
@@ -329,12 +364,24 @@ pub fn detect_smells(
     let files: Vec<PathBuf> = if path.is_file() {
         vec![path.to_path_buf()]
     } else {
-        WalkDir::new(path)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
-            .filter(|e| Language::from_path(e.path()).is_some())
-            .filter(|e| e.metadata().map(|m| m.len() <= MAX_FILE_SIZE).unwrap_or(true))
+        let mut walker = crate::walker::ProjectWalker::new(path);
+        if walker_opts.no_default_ignore {
+            walker = walker.no_default_ignore();
+        }
+        let lang_filter = walker_opts.lang;
+        walker
+            .iter()
+            .filter(|e| e.file_type().map(|ft| ft.is_file()).unwrap_or(false))
+            .filter(|e| match (Language::from_path(e.path()), lang_filter) {
+                (Some(detected), Some(requested)) => detected == requested,
+                (Some(_), None) => true,
+                _ => false,
+            })
+            .filter(|e| {
+                e.metadata()
+                    .map(|m| m.len() <= MAX_FILE_SIZE)
+                    .unwrap_or(true)
+            })
             .map(|e| e.path().to_path_buf())
             .collect()
     };
@@ -342,9 +389,7 @@ pub fn detect_smells(
     // Analyze files in parallel using rayon
     let file_results: Vec<Vec<SmellFinding>> = files
         .par_iter()
-        .filter_map(|file_path| {
-            analyze_file(file_path, &thresholds, smell_type, suggest).ok()
-        })
+        .filter_map(|file_path| analyze_file(file_path, &thresholds, smell_type, suggest).ok())
         .collect();
 
     let files_scanned = file_results.len();
@@ -403,7 +448,9 @@ fn analyze_file(
     }
 
     let complexity_map = calculate_all_complexities_file(path).unwrap_or_default();
-    let all_functions = module_info.functions.iter()
+    let all_functions = module_info
+        .functions
+        .iter()
         .chain(module_info.classes.iter().flat_map(|c| c.methods.iter()));
     for func in all_functions {
         if should_analyze_smell(smell_filter, SmellType::LongParameterList) {
@@ -425,14 +472,7 @@ fn analyze_file(
     let lang_str = Language::from_path(path)
         .map(|l| format!("{:?}", l).to_lowercase())
         .unwrap_or_default();
-    collect_tier1_ast_smells(
-        path,
-        &source,
-        &lang_str,
-        smell_filter,
-        suggest,
-        &mut smells,
-    );
+    collect_tier1_ast_smells(path, &source, &lang_str, smell_filter, suggest, &mut smells);
 
     Ok(smells)
 }
@@ -478,7 +518,10 @@ fn collect_god_class_smells(
                 ),
                 severity: calculate_severity(class_loc, thresholds.god_class_loc),
                 suggestion: if suggest {
-                    Some("Consider extracting methods and responsibilities into separate classes".to_string())
+                    Some(
+                        "Consider extracting methods and responsibilities into separate classes"
+                            .to_string(),
+                    )
                 } else {
                     None
                 },
@@ -509,7 +552,10 @@ fn maybe_add_long_parameter_smell(
         ),
         severity: calculate_severity(param_count, thresholds.long_param_count),
         suggestion: if suggest {
-            Some("Consider using a parameter object or builder pattern to reduce parameters".to_string())
+            Some(
+                "Consider using a parameter object or builder pattern to reduce parameters"
+                    .to_string(),
+            )
         } else {
             None
         },
@@ -542,7 +588,10 @@ fn maybe_add_long_method_smell(
                 thresholds.long_method_loc,
             ),
             suggestion: if suggest {
-                Some("Consider extracting parts of this method into smaller helper methods".to_string())
+                Some(
+                    "Consider extracting parts of this method into smaller helper methods"
+                        .to_string(),
+                )
             } else {
                 None
             },
@@ -650,7 +699,9 @@ fn estimate_class_loc(class: &crate::types::ClassInfo) -> usize {
     }
 
     let min_line = class.line_number;
-    let max_line = class.methods.iter()
+    let max_line = class
+        .methods
+        .iter()
         .map(|m| m.line_number)
         .max()
         .unwrap_or(min_line);
@@ -862,9 +913,7 @@ pub(crate) fn intimacy_severity(total_accesses: usize, min_direction_count: usiz
 /// 3. Deduplicate by function name
 fn get_class_methods_robust<'a>(file_ir: &'a FileIR, class_name: &str) -> Vec<&'a FuncDef> {
     let class_def = file_ir.get_class(class_name);
-    let has_methods_list = class_def
-        .map(|c| !c.methods.is_empty())
-        .unwrap_or(false);
+    let has_methods_list = class_def.map(|c| !c.methods.is_empty()).unwrap_or(false);
 
     if has_methods_list {
         // Use ClassDef.methods to find matching FuncDefs
@@ -984,7 +1033,8 @@ fn parse_source(source: &str, lang_str: &str) -> Option<(tree_sitter::Tree, Lang
 
 /// Check if a tree-sitter node kind represents a control flow construct that increases nesting.
 fn is_nesting_node(kind: &str) -> bool {
-    matches!(kind,
+    matches!(
+        kind,
         // Common across languages
         "if_statement" | "if_expression" |
         "for_statement" | "for_expression" |
@@ -1041,17 +1091,26 @@ fn find_functions_and_measure_nesting(
     findings: &mut Vec<SmellFinding>,
 ) {
     let kind = node.kind();
-    let is_function = matches!(kind,
-        "function_definition" | "function_declaration" | "function_item" |
-        "method_definition" | "method_declaration" |
-        "arrow_function" | "function" | "closure_expression" |
-        "function_expression" | "generator_function" |
-        "async_function" | "function_def"
+    let is_function = matches!(
+        kind,
+        "function_definition"
+            | "function_declaration"
+            | "function_item"
+            | "method_definition"
+            | "method_declaration"
+            | "arrow_function"
+            | "function"
+            | "closure_expression"
+            | "function_expression"
+            | "generator_function"
+            | "async_function"
+            | "function_def"
     );
 
     if is_function {
         // Get function name
-        let func_name = extract_function_name(node, source).unwrap_or_else(|| "<anonymous>".to_string());
+        let func_name =
+            extract_function_name(node, source).unwrap_or_else(|| "<anonymous>".to_string());
         let line = node.start_position().row as u32 + 1;
 
         // Measure max nesting depth within this function's body
@@ -1063,10 +1122,7 @@ fn find_functions_and_measure_nesting(
                 file: PathBuf::from("<source>"),
                 name: func_name,
                 line,
-                reason: format!(
-                    "Function has nesting depth {} (threshold: 5)",
-                    max_depth
-                ),
+                reason: format!("Function has nesting depth {} (threshold: 5)", max_depth),
                 severity: nesting_severity(max_depth),
                 suggestion: None,
             });
@@ -1077,10 +1133,16 @@ fn find_functions_and_measure_nesting(
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         // Don't recurse into nested functions - they get their own analysis
-        if !is_function || !matches!(child.kind(),
-            "function_definition" | "function_declaration" | "function_item" |
-            "method_definition" | "method_declaration"
-        ) {
+        if !is_function
+            || !matches!(
+                child.kind(),
+                "function_definition"
+                    | "function_declaration"
+                    | "function_item"
+                    | "method_definition"
+                    | "method_declaration"
+            )
+        {
             find_functions_and_measure_nesting(child, source, findings);
         }
     }
@@ -1149,15 +1211,18 @@ fn find_classes_and_check_data_class(
     findings: &mut Vec<SmellFinding>,
 ) {
     let kind = node.kind();
-    let is_class = matches!(kind,
-        "class_definition" | "class_declaration" |
-        "struct_item" | "struct_declaration" |
-        "interface_declaration"
+    let is_class = matches!(
+        kind,
+        "class_definition"
+            | "class_declaration"
+            | "struct_item"
+            | "struct_declaration"
+            | "interface_declaration"
     );
 
     if is_class {
-        let class_name = extract_class_name(node, source)
-            .unwrap_or_else(|| "<unknown>".to_string());
+        let class_name =
+            extract_class_name(node, source).unwrap_or_else(|| "<unknown>".to_string());
         let line = node.start_position().row as u32 + 1;
 
         let (field_count, method_count) = count_class_members(node, source);
@@ -1216,9 +1281,11 @@ fn count_class_members(node: tree_sitter::Node, source: &str) -> (usize, usize) 
         let kind = child.kind();
         match kind {
             // Direct method definitions
-            "function_definition" | "function_declaration" |
-            "method_definition" | "method_declaration" |
-            "function_item" => {
+            "function_definition"
+            | "function_declaration"
+            | "method_definition"
+            | "method_declaration"
+            | "function_item" => {
                 method_count += 1;
                 // For Python __init__, count self.x = ... assignments as fields
                 let func_name = extract_function_name(child, source);
@@ -1227,9 +1294,11 @@ fn count_class_members(node: tree_sitter::Node, source: &str) -> (usize, usize) 
                 }
             }
             // Field declarations (Java, TypeScript, Rust struct fields)
-            "field_declaration" | "field_definition" |
-            "property_declaration" | "public_field_definition" |
-            "class_variable" => {
+            "field_declaration"
+            | "field_definition"
+            | "property_declaration"
+            | "public_field_definition"
+            | "class_variable" => {
                 field_count += 1;
             }
             // Rust struct body members
@@ -1303,14 +1372,14 @@ fn find_classes_and_check_lazy(
     findings: &mut Vec<SmellFinding>,
 ) {
     let kind = node.kind();
-    let is_class = matches!(kind,
-        "class_definition" | "class_declaration" |
-        "struct_item" | "struct_declaration"
+    let is_class = matches!(
+        kind,
+        "class_definition" | "class_declaration" | "struct_item" | "struct_declaration"
     );
 
     if is_class {
-        let class_name = extract_class_name(node, source)
-            .unwrap_or_else(|| "<unknown>".to_string());
+        let class_name =
+            extract_class_name(node, source).unwrap_or_else(|| "<unknown>".to_string());
         let line = node.start_position().row as u32 + 1;
 
         let (field_count, method_count) = count_class_members(node, source);
@@ -1373,9 +1442,14 @@ fn find_message_chains(
     let kind = node.kind();
 
     // Look for attribute/member access patterns
-    let is_chain_node = matches!(kind,
-        "attribute" | "member_expression" | "field_expression" |
-        "call_expression" | "method_invocation" | "call"
+    let is_chain_node = matches!(
+        kind,
+        "attribute"
+            | "member_expression"
+            | "field_expression"
+            | "call_expression"
+            | "method_invocation"
+            | "call"
     );
 
     if is_chain_node {
@@ -1396,10 +1470,7 @@ fn find_message_chains(
                 file: PathBuf::from("<source>"),
                 name: truncated,
                 line,
-                reason: format!(
-                    "Method chain of length {} (threshold: 3)",
-                    chain_length
-                ),
+                reason: format!("Method chain of length {} (threshold: 3)", chain_length),
                 severity: chain_severity(chain_length),
                 suggestion: None,
             });
@@ -1417,9 +1488,14 @@ fn find_message_chains(
 /// Measure the length of a method/attribute chain by walking down the AST.
 fn measure_chain_length(node: tree_sitter::Node) -> usize {
     let kind = node.kind();
-    let is_access = matches!(kind,
-        "attribute" | "member_expression" | "field_expression" |
-        "call_expression" | "method_invocation" | "call"
+    let is_access = matches!(
+        kind,
+        "attribute"
+            | "member_expression"
+            | "field_expression"
+            | "call_expression"
+            | "method_invocation"
+            | "call"
     );
 
     if !is_access {
@@ -1427,7 +1503,8 @@ fn measure_chain_length(node: tree_sitter::Node) -> usize {
     }
 
     // The "object" or "value" or "function" child is the part before the dot
-    let child_chain = node.child_by_field_name("object")
+    let child_chain = node
+        .child_by_field_name("object")
         .or_else(|| node.child_by_field_name("value"))
         .or_else(|| node.child_by_field_name("function"))
         .map(|c| measure_chain_length(c))
@@ -1451,20 +1528,13 @@ fn measure_chain_length(node: tree_sitter::Node) -> usize {
 /// Set of primitive type names across languages.
 const PRIMITIVE_TYPES: &[&str] = &[
     // Python
-    "int", "float", "str", "bool", "bytes",
-    // Rust
-    "i8", "i16", "i32", "i64", "i128", "isize",
-    "u8", "u16", "u32", "u64", "u128", "usize",
-    "f32", "f64", "String", "&str", "char",
-    // TypeScript/JavaScript
-    "number", "string", "boolean",
-    // Java / C#
-    "byte", "short", "long", "double",
-    "Integer", "Long", "Double", "Float", "Boolean",
+    "int", "float", "str", "bool", "bytes", // Rust
+    "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64", "u128", "usize", "f32",
+    "f64", "String", "&str", "char", // TypeScript/JavaScript
+    "number", "string", "boolean", // Java / C#
+    "byte", "short", "long", "double", "Integer", "Long", "Double", "Float", "Boolean",
     // Go
-    "int8", "int16", "int32", "int64",
-    "uint8", "uint16", "uint32", "uint64",
-    "float32", "float64",
+    "int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64", "float32", "float64",
 ];
 
 /// Check if a type string is a primitive type.
@@ -1507,15 +1577,20 @@ fn find_functions_and_check_primitives(
     findings: &mut Vec<SmellFinding>,
 ) {
     let kind = node.kind();
-    let is_function = matches!(kind,
-        "function_definition" | "function_declaration" | "function_item" |
-        "method_definition" | "method_declaration" |
-        "arrow_function" | "function"
+    let is_function = matches!(
+        kind,
+        "function_definition"
+            | "function_declaration"
+            | "function_item"
+            | "method_definition"
+            | "method_declaration"
+            | "arrow_function"
+            | "function"
     );
 
     if is_function {
-        let func_name = extract_function_name(node, source)
-            .unwrap_or_else(|| "<anonymous>".to_string());
+        let func_name =
+            extract_function_name(node, source).unwrap_or_else(|| "<anonymous>".to_string());
         let line = node.start_position().row as u32 + 1;
 
         let primitive_count = count_primitive_params(node, source);
@@ -1597,7 +1672,10 @@ fn count_primitive_params(node: tree_sitter::Node, source: &str) -> usize {
 ///
 /// This is a backward-compatible stub. Tier-2 Middle Man detection requires
 /// `--deep` mode. Use `detect_middle_man_from_callgraph()` for proper detection.
-#[deprecated(since = "0.2.0", note = "Use detect_middle_man_from_callgraph() with --deep mode instead")]
+#[deprecated(
+    since = "0.2.0",
+    note = "Use detect_middle_man_from_callgraph() with --deep mode instead"
+)]
 pub fn detect_middle_man(_source: &str, _language: &str) -> Vec<SmellFinding> {
     // Tier-2 smells require --deep mode with CallGraphIR
     Vec::new()
@@ -1607,7 +1685,10 @@ pub fn detect_middle_man(_source: &str, _language: &str) -> Vec<SmellFinding> {
 ///
 /// This is a backward-compatible stub. Tier-2 Refused Bequest detection requires
 /// `--deep` mode. Use `detect_refused_bequest_from_callgraph()` for proper detection.
-#[deprecated(since = "0.2.0", note = "Use detect_refused_bequest_from_callgraph() with --deep mode instead")]
+#[deprecated(
+    since = "0.2.0",
+    note = "Use detect_refused_bequest_from_callgraph() with --deep mode instead"
+)]
 pub fn detect_refused_bequest(_source: &str, _language: &str) -> Vec<SmellFinding> {
     // Tier-2 smells require --deep mode with CallGraphIR + InheritanceReport
     Vec::new()
@@ -1617,7 +1698,10 @@ pub fn detect_refused_bequest(_source: &str, _language: &str) -> Vec<SmellFindin
 ///
 /// This is a backward-compatible stub. Tier-2 Feature Envy detection requires
 /// `--deep` mode. Use `detect_feature_envy_from_callgraph()` for proper detection.
-#[deprecated(since = "0.2.0", note = "Use detect_feature_envy_from_callgraph() with --deep mode instead")]
+#[deprecated(
+    since = "0.2.0",
+    note = "Use detect_feature_envy_from_callgraph() with --deep mode instead"
+)]
 pub fn detect_feature_envy(_source: &str, _language: &str) -> Vec<SmellFinding> {
     // Tier-2 smells require --deep mode with CallGraphIR
     Vec::new()
@@ -1627,7 +1711,10 @@ pub fn detect_feature_envy(_source: &str, _language: &str) -> Vec<SmellFinding> 
 ///
 /// This is a backward-compatible stub. Tier-2 Inappropriate Intimacy detection requires
 /// `--deep` mode. Use `detect_inappropriate_intimacy_from_callgraph()` for proper detection.
-#[deprecated(since = "0.2.0", note = "Use detect_inappropriate_intimacy_from_callgraph() with --deep mode instead")]
+#[deprecated(
+    since = "0.2.0",
+    note = "Use detect_inappropriate_intimacy_from_callgraph() with --deep mode instead"
+)]
 pub fn detect_inappropriate_intimacy(_source: &str, _language: &str) -> Vec<SmellFinding> {
     // Tier-2 smells require --deep mode with CallGraphIR + InheritanceReport
     Vec::new()
@@ -1657,7 +1744,13 @@ pub fn detect_middle_man_from_callgraph(
     /// Design-pattern class names to exclude (case-insensitive).
     /// These classes legitimately delegate as part of their pattern.
     const EXCLUDED_PATTERNS: &[&str] = &[
-        "facade", "adapter", "wrapper", "proxy", "bridge", "decorator", "gateway",
+        "facade",
+        "adapter",
+        "wrapper",
+        "proxy",
+        "bridge",
+        "decorator",
+        "gateway",
     ];
 
     let mut findings = Vec::new();
@@ -1789,7 +1882,7 @@ pub fn detect_refused_bequest_from_callgraph(
     thresholds: &Thresholds,
     suggest: bool,
 ) -> Vec<SmellFinding> {
-    use crate::types::inheritance::{InheritanceKind, BaseResolution};
+    use crate::types::inheritance::{BaseResolution, InheritanceKind};
 
     let mut findings = Vec::new();
 
@@ -1837,10 +1930,8 @@ pub fn detect_refused_bequest_from_callgraph(
             .map(|fir| get_class_methods_robust(fir, &edge.child))
             .unwrap_or_default();
 
-        let child_method_names: HashSet<&str> = child_methods
-            .iter()
-            .map(|f| f.name.as_str())
-            .collect();
+        let child_method_names: HashSet<&str> =
+            child_methods.iter().map(|f| f.name.as_str()).collect();
 
         // Get all call targets made from any child class method
         let child_call_targets: HashSet<String> = if let Some(fir) = child_file_ir {
@@ -1975,10 +2066,23 @@ pub fn detect_feature_envy_from_callgraph(
     /// Role-based class name patterns to exclude (case-insensitive).
     /// These classes legitimately access foreign data as part of their design role.
     const EXCLUDED_ROLES: &[&str] = &[
-        "format", "formatter", "serialize", "serializer", "deserialize",
-        "handler", "visitor", "render", "renderer", "builder",
-        "validator", "converter", "mapper", "adapter",
-        "factory", "transformer", "presenter",
+        "format",
+        "formatter",
+        "serialize",
+        "serializer",
+        "deserialize",
+        "handler",
+        "visitor",
+        "render",
+        "renderer",
+        "builder",
+        "validator",
+        "converter",
+        "mapper",
+        "adapter",
+        "factory",
+        "transformer",
+        "presenter",
     ];
 
     let mut findings = Vec::new();
@@ -2293,11 +2397,36 @@ pub fn analyze_smells_aggregated(
     smell_type: Option<SmellType>,
     suggest: bool,
 ) -> TldrResult<SmellsReport> {
+    analyze_smells_aggregated_with_walker_opts(
+        path,
+        threshold,
+        smell_type,
+        suggest,
+        SmellsWalkerOpts::default(),
+    )
+}
+
+/// Same as [`analyze_smells_aggregated`] but accepts walker options.
+///
+/// Sub-analyzers (cohesion, dead code, similarity, etc.) still use the
+/// default walker; only the top-level smell scan honors `walker_opts`.
+/// This matches the spec-defined behavior for `--no-default-ignore`:
+/// the base detectors walk vendor dirs when requested, but the deep
+/// analyzers use their own defaults.
+pub fn analyze_smells_aggregated_with_walker_opts(
+    path: &Path,
+    threshold: ThresholdPreset,
+    smell_type: Option<SmellType>,
+    suggest: bool,
+    walker_opts: SmellsWalkerOpts,
+) -> TldrResult<SmellsReport> {
     let mut all_smells: Vec<SmellFinding> = Vec::new();
     let mut files_scanned: usize = 0;
 
     if should_run_original_detectors(smell_type) {
-        if let Ok(base_report) = detect_smells(path, threshold, smell_type, suggest) {
+        if let Ok(base_report) =
+            detect_smells_with_walker_opts(path, threshold, smell_type, suggest, walker_opts)
+        {
             files_scanned = base_report.files_scanned;
             all_smells.extend(base_report.smells);
         }
@@ -2406,8 +2535,7 @@ pub fn analyze_smells_aggregated(
 fn should_run_original_detectors(smell_type: Option<SmellType>) -> bool {
     matches!(
         smell_type,
-        None
-            | Some(SmellType::GodClass)
+        None | Some(SmellType::GodClass)
             | Some(SmellType::LongMethod)
             | Some(SmellType::LongParameterList)
             | Some(SmellType::FeatureEnvy)
@@ -2445,9 +2573,7 @@ fn call_graph_context(path: &Path, needs_call_graph: bool) -> (&Path, String) {
             .unwrap_or_else(|| "python".to_string());
         return (path.parent().unwrap_or(path), lang);
     }
-    let lang = WalkDir::new(path)
-        .into_iter()
-        .filter_map(Result::ok)
+    let lang = crate::walker::walk_project(path)
         .find_map(|e| Language::from_path(e.path()))
         .map(|l| l.to_string().to_lowercase())
         .unwrap_or_else(|| "python".to_string());
@@ -2487,10 +2613,9 @@ fn collect_low_cohesion_smells(path: &Path, suggest: bool, all_smells: &mut Vec<
                 ),
                 severity: cohesion_severity(class.lcom4),
                 suggestion: if suggest {
-                    class
-                        .split_suggestion
-                        .clone()
-                        .or_else(|| Some("Consider splitting this class by responsibility".to_string()))
+                    class.split_suggestion.clone().or_else(|| {
+                        Some("Consider splitting this class by responsibility".to_string())
+                    })
                 } else {
                     None
                 },
@@ -2514,9 +2639,12 @@ fn collect_tight_coupling_smells(
         max_pairs: 50,
         ..Default::default()
     };
-    if let Ok(coupling_report) =
-        crate::quality::coupling::analyze_coupling_with_graph(path, lang, project_call_graph, &options)
-    {
+    if let Ok(coupling_report) = crate::quality::coupling::analyze_coupling_with_graph(
+        path,
+        lang,
+        project_call_graph,
+        &options,
+    ) {
         for pair in &coupling_report.top_pairs {
             if pair.score < 0.6 {
                 continue;
@@ -2678,8 +2806,12 @@ fn collect_refused_bequest_smells(
     else {
         return;
     };
-    let findings =
-        detect_refused_bequest_from_callgraph(shared_call_graph_ir, inheritance_report, thresholds, suggest);
+    let findings = detect_refused_bequest_from_callgraph(
+        shared_call_graph_ir,
+        inheritance_report,
+        thresholds,
+        suggest,
+    );
     all_smells.extend(findings);
 }
 
@@ -2792,8 +2924,8 @@ mod tests {
 
     #[test]
     fn test_severity_calculation() {
-        assert_eq!(calculate_severity(6, 5), 1);  // 20% over
-        assert_eq!(calculate_severity(8, 5), 2);  // 60% over
+        assert_eq!(calculate_severity(6, 5), 1); // 20% over
+        assert_eq!(calculate_severity(8, 5), 2); // 60% over
         assert_eq!(calculate_severity(11, 5), 3); // 120% over
     }
 
@@ -2801,7 +2933,10 @@ mod tests {
     fn test_smell_type_display() {
         assert_eq!(SmellType::GodClass.to_string(), "God Class");
         assert_eq!(SmellType::LongMethod.to_string(), "Long Method");
-        assert_eq!(SmellType::LongParameterList.to_string(), "Long Parameter List");
+        assert_eq!(
+            SmellType::LongParameterList.to_string(),
+            "Long Parameter List"
+        );
     }
 
     // =========================================================================
@@ -2824,7 +2959,10 @@ mod tests {
         assert_eq!(SmellType::TightCoupling.to_string(), "Tight Coupling");
         assert_eq!(SmellType::DeadCode.to_string(), "Dead Code");
         assert_eq!(SmellType::CodeClone.to_string(), "Code Clone");
-        assert_eq!(SmellType::HighCognitiveComplexity.to_string(), "High Cognitive Complexity");
+        assert_eq!(
+            SmellType::HighCognitiveComplexity.to_string(),
+            "High Cognitive Complexity"
+        );
     }
 
     #[test]
@@ -2895,12 +3033,7 @@ mod tests {
         let dir = std::env::temp_dir().join("tldr_smells_test_empty");
         let _ = std::fs::create_dir_all(&dir);
 
-        let result = analyze_smells_aggregated(
-            &dir,
-            ThresholdPreset::Default,
-            None,
-            false,
-        );
+        let result = analyze_smells_aggregated(&dir, ThresholdPreset::Default, None, false);
         assert!(result.is_ok());
         let report = result.unwrap();
         assert_eq!(report.smells.len(), 0);
@@ -2937,12 +3070,7 @@ mod tests {
         let dir = std::env::temp_dir().join("tldr_smells_test_compat");
         let _ = std::fs::create_dir_all(&dir);
 
-        let result = detect_smells(
-            &dir,
-            ThresholdPreset::Default,
-            None,
-            false,
-        );
+        let result = detect_smells(&dir, ThresholdPreset::Default, None, false);
         assert!(result.is_ok());
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -2980,7 +3108,10 @@ def deeply_nested():
                     pass
 "#;
         let findings = detect_deep_nesting(source, "python");
-        assert!(!findings.is_empty(), "Should detect deep nesting (depth >= 5)");
+        assert!(
+            !findings.is_empty(),
+            "Should detect deep nesting (depth >= 5)"
+        );
         assert_eq!(findings[0].smell_type, SmellType::DeepNesting);
         assert!(findings[0].severity >= 1);
     }
@@ -3015,7 +3146,10 @@ def shallow():
             print(i)
 "#;
         let findings = detect_deep_nesting(source, "python");
-        assert!(findings.is_empty(), "Shallow code should not trigger deep nesting smell");
+        assert!(
+            findings.is_empty(),
+            "Shallow code should not trigger deep nesting smell"
+        );
     }
 
     #[test]
@@ -3056,7 +3190,10 @@ class UserData:
         self.phone = ""
 "#;
         let findings = detect_data_classes(source, "python");
-        assert!(!findings.is_empty(), "Class with 5 fields and 1 method should be a data class");
+        assert!(
+            !findings.is_empty(),
+            "Class with 5 fields and 1 method should be a data class"
+        );
         assert_eq!(findings[0].smell_type, SmellType::DataClass);
     }
 
@@ -3078,7 +3215,10 @@ class UserService:
         pass
 "#;
         let findings = detect_data_classes(source, "python");
-        assert!(findings.is_empty(), "Class with many methods should not be a data class");
+        assert!(
+            findings.is_empty(),
+            "Class with many methods should not be a data class"
+        );
     }
 
     #[test]
@@ -3113,7 +3253,10 @@ class Wrapper:
         pass
 "#;
         let findings = detect_lazy_elements(source, "python");
-        assert!(!findings.is_empty(), "Class with 1 method and 0 fields should be a lazy element");
+        assert!(
+            !findings.is_empty(),
+            "Class with 1 method and 0 fields should be a lazy element"
+        );
         assert_eq!(findings[0].smell_type, SmellType::LazyElement);
         assert_eq!(findings[0].severity, 1);
     }
@@ -3133,7 +3276,10 @@ class Service:
         pass
 "#;
         let findings = detect_lazy_elements(source, "python");
-        assert!(findings.is_empty(), "Class with 2+ methods and 2+ fields should not be lazy");
+        assert!(
+            findings.is_empty(),
+            "Class with 2+ methods and 2+ fields should not be lazy"
+        );
     }
 
     // --- Message Chain tests ---
@@ -3157,7 +3303,10 @@ def process():
     result = obj.get_manager().get_department().get_employees().get_first().name
 "#;
         let findings = detect_message_chains(source, "python");
-        assert!(!findings.is_empty(), "Should detect long method chain (> 3 calls)");
+        assert!(
+            !findings.is_empty(),
+            "Should detect long method chain (> 3 calls)"
+        );
         assert_eq!(findings[0].smell_type, SmellType::MessageChain);
     }
 
@@ -3186,7 +3335,10 @@ def simple():
     #[test]
     fn test_primitive_obsession_variant_exists() {
         let _ = SmellType::PrimitiveObsession;
-        assert_eq!(SmellType::PrimitiveObsession.to_string(), "Primitive Obsession");
+        assert_eq!(
+            SmellType::PrimitiveObsession.to_string(),
+            "Primitive Obsession"
+        );
     }
 
     #[test]
@@ -3202,7 +3354,10 @@ def create_user(name: str, email: str, age: int, phone: str, active: bool):
     pass
 "#;
         let findings = detect_primitive_obsession(source, "python");
-        assert!(!findings.is_empty(), "Function with 5 primitive params should trigger");
+        assert!(
+            !findings.is_empty(),
+            "Function with 5 primitive params should trigger"
+        );
         assert_eq!(findings[0].smell_type, SmellType::PrimitiveObsession);
     }
 
@@ -3213,8 +3368,14 @@ fn create_user(name: &str, email: String, age: i32, phone: String, active: bool,
 }
 "#;
         let findings = detect_primitive_obsession(source, "rust");
-        assert!(!findings.is_empty(), "Function with 6 primitive params should trigger in Rust");
-        assert!(findings[0].severity >= 2, "6 primitives should have severity >= 2");
+        assert!(
+            !findings.is_empty(),
+            "Function with 6 primitive params should trigger in Rust"
+        );
+        assert!(
+            findings[0].severity >= 2,
+            "6 primitives should have severity >= 2"
+        );
     }
 
     #[test]
@@ -3224,7 +3385,10 @@ def create_user(config: UserConfig, permissions: PermissionSet):
     pass
 "#;
         let findings = detect_primitive_obsession(source, "python");
-        assert!(findings.is_empty(), "Non-primitive params should not trigger");
+        assert!(
+            findings.is_empty(),
+            "Non-primitive params should not trigger"
+        );
     }
 
     #[test]
@@ -3245,7 +3409,9 @@ def create_user(config: UserConfig, permissions: PermissionSet):
         let dir = std::env::temp_dir().join("tldr_smells_new_types_test");
         let _ = std::fs::create_dir_all(&dir);
         let py_file = dir.join("nested.py");
-        std::fs::write(&py_file, r#"
+        std::fs::write(
+            &py_file,
+            r#"
 def deeply_nested():
     if True:
         for i in range(10):
@@ -3255,7 +3421,9 @@ def deeply_nested():
                         print("deep")
                 except:
                     pass
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let result = detect_smells(
             &dir,
@@ -3278,7 +3446,9 @@ def deeply_nested():
         let dir = std::env::temp_dir().join("tldr_smells_new_agg_test");
         let _ = std::fs::create_dir_all(&dir);
         let py_file = dir.join("data.py");
-        std::fs::write(&py_file, r#"
+        std::fs::write(
+            &py_file,
+            r#"
 class BigDataBag:
     def __init__(self):
         self.a = 1
@@ -3289,7 +3459,9 @@ class BigDataBag:
         self.f = 6
         self.g = 7
         self.h = 8
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let result = analyze_smells_aggregated(
             &dir,
@@ -3368,26 +3540,37 @@ class BigDataBag:
         // Add constructor if specified
         if let Some(ctor) = constructor_name {
             method_names.push(ctor.to_string());
-            file_ir.funcs.push(FuncDef::method(ctor, class_name, line, line + 2));
+            file_ir
+                .funcs
+                .push(FuncDef::method(ctor, class_name, line, line + 2));
             line += 3;
         }
 
         // Add each method as a FuncDef and its calls
         for (method_name, calls) in &methods {
             method_names.push(method_name.to_string());
-            file_ir.funcs.push(FuncDef::method(*method_name, class_name, line, line + 2));
+            file_ir
+                .funcs
+                .push(FuncDef::method(*method_name, class_name, line, line + 2));
 
             // Add calls for this method
             let qualified = format!("{}.{}", class_name, method_name);
-            let call_sites: Vec<CallSite> = calls.iter().map(|(target, receiver, receiver_type)| {
-                CallSite::method(
-                    qualified.clone(),
-                    *target,
-                    *receiver,
-                    if receiver_type.is_empty() { None } else { Some(receiver_type.to_string()) },
-                    Some(line + 1),
-                )
-            }).collect();
+            let call_sites: Vec<CallSite> = calls
+                .iter()
+                .map(|(target, receiver, receiver_type)| {
+                    CallSite::method(
+                        qualified.clone(),
+                        *target,
+                        *receiver,
+                        if receiver_type.is_empty() {
+                            None
+                        } else {
+                            Some(receiver_type.to_string())
+                        },
+                        Some(line + 1),
+                    )
+                })
+                .collect();
 
             if !call_sites.is_empty() {
                 file_ir.calls.insert(qualified, call_sites);
@@ -3423,9 +3606,15 @@ class BigDataBag:
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(!findings.is_empty(), "Class with 4/4 delegating methods should be middle man");
+        assert!(
+            !findings.is_empty(),
+            "Class with 4/4 delegating methods should be middle man"
+        );
         assert_eq!(findings[0].smell_type, SmellType::MiddleMan);
-        assert!(findings[0].severity >= 2, "100% delegation with 4 methods should have severity >= 2");
+        assert!(
+            findings[0].severity >= 2,
+            "100% delegation with 4 methods should have severity >= 2"
+        );
     }
 
     #[test]
@@ -3435,33 +3624,70 @@ class BigDataBag:
             use crate::callgraph::cross_file_types::{CallSite, ClassDef};
             let mut fir = FileIR::new(PathBuf::from("test.py"));
             // __init__
-            fir.funcs.push(FuncDef::method("__init__", "OrderService", 1, 3));
+            fir.funcs
+                .push(FuncDef::method("__init__", "OrderService", 1, 3));
             // get_total: pure delegation to order.get_total()
-            fir.funcs.push(FuncDef::method("get_total", "OrderService", 4, 6));
-            fir.calls.insert("OrderService.get_total".to_string(), vec![
-                CallSite::method("OrderService.get_total", "get_total", "order", Some("Order".to_string()), Some(5)),
-            ]);
+            fir.funcs
+                .push(FuncDef::method("get_total", "OrderService", 4, 6));
+            fir.calls.insert(
+                "OrderService.get_total".to_string(),
+                vec![CallSite::method(
+                    "OrderService.get_total",
+                    "get_total",
+                    "order",
+                    Some("Order".to_string()),
+                    Some(5),
+                )],
+            );
             // validate: calls self and order (2 method calls, not pure delegation)
-            fir.funcs.push(FuncDef::method("validate", "OrderService", 7, 10));
-            fir.calls.insert("OrderService.validate".to_string(), vec![
-                CallSite::method("OrderService.validate", "get_total", "self", None, Some(8)),
-                CallSite::method("OrderService.validate", "get_total", "order", Some("Order".to_string()), Some(9)),
-            ]);
+            fir.funcs
+                .push(FuncDef::method("validate", "OrderService", 7, 10));
+            fir.calls.insert(
+                "OrderService.validate".to_string(),
+                vec![
+                    CallSite::method("OrderService.validate", "get_total", "self", None, Some(8)),
+                    CallSite::method(
+                        "OrderService.validate",
+                        "get_total",
+                        "order",
+                        Some("Order".to_string()),
+                        Some(9),
+                    ),
+                ],
+            );
             // process_payment: calls self.get_total() (self-call, not delegation to external)
-            fir.funcs.push(FuncDef::method("process_payment", "OrderService", 11, 14));
-            fir.calls.insert("OrderService.process_payment".to_string(), vec![
-                CallSite::method("OrderService.process_payment", "get_total", "self", None, Some(12)),
-            ]);
+            fir.funcs
+                .push(FuncDef::method("process_payment", "OrderService", 11, 14));
+            fir.calls.insert(
+                "OrderService.process_payment".to_string(),
+                vec![CallSite::method(
+                    "OrderService.process_payment",
+                    "get_total",
+                    "self",
+                    None,
+                    Some(12),
+                )],
+            );
             fir.classes.push(ClassDef::new(
-                "OrderService".to_string(), 1, 14,
-                vec!["__init__".to_string(), "get_total".to_string(), "validate".to_string(), "process_payment".to_string()],
+                "OrderService".to_string(),
+                1,
+                14,
+                vec![
+                    "__init__".to_string(),
+                    "get_total".to_string(),
+                    "validate".to_string(),
+                    "process_payment".to_string(),
+                ],
                 vec![],
             ));
             fir
         };
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(findings.is_empty(), "Class with 1/3 delegation (33%) should not be middle man");
+        assert!(
+            findings.is_empty(),
+            "Class with 1/3 delegation (33%) should not be middle man"
+        );
     }
 
     #[test]
@@ -3470,25 +3696,41 @@ class BigDataBag:
         let file_ir = {
             use crate::callgraph::cross_file_types::{CallSite, ClassDef};
             let mut fir = FileIR::new(PathBuf::from("test.py"));
-            fir.funcs.push(FuncDef::method("__init__", "Delegator", 1, 3));
+            fir.funcs
+                .push(FuncDef::method("__init__", "Delegator", 1, 3));
             // 3 pure delegators
             for (i, name) in ["method1", "method2", "method3"].iter().enumerate() {
                 let line = (4 + i * 3) as u32;
-                fir.funcs.push(FuncDef::method(*name, "Delegator", line, line + 2));
-                fir.calls.insert(format!("Delegator.{}", name), vec![
-                    CallSite::method(
-                        format!("Delegator.{}", name), *name, "backend",
-                        Some("Backend".to_string()), Some(line + 1),
-                    ),
-                ]);
+                fir.funcs
+                    .push(FuncDef::method(*name, "Delegator", line, line + 2));
+                fir.calls.insert(
+                    format!("Delegator.{}", name),
+                    vec![CallSite::method(
+                        format!("Delegator.{}", name),
+                        *name,
+                        "backend",
+                        Some("Backend".to_string()),
+                        Some(line + 1),
+                    )],
+                );
             }
             // 2 non-delegators (no calls = real logic or empty)
-            fir.funcs.push(FuncDef::method("method4", "Delegator", 13, 16));
-            fir.funcs.push(FuncDef::method("method5", "Delegator", 17, 19));
+            fir.funcs
+                .push(FuncDef::method("method4", "Delegator", 13, 16));
+            fir.funcs
+                .push(FuncDef::method("method5", "Delegator", 17, 19));
             fir.classes.push(ClassDef::new(
-                "Delegator".to_string(), 1, 19,
-                vec!["__init__".to_string(), "method1".to_string(), "method2".to_string(),
-                     "method3".to_string(), "method4".to_string(), "method5".to_string()],
+                "Delegator".to_string(),
+                1,
+                19,
+                vec![
+                    "__init__".to_string(),
+                    "method1".to_string(),
+                    "method2".to_string(),
+                    "method3".to_string(),
+                    "method4".to_string(),
+                    "method5".to_string(),
+                ],
                 vec![],
             ));
             fir
@@ -3496,7 +3738,10 @@ class BigDataBag:
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "python", false);
         // 3/5 = 60% >= 60% threshold => should trigger
-        assert!(!findings.is_empty(), "60% delegation at default threshold (60%) should trigger middle man");
+        assert!(
+            !findings.is_empty(),
+            "60% delegation at default threshold (60%) should trigger middle man"
+        );
     }
 
     #[test]
@@ -3505,13 +3750,14 @@ class BigDataBag:
         let file_ir = build_middle_man_file_ir(
             "TinyHelper",
             Some("__init__"),
-            vec![
-                ("do_thing", vec![("do_thing", "obj", "Target")]),
-            ],
+            vec![("do_thing", vec![("do_thing", "obj", "Target")])],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(findings.is_empty(), "Single non-constructor method class should not trigger middle man (below min_methods)");
+        assert!(
+            findings.is_empty(),
+            "Single non-constructor method class should not trigger middle man (below min_methods)"
+        );
     }
 
     #[test]
@@ -3528,7 +3774,10 @@ class BigDataBag:
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(!findings.is_empty(), "Constructor should be excluded from method count; 3/3 delegation = 100%");
+        assert!(
+            !findings.is_empty(),
+            "Constructor should be excluded from method count; 3/3 delegation = 100%"
+        );
     }
 
     // --- New Middle Man boundary tests ---
@@ -3547,7 +3796,10 @@ class BigDataBag:
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(findings.is_empty(), "Class named 'UserFacade' should be excluded by facade heuristic");
+        assert!(
+            findings.is_empty(),
+            "Class named 'UserFacade' should be excluded by facade heuristic"
+        );
     }
 
     #[test]
@@ -3567,7 +3819,10 @@ class BigDataBag:
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(!findings.is_empty(), "3/5 = 60% should trigger at default 60% threshold");
+        assert!(
+            !findings.is_empty(),
+            "3/5 = 60% should trigger at default 60% threshold"
+        );
 
         // Just below threshold: 2/5 = 40%
         let file_ir_below = build_middle_man_file_ir(
@@ -3581,8 +3836,12 @@ class BigDataBag:
                 ("real_logic3", vec![]),
             ],
         );
-        let findings_below = detect_middle_man_from_callgraph(&file_ir_below, &thresholds, "python", false);
-        assert!(findings_below.is_empty(), "2/5 = 40% should NOT trigger at default 60% threshold");
+        let findings_below =
+            detect_middle_man_from_callgraph(&file_ir_below, &thresholds, "python", false);
+        assert!(
+            findings_below.is_empty(),
+            "2/5 = 40% should NOT trigger at default 60% threshold"
+        );
     }
 
     #[test]
@@ -3600,9 +3859,13 @@ class BigDataBag:
             ],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
-        let findings1 = detect_middle_man_from_callgraph(&file_ir_sev1, &thresholds, "python", false);
+        let findings1 =
+            detect_middle_man_from_callgraph(&file_ir_sev1, &thresholds, "python", false);
         assert!(!findings1.is_empty());
-        assert_eq!(findings1[0].severity, 1, "60% with 3 delegators = severity 1");
+        assert_eq!(
+            findings1[0].severity, 1,
+            "60% with 3 delegators = severity 1"
+        );
 
         // Severity 2: 80% delegation, 4 delegators
         let file_ir_sev2 = build_middle_man_file_ir(
@@ -3616,9 +3879,13 @@ class BigDataBag:
                 ("real1", vec![]),
             ],
         );
-        let findings2 = detect_middle_man_from_callgraph(&file_ir_sev2, &thresholds, "python", false);
+        let findings2 =
+            detect_middle_man_from_callgraph(&file_ir_sev2, &thresholds, "python", false);
         assert!(!findings2.is_empty());
-        assert_eq!(findings2[0].severity, 2, "80% with 4 delegators = severity 2");
+        assert_eq!(
+            findings2[0].severity, 2,
+            "80% with 4 delegators = severity 2"
+        );
 
         // Severity 3: 100% delegation, 6 delegators
         let file_ir_sev3 = build_middle_man_file_ir(
@@ -3633,9 +3900,13 @@ class BigDataBag:
                 ("d6", vec![("op6", "svc", "Service")]),
             ],
         );
-        let findings3 = detect_middle_man_from_callgraph(&file_ir_sev3, &thresholds, "python", false);
+        let findings3 =
+            detect_middle_man_from_callgraph(&file_ir_sev3, &thresholds, "python", false);
         assert!(!findings3.is_empty());
-        assert_eq!(findings3[0].severity, 3, "100% with 6 delegators = severity 3");
+        assert_eq!(
+            findings3[0].severity, 3,
+            "100% with 6 delegators = severity 3"
+        );
     }
 
     // --- Refused Bequest tests ---
@@ -3665,8 +3936,8 @@ class BigDataBag:
         parent_node_builder: impl FnOnce() -> crate::types::inheritance::InheritanceNode,
         child_calls: &[(/* child_method */ &str, /* call_target */ &str)],
     ) -> (CallGraphIR, InheritanceReport) {
-        use crate::callgraph::cross_file_types::{ClassDef, FuncDef, CallSite, CallType};
-        use crate::types::inheritance::{InheritanceReport, InheritanceNode};
+        use crate::callgraph::cross_file_types::{CallSite, CallType, ClassDef, FuncDef};
+        use crate::types::inheritance::{InheritanceNode, InheritanceReport};
 
         let parent_file_path = PathBuf::from("parent.py");
         let child_file_path = PathBuf::from("child.py");
@@ -3682,12 +3953,9 @@ class BigDataBag:
         ));
         for (i, method_name) in parent_methods.iter().enumerate() {
             let line = (i as u32 * 3) + 2;
-            parent_file_ir.funcs.push(FuncDef::method(
-                *method_name,
-                parent_name,
-                line,
-                line + 2,
-            ));
+            parent_file_ir
+                .funcs
+                .push(FuncDef::method(*method_name, parent_name, line, line + 2));
         }
 
         // Build child FileIR
@@ -3701,12 +3969,9 @@ class BigDataBag:
         ));
         for (i, method_name) in child_methods.iter().enumerate() {
             let line = (i as u32 * 3) + 2;
-            child_file_ir.funcs.push(FuncDef::method(
-                *method_name,
-                child_name,
-                line,
-                line + 2,
-            ));
+            child_file_ir
+                .funcs
+                .push(FuncDef::method(*method_name, child_name, line, line + 2));
         }
 
         // Add child calls (e.g., calls to parent methods via super())
@@ -3739,7 +4004,8 @@ class BigDataBag:
             PathBuf::from("child.py"),
             1,
             crate::types::Language::Python,
-        ).with_base(parent_name.to_string());
+        )
+        .with_base(parent_name.to_string());
 
         let ir = InheritanceReport {
             edges: vec![edge],
@@ -3762,32 +4028,53 @@ class BigDataBag:
         // Below 33% threshold -> should trigger
         use crate::types::inheritance::{InheritanceEdge, InheritanceNode};
 
-        let parent_methods: Vec<&str> = (1..=10).map(|i| match i {
-            1 => "method1", 2 => "method2", 3 => "method3", 4 => "method4",
-            5 => "method5", 6 => "method6", 7 => "method7", 8 => "method8",
-            9 => "method9", _ => "method10",
-        }).collect();
+        let parent_methods: Vec<&str> = (1..=10)
+            .map(|i| match i {
+                1 => "method1",
+                2 => "method2",
+                3 => "method3",
+                4 => "method4",
+                5 => "method5",
+                6 => "method6",
+                7 => "method7",
+                8 => "method8",
+                9 => "method9",
+                _ => "method10",
+            })
+            .collect();
 
         let (cg, ir) = build_refused_bequest_test_data(
             "BaseService",
             &parent_methods,
             "ChildService",
             &["method1", "custom_method"],
-            || InheritanceEdge::project(
-                "ChildService", "BaseService",
-                PathBuf::from("child.py"), 1,
-                PathBuf::from("parent.py"), 1,
-            ),
-            || InheritanceNode::new(
-                "BaseService", PathBuf::from("parent.py"), 1,
-                crate::types::Language::Python,
-            ),
+            || {
+                InheritanceEdge::project(
+                    "ChildService",
+                    "BaseService",
+                    PathBuf::from("child.py"),
+                    1,
+                    PathBuf::from("parent.py"),
+                    1,
+                )
+            },
+            || {
+                InheritanceNode::new(
+                    "BaseService",
+                    PathBuf::from("parent.py"),
+                    1,
+                    crate::types::Language::Python,
+                )
+            },
             &[], // method1 is overridden (name match), no explicit calls
         );
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_refused_bequest_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(!findings.is_empty(), "Subclass using 1/10 (10%) of inherited methods should trigger");
+        assert!(
+            !findings.is_empty(),
+            "Subclass using 1/10 (10%) of inherited methods should trigger"
+        );
         assert_eq!(findings[0].smell_type, SmellType::RefusedBequest);
     }
 
@@ -3801,21 +4088,33 @@ class BigDataBag:
             &["eat", "sleep", "move_around"],
             "Dog",
             &["eat", "sleep", "move_around", "bark"],
-            || InheritanceEdge::project(
-                "Dog", "Animal",
-                PathBuf::from("child.py"), 1,
-                PathBuf::from("parent.py"), 1,
-            ),
-            || InheritanceNode::new(
-                "Animal", PathBuf::from("parent.py"), 1,
-                crate::types::Language::Python,
-            ),
+            || {
+                InheritanceEdge::project(
+                    "Dog",
+                    "Animal",
+                    PathBuf::from("child.py"),
+                    1,
+                    PathBuf::from("parent.py"),
+                    1,
+                )
+            },
+            || {
+                InheritanceNode::new(
+                    "Animal",
+                    PathBuf::from("parent.py"),
+                    1,
+                    crate::types::Language::Python,
+                )
+            },
             &[], // All 3 methods overridden by name match
         );
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_refused_bequest_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(findings.is_empty(), "Subclass using 100% of inherited methods should not trigger");
+        assert!(
+            findings.is_empty(),
+            "Subclass using 100% of inherited methods should not trigger"
+        );
     }
 
     #[test]
@@ -3828,20 +4127,31 @@ class BigDataBag:
             &["ext_method1", "ext_method2", "ext_method3", "ext_method4"],
             "MyClass",
             &["my_method"],
-            || InheritanceEdge::unresolved(
-                "MyClass", "SomeExternalBase",
-                PathBuf::from("child.py"), 1,
-            ),
-            || InheritanceNode::new(
-                "SomeExternalBase", PathBuf::from("external.py"), 1,
-                crate::types::Language::Python,
-            ),
+            || {
+                InheritanceEdge::unresolved(
+                    "MyClass",
+                    "SomeExternalBase",
+                    PathBuf::from("child.py"),
+                    1,
+                )
+            },
+            || {
+                InheritanceNode::new(
+                    "SomeExternalBase",
+                    PathBuf::from("external.py"),
+                    1,
+                    crate::types::Language::Python,
+                )
+            },
             &[],
         );
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_refused_bequest_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(findings.is_empty(), "Should skip when base class is external/unresolved");
+        assert!(
+            findings.is_empty(),
+            "Should skip when base class is external/unresolved"
+        );
     }
 
     #[test]
@@ -3852,8 +4162,8 @@ class BigDataBag:
         // But if we increase parent methods to 4 each, then:
         // Base1: 1/4 = 25% usage -> below 33% -> triggers
         // Base2: 0/4 = 0% usage -> below 33% -> triggers
-        use crate::types::inheritance::{InheritanceEdge, InheritanceNode, InheritanceReport};
         use crate::callgraph::cross_file_types::{ClassDef, FuncDef};
+        use crate::types::inheritance::{InheritanceEdge, InheritanceNode, InheritanceReport};
 
         let parent1_path = PathBuf::from("base1.py");
         let _parent2_path = PathBuf::from("base2.py");
@@ -3862,24 +4172,42 @@ class BigDataBag:
         // Build Base1 FileIR
         let mut base1_ir = FileIR::new(parent1_path.clone());
         base1_ir.classes.push(ClassDef::new(
-            "Base1".to_string(), 1, 15,
-            vec!["method1".into(), "method2".into(), "method3".into(), "method4".into()],
+            "Base1".to_string(),
+            1,
+            15,
+            vec![
+                "method1".into(),
+                "method2".into(),
+                "method3".into(),
+                "method4".into(),
+            ],
             vec![],
         ));
-        for (i, name) in ["method1", "method2", "method3", "method4"].iter().enumerate() {
+        for (i, name) in ["method1", "method2", "method3", "method4"]
+            .iter()
+            .enumerate()
+        {
             let line = (i as u32 * 3) + 2;
-            base1_ir.funcs.push(FuncDef::method(*name, "Base1", line, line + 2));
+            base1_ir
+                .funcs
+                .push(FuncDef::method(*name, "Base1", line, line + 2));
         }
 
         // Build child FileIR with method1 override
         let mut child_ir = FileIR::new(child_path.clone());
         child_ir.classes.push(ClassDef::new(
-            "Child".to_string(), 1, 10,
+            "Child".to_string(),
+            1,
+            10,
             vec!["method1".into(), "custom".into()],
             vec!["Base1".into()],
         ));
-        child_ir.funcs.push(FuncDef::method("method1", "Child", 2, 4));
-        child_ir.funcs.push(FuncDef::method("custom", "Child", 5, 7));
+        child_ir
+            .funcs
+            .push(FuncDef::method("method1", "Child", 2, 4));
+        child_ir
+            .funcs
+            .push(FuncDef::method("custom", "Child", 5, 7));
 
         // Build CallGraphIR
         let mut cg = CallGraphIR::new(PathBuf::from("."), "python");
@@ -3888,16 +4216,26 @@ class BigDataBag:
 
         // Build InheritanceReport with one edge: Child -> Base1
         let edge = InheritanceEdge::project(
-            "Child", "Base1",
-            PathBuf::from("child.py"), 1,
-            parent1_path, 1,
+            "Child",
+            "Base1",
+            PathBuf::from("child.py"),
+            1,
+            parent1_path,
+            1,
         );
         let base1_node = InheritanceNode::new(
-            "Base1", PathBuf::from("base1.py"), 1, crate::types::Language::Python,
+            "Base1",
+            PathBuf::from("base1.py"),
+            1,
+            crate::types::Language::Python,
         );
         let child_node = InheritanceNode::new(
-            "Child", PathBuf::from("child.py"), 1, crate::types::Language::Python,
-        ).with_base("Base1".to_string());
+            "Child",
+            PathBuf::from("child.py"),
+            1,
+            crate::types::Language::Python,
+        )
+        .with_base("Base1".to_string());
 
         let ir = InheritanceReport {
             edges: vec![edge],
@@ -3914,7 +4252,10 @@ class BigDataBag:
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_refused_bequest_from_callgraph(&cg, &ir, &thresholds, false);
         // Child overrides method1 out of 4 = 25% usage < 33% threshold
-        assert!(!findings.is_empty(), "1/4 methods used (25%) should trigger refused bequest");
+        assert!(
+            !findings.is_empty(),
+            "1/4 methods used (25%) should trigger refused bequest"
+        );
     }
 
     #[test]
@@ -3928,21 +4269,33 @@ class BigDataBag:
             &["method1", "method2", "method3", "method4", "method5"],
             "Child",
             &["method1", "method2"], // overrides 2 of 5
-            || InheritanceEdge::project(
-                "Child", "Base",
-                PathBuf::from("child.py"), 1,
-                PathBuf::from("parent.py"), 1,
-            ),
-            || InheritanceNode::new(
-                "Base", PathBuf::from("parent.py"), 1,
-                crate::types::Language::Python,
-            ),
+            || {
+                InheritanceEdge::project(
+                    "Child",
+                    "Base",
+                    PathBuf::from("child.py"),
+                    1,
+                    PathBuf::from("parent.py"),
+                    1,
+                )
+            },
+            || {
+                InheritanceNode::new(
+                    "Base",
+                    PathBuf::from("parent.py"),
+                    1,
+                    crate::types::Language::Python,
+                )
+            },
             &[], // Overrides counted by name match, no explicit calls needed
         );
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_refused_bequest_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(findings.is_empty(), "Overriding counts as using - 2/5 = 40% should not trigger (threshold 33%)");
+        assert!(
+            findings.is_empty(),
+            "Overriding counts as using - 2/5 = 40% should not trigger (threshold 33%)"
+        );
     }
 
     // --- New Refused Bequest tests (Phase 3) ---
@@ -3957,48 +4310,74 @@ class BigDataBag:
             &["method1", "method2", "method3", "method4", "method5"],
             "ConcreteChild",
             &["custom_only"], // uses 0/5 = 0% -> would trigger if not excluded
-            || InheritanceEdge::project(
-                "ConcreteChild", "AbstractBase",
-                PathBuf::from("child.py"), 1,
-                PathBuf::from("parent.py"), 1,
-            ),
-            || InheritanceNode::new(
-                "AbstractBase", PathBuf::from("parent.py"), 1,
-                crate::types::Language::Python,
-            ).as_abstract(), // Mark parent as abstract
+            || {
+                InheritanceEdge::project(
+                    "ConcreteChild",
+                    "AbstractBase",
+                    PathBuf::from("child.py"),
+                    1,
+                    PathBuf::from("parent.py"),
+                    1,
+                )
+            },
+            || {
+                InheritanceNode::new(
+                    "AbstractBase",
+                    PathBuf::from("parent.py"),
+                    1,
+                    crate::types::Language::Python,
+                )
+                .as_abstract()
+            }, // Mark parent as abstract
             &[],
         );
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_refused_bequest_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(findings.is_empty(), "Abstract parent should be excluded from refused bequest check");
+        assert!(
+            findings.is_empty(),
+            "Abstract parent should be excluded from refused bequest check"
+        );
     }
 
     #[test]
     fn test_refused_bequest_go_embedding_excluded() {
         // Go struct embedding (kind = Embeds) -> should be skipped (XL2)
-        use crate::types::inheritance::{InheritanceEdge, InheritanceNode, InheritanceKind};
+        use crate::types::inheritance::{InheritanceEdge, InheritanceKind, InheritanceNode};
 
         let (cg, ir) = build_refused_bequest_test_data(
             "BaseStruct",
             &["Method1", "Method2", "Method3", "Method4"],
             "ChildStruct",
             &["CustomMethod"], // uses 0/4 = 0% -> would trigger if not excluded
-            || InheritanceEdge::project(
-                "ChildStruct", "BaseStruct",
-                PathBuf::from("child.py"), 1,
-                PathBuf::from("parent.py"), 1,
-            ).with_kind(InheritanceKind::Embeds), // Go embedding
-            || InheritanceNode::new(
-                "BaseStruct", PathBuf::from("parent.py"), 1,
-                crate::types::Language::Go,
-            ),
+            || {
+                InheritanceEdge::project(
+                    "ChildStruct",
+                    "BaseStruct",
+                    PathBuf::from("child.py"),
+                    1,
+                    PathBuf::from("parent.py"),
+                    1,
+                )
+                .with_kind(InheritanceKind::Embeds)
+            }, // Go embedding
+            || {
+                InheritanceNode::new(
+                    "BaseStruct",
+                    PathBuf::from("parent.py"),
+                    1,
+                    crate::types::Language::Go,
+                )
+            },
             &[],
         );
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_refused_bequest_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(findings.is_empty(), "Go embedding (Embeds kind) should be excluded from refused bequest check");
+        assert!(
+            findings.is_empty(),
+            "Go embedding (Embeds kind) should be excluded from refused bequest check"
+        );
     }
 
     #[test]
@@ -4012,21 +4391,33 @@ class BigDataBag:
             &["render", "validate", "save", "delete", "archive"],
             "SpecialChild",
             &["render", "validate", "save"], // overrides 3 of 5 = 60%
-            || InheritanceEdge::project(
-                "SpecialChild", "Parent",
-                PathBuf::from("child.py"), 1,
-                PathBuf::from("parent.py"), 1,
-            ),
-            || InheritanceNode::new(
-                "Parent", PathBuf::from("parent.py"), 1,
-                crate::types::Language::Python,
-            ),
+            || {
+                InheritanceEdge::project(
+                    "SpecialChild",
+                    "Parent",
+                    PathBuf::from("child.py"),
+                    1,
+                    PathBuf::from("parent.py"),
+                    1,
+                )
+            },
+            || {
+                InheritanceNode::new(
+                    "Parent",
+                    PathBuf::from("parent.py"),
+                    1,
+                    crate::types::Language::Python,
+                )
+            },
             &[], // Overrides by name match only
         );
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_refused_bequest_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(findings.is_empty(), "3/5 overrides (60%) should not trigger (threshold 33%)");
+        assert!(
+            findings.is_empty(),
+            "3/5 overrides (60%) should not trigger (threshold 33%)"
+        );
     }
 
     #[test]
@@ -4039,21 +4430,34 @@ class BigDataBag:
             &["log_info", "log_debug", "log_error", "log_warning"],
             "MyService",
             &["process"], // uses 0/4 = 0% -> would trigger if not excluded
-            || InheritanceEdge::project(
-                "MyService", "LoggingMixin",
-                PathBuf::from("child.py"), 1,
-                PathBuf::from("parent.py"), 1,
-            ),
-            || InheritanceNode::new(
-                "LoggingMixin", PathBuf::from("parent.py"), 1,
-                crate::types::Language::Python,
-            ).as_mixin(), // Mark parent as mixin
+            || {
+                InheritanceEdge::project(
+                    "MyService",
+                    "LoggingMixin",
+                    PathBuf::from("child.py"),
+                    1,
+                    PathBuf::from("parent.py"),
+                    1,
+                )
+            },
+            || {
+                InheritanceNode::new(
+                    "LoggingMixin",
+                    PathBuf::from("parent.py"),
+                    1,
+                    crate::types::Language::Python,
+                )
+                .as_mixin()
+            }, // Mark parent as mixin
             &[],
         );
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_refused_bequest_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(findings.is_empty(), "Mixin parent should be excluded from refused bequest check");
+        assert!(
+            findings.is_empty(),
+            "Mixin parent should be excluded from refused bequest check"
+        );
     }
 
     #[test]
@@ -4066,48 +4470,75 @@ class BigDataBag:
             &["render", "to_html", "to_json", "to_xml"],
             "SimpleRenderer",
             &["custom_render"], // uses 0/4 = 0% -> would trigger if not excluded
-            || InheritanceEdge::project(
-                "SimpleRenderer", "Renderable",
-                PathBuf::from("child.py"), 1,
-                PathBuf::from("parent.py"), 1,
-            ),
-            || InheritanceNode::new(
-                "Renderable", PathBuf::from("parent.py"), 1,
-                crate::types::Language::Python,
-            ).as_protocol(), // Mark parent as protocol
+            || {
+                InheritanceEdge::project(
+                    "SimpleRenderer",
+                    "Renderable",
+                    PathBuf::from("child.py"),
+                    1,
+                    PathBuf::from("parent.py"),
+                    1,
+                )
+            },
+            || {
+                InheritanceNode::new(
+                    "Renderable",
+                    PathBuf::from("parent.py"),
+                    1,
+                    crate::types::Language::Python,
+                )
+                .as_protocol()
+            }, // Mark parent as protocol
             &[],
         );
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_refused_bequest_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(findings.is_empty(), "Protocol parent should be excluded from refused bequest check");
+        assert!(
+            findings.is_empty(),
+            "Protocol parent should be excluded from refused bequest check"
+        );
     }
 
     #[test]
     fn test_refused_bequest_implements_kind_excluded() {
         // Interface implementation (kind = Implements) -> should be skipped
-        use crate::types::inheritance::{InheritanceEdge, InheritanceNode, InheritanceKind};
+        use crate::types::inheritance::{InheritanceEdge, InheritanceKind, InheritanceNode};
 
         let (cg, ir) = build_refused_bequest_test_data(
             "Repository",
             &["find", "save", "delete", "update"],
             "UserRepo",
             &["custom_find"], // uses 0/4 = 0%
-            || InheritanceEdge::project(
-                "UserRepo", "Repository",
-                PathBuf::from("child.py"), 1,
-                PathBuf::from("parent.py"), 1,
-            ).with_kind(InheritanceKind::Implements),
-            || InheritanceNode::new(
-                "Repository", PathBuf::from("parent.py"), 1,
-                crate::types::Language::Python,
-            ).as_interface(),
+            || {
+                InheritanceEdge::project(
+                    "UserRepo",
+                    "Repository",
+                    PathBuf::from("child.py"),
+                    1,
+                    PathBuf::from("parent.py"),
+                    1,
+                )
+                .with_kind(InheritanceKind::Implements)
+            },
+            || {
+                InheritanceNode::new(
+                    "Repository",
+                    PathBuf::from("parent.py"),
+                    1,
+                    crate::types::Language::Python,
+                )
+                .as_interface()
+            },
             &[],
         );
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_refused_bequest_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(findings.is_empty(), "Interface implementation (Implements kind) should be excluded");
+        assert!(
+            findings.is_empty(),
+            "Interface implementation (Implements kind) should be excluded"
+        );
     }
 
     #[test]
@@ -4115,35 +4546,59 @@ class BigDataBag:
         // Same as basic test but with suggest=true to verify suggestion text
         use crate::types::inheritance::{InheritanceEdge, InheritanceNode};
 
-        let parent_methods: Vec<&str> = (1..=10).map(|i| match i {
-            1 => "method1", 2 => "method2", 3 => "method3", 4 => "method4",
-            5 => "method5", 6 => "method6", 7 => "method7", 8 => "method8",
-            9 => "method9", _ => "method10",
-        }).collect();
+        let parent_methods: Vec<&str> = (1..=10)
+            .map(|i| match i {
+                1 => "method1",
+                2 => "method2",
+                3 => "method3",
+                4 => "method4",
+                5 => "method5",
+                6 => "method6",
+                7 => "method7",
+                8 => "method8",
+                9 => "method9",
+                _ => "method10",
+            })
+            .collect();
 
         let (cg, ir) = build_refused_bequest_test_data(
             "BaseService",
             &parent_methods,
             "ChildService",
             &["method1", "custom_method"],
-            || InheritanceEdge::project(
-                "ChildService", "BaseService",
-                PathBuf::from("child.py"), 1,
-                PathBuf::from("parent.py"), 1,
-            ),
-            || InheritanceNode::new(
-                "BaseService", PathBuf::from("parent.py"), 1,
-                crate::types::Language::Python,
-            ),
+            || {
+                InheritanceEdge::project(
+                    "ChildService",
+                    "BaseService",
+                    PathBuf::from("child.py"),
+                    1,
+                    PathBuf::from("parent.py"),
+                    1,
+                )
+            },
+            || {
+                InheritanceNode::new(
+                    "BaseService",
+                    PathBuf::from("parent.py"),
+                    1,
+                    crate::types::Language::Python,
+                )
+            },
             &[],
         );
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_refused_bequest_from_callgraph(&cg, &ir, &thresholds, true);
         assert!(!findings.is_empty(), "Should trigger with suggest=true");
-        assert!(findings[0].suggestion.is_some(), "Should include a suggestion");
+        assert!(
+            findings[0].suggestion.is_some(),
+            "Should include a suggestion"
+        );
         let suggestion = findings[0].suggestion.as_ref().unwrap();
-        assert!(suggestion.contains("composition"), "Suggestion should mention composition");
+        assert!(
+            suggestion.contains("composition"),
+            "Suggestion should mention composition"
+        );
     }
 
     #[test]
@@ -4157,24 +4612,36 @@ class BigDataBag:
             &["method1", "method2", "method3", "method4", "method5"],
             "Child",
             &["do_work", "do_other"], // No name matches with parent
-            || InheritanceEdge::project(
-                "Child", "Base",
-                PathBuf::from("child.py"), 1,
-                PathBuf::from("parent.py"), 1,
-            ),
-            || InheritanceNode::new(
-                "Base", PathBuf::from("parent.py"), 1,
-                crate::types::Language::Python,
-            ),
+            || {
+                InheritanceEdge::project(
+                    "Child",
+                    "Base",
+                    PathBuf::from("child.py"),
+                    1,
+                    PathBuf::from("parent.py"),
+                    1,
+                )
+            },
+            || {
+                InheritanceNode::new(
+                    "Base",
+                    PathBuf::from("parent.py"),
+                    1,
+                    crate::types::Language::Python,
+                )
+            },
             &[
-                ("do_work", "method1"),     // Calls parent's method1
-                ("do_other", "method2"),    // Calls parent's method2
+                ("do_work", "method1"),  // Calls parent's method1
+                ("do_other", "method2"), // Calls parent's method2
             ],
         );
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_refused_bequest_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(findings.is_empty(), "Calling 2/5 parent methods (40%) should not trigger");
+        assert!(
+            findings.is_empty(),
+            "Calling 2/5 parent methods (40%) should not trigger"
+        );
     }
 
     // --- Feature Envy tests ---
@@ -4211,7 +4678,9 @@ class BigDataBag:
         // Add constructor if specified
         if let Some(ctor) = constructor_name {
             method_names.push(ctor.to_string());
-            file_ir.funcs.push(FuncDef::method(ctor, class_name, line, line + 2));
+            file_ir
+                .funcs
+                .push(FuncDef::method(ctor, class_name, line, line + 2));
             line += 3;
         }
 
@@ -4219,7 +4688,9 @@ class BigDataBag:
         for (method_name, is_method, calls) in &methods {
             method_names.push(method_name.to_string());
             if *is_method {
-                file_ir.funcs.push(FuncDef::method(*method_name, class_name, line, line + 5));
+                file_ir
+                    .funcs
+                    .push(FuncDef::method(*method_name, class_name, line, line + 5));
             } else {
                 // Static/standalone function -- not a method (is_method=false, no class_name)
                 file_ir.funcs.push(FuncDef::new(
@@ -4234,15 +4705,22 @@ class BigDataBag:
             }
 
             let qualified = format!("{}.{}", class_name, method_name);
-            let call_sites: Vec<CallSite> = calls.iter().map(|(target, receiver, receiver_type)| {
-                CallSite::method(
-                    qualified.clone(),
-                    *target,
-                    *receiver,
-                    if receiver_type.is_empty() { None } else { Some(receiver_type.to_string()) },
-                    Some(line + 1),
-                )
-            }).collect();
+            let call_sites: Vec<CallSite> = calls
+                .iter()
+                .map(|(target, receiver, receiver_type)| {
+                    CallSite::method(
+                        qualified.clone(),
+                        *target,
+                        *receiver,
+                        if receiver_type.is_empty() {
+                            None
+                        } else {
+                            Some(receiver_type.to_string())
+                        },
+                        Some(line + 1),
+                    )
+                })
+                .collect();
 
             if !call_sites.is_empty() {
                 file_ir.calls.insert(qualified, call_sites);
@@ -4269,19 +4747,24 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Invoice",
             Some("__init__"),
-            vec![
-                ("calculate_discount", true, vec![
+            vec![(
+                "calculate_discount",
+                true,
+                vec![
                     ("loyalty_points", "customer", "Customer"),
                     ("discount_rate", "customer", "Customer"),
                     ("years_active", "customer", "Customer"),
                     ("bonus_multiplier", "customer", "Customer"),
                     ("amount", "self", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(!findings.is_empty(), "Method accessing other class 4 times vs own 1 time should trigger");
+        assert!(
+            !findings.is_empty(),
+            "Method accessing other class 4 times vs own 1 time should trigger"
+        );
         assert_eq!(findings[0].smell_type, SmellType::FeatureEnvy);
     }
 
@@ -4291,17 +4774,22 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Account",
             Some("__init__"),
-            vec![
-                ("calculate_interest", true, vec![
+            vec![(
+                "calculate_interest",
+                true,
+                vec![
                     ("balance", "self", ""),
                     ("rate", "self", ""),
                     ("fees", "self", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(findings.is_empty(), "Method using only own fields should not trigger");
+        assert!(
+            findings.is_empty(),
+            "Method using only own fields should not trigger"
+        );
     }
 
     #[test]
@@ -4310,19 +4798,24 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Report",
             None,
-            vec![
-                ("generate", true, vec![
+            vec![(
+                "generate",
+                true,
+                vec![
                     ("get_title", "data", "DataSource"),
                     ("get_author", "data", "DataSource"),
                     ("get_content", "data", "DataSource"),
                     ("get_footer", "data", "DataSource"),
                     ("format_output", "self", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(!findings.is_empty(), "4 external vs 1 own method call should trigger");
+        assert!(
+            !findings.is_empty(),
+            "4 external vs 1 own method call should trigger"
+        );
         assert_eq!(findings[0].smell_type, SmellType::FeatureEnvy);
     }
 
@@ -4332,18 +4825,23 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Processor",
             Some("__init__"),
-            vec![
-                ("process", true, vec![
+            vec![(
+                "process",
+                true,
+                vec![
                     ("value", "item", "Item"),
                     ("weight", "item", "Item"),
                     ("get_config", "self", ""),
                     ("transform", "self", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(findings.is_empty(), "2 foreign vs 2 own (ratio 1:1) should not trigger at default threshold (2.0)");
+        assert!(
+            findings.is_empty(),
+            "2 foreign vs 2 own (ratio 1:1) should not trigger at default threshold (2.0)"
+        );
     }
 
     #[test]
@@ -4352,19 +4850,24 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Util",
             None,
-            vec![
-                ("helper", false, vec![
+            vec![(
+                "helper",
+                false,
+                vec![
                     ("x", "data", "Data"),
                     ("y", "data", "Data"),
                     ("z", "data", "Data"),
                     ("w", "data", "Data"),
                     ("v", "data", "Data"),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(findings.is_empty(), "Static methods should be excluded from feature envy");
+        assert!(
+            findings.is_empty(),
+            "Static methods should be excluded from feature envy"
+        );
     }
 
     #[test]
@@ -4373,19 +4876,24 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "UserFormatter",
             None,
-            vec![
-                ("format_user", true, vec![
+            vec![(
+                "format_user",
+                true,
+                vec![
                     ("get_name", "user", "User"),
                     ("get_email", "user", "User"),
                     ("get_age", "user", "User"),
                     ("get_address", "user", "User"),
                     ("get_phone", "user", "User"),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(findings.is_empty(), "Classes with 'Formatter' in name should be excluded (role-based C4)");
+        assert!(
+            findings.is_empty(),
+            "Classes with 'Formatter' in name should be excluded (role-based C4)"
+        );
     }
 
     #[test]
@@ -4394,21 +4902,26 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Analyzer",
             None,
-            vec![
-                ("analyze", true, vec![
+            vec![(
+                "analyze",
+                true,
+                vec![
                     ("metric1", "stats", "Stats"),
                     ("metric2", "stats", "Stats"),
                     ("metric3", "stats", "Stats"),
                     ("metric4", "stats", "Stats"),
                     ("get_base", "self", ""),
                     ("get_factor", "self", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "python", false);
         // 4 foreign, 2 own => ratio 2.0 >= 2.0 threshold, and foreign 4 >= min_foreign 4
-        assert!(!findings.is_empty(), "Exactly at threshold (4 foreign, ratio 2.0) should trigger");
+        assert!(
+            !findings.is_empty(),
+            "Exactly at threshold (4 foreign, ratio 2.0) should trigger"
+        );
     }
 
     #[test]
@@ -4417,16 +4930,21 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "SmallEnvy",
             None,
-            vec![
-                ("process", true, vec![
+            vec![(
+                "process",
+                true,
+                vec![
                     ("get_x", "other", "OtherClass"),
                     ("get_y", "other", "OtherClass"),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(findings.is_empty(), "2 foreign accesses (below min_foreign=4) should not trigger");
+        assert!(
+            findings.is_empty(),
+            "2 foreign accesses (below min_foreign=4) should not trigger"
+        );
     }
 
     #[test]
@@ -4435,19 +4953,24 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Service",
             None,
-            vec![
-                ("__init__", true, vec![
+            vec![(
+                "__init__",
+                true,
+                vec![
                     ("get_config", "db", "Database"),
                     ("get_pool", "db", "Database"),
                     ("get_timeout", "db", "Database"),
                     ("get_retries", "db", "Database"),
                     ("get_host", "db", "Database"),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(findings.is_empty(), "Constructor methods should be excluded from feature envy analysis");
+        assert!(
+            findings.is_empty(),
+            "Constructor methods should be excluded from feature envy analysis"
+        );
     }
 
     #[test]
@@ -4458,26 +4981,34 @@ class BigDataBag:
         let file_ir_mild = build_feature_envy_file_ir(
             "MildEnvy",
             None,
-            vec![
-                ("envious_method", true, vec![
+            vec![(
+                "envious_method",
+                true,
+                vec![
                     ("a", "other", "Other"),
                     ("b", "other", "Other"),
                     ("c", "other", "Other"),
                     ("d", "other", "Other"),
                     ("own_method", "self", ""),
-                ]),
-            ],
+                ],
+            )],
         );
-        let findings = detect_feature_envy_from_callgraph(&file_ir_mild, &thresholds, "python", false);
+        let findings =
+            detect_feature_envy_from_callgraph(&file_ir_mild, &thresholds, "python", false);
         assert!(!findings.is_empty(), "4 foreign, 1 own should trigger");
-        assert_eq!(findings[0].severity, 1, "4 foreign, 1 own should be severity 1");
+        assert_eq!(
+            findings[0].severity, 1,
+            "4 foreign, 1 own should be severity 1"
+        );
 
         // Severity 2: strong envy (6 foreign, 1 own => ratio 6.0, foreign >= 5, ratio > 2.5)
         let file_ir_strong = build_feature_envy_file_ir(
             "StrongEnvy",
             None,
-            vec![
-                ("very_envious", true, vec![
+            vec![(
+                "very_envious",
+                true,
+                vec![
                     ("a", "other", "Other"),
                     ("b", "other", "Other"),
                     ("c", "other", "Other"),
@@ -4485,19 +5016,25 @@ class BigDataBag:
                     ("e", "other", "Other"),
                     ("f", "other", "Other"),
                     ("own_method", "self", ""),
-                ]),
-            ],
+                ],
+            )],
         );
-        let findings = detect_feature_envy_from_callgraph(&file_ir_strong, &thresholds, "python", false);
+        let findings =
+            detect_feature_envy_from_callgraph(&file_ir_strong, &thresholds, "python", false);
         assert!(!findings.is_empty(), "6 foreign, 1 own should trigger");
-        assert_eq!(findings[0].severity, 2, "6 foreign, 1 own should be severity 2");
+        assert_eq!(
+            findings[0].severity, 2,
+            "6 foreign, 1 own should be severity 2"
+        );
 
         // Severity 3: extreme envy (10 foreign, 1 own => foreign >= 8, ratio > 4.0)
         let file_ir_extreme = build_feature_envy_file_ir(
             "ExtremeEnvy",
             None,
-            vec![
-                ("extremely_envious", true, vec![
+            vec![(
+                "extremely_envious",
+                true,
+                vec![
                     ("a", "other", "Other"),
                     ("b", "other", "Other"),
                     ("c", "other", "Other"),
@@ -4509,12 +5046,16 @@ class BigDataBag:
                     ("i", "other", "Other"),
                     ("j", "other", "Other"),
                     ("own_method", "self", ""),
-                ]),
-            ],
+                ],
+            )],
         );
-        let findings = detect_feature_envy_from_callgraph(&file_ir_extreme, &thresholds, "python", false);
+        let findings =
+            detect_feature_envy_from_callgraph(&file_ir_extreme, &thresholds, "python", false);
         assert!(!findings.is_empty(), "10 foreign, 1 own should trigger");
-        assert_eq!(findings[0].severity, 3, "10 foreign, 1 own should be severity 3");
+        assert_eq!(
+            findings[0].severity, 3,
+            "10 foreign, 1 own should be severity 3"
+        );
     }
 
     #[test]
@@ -4522,22 +5063,30 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Reporter",
             None,
-            vec![
-                ("generate", true, vec![
+            vec![(
+                "generate",
+                true,
+                vec![
                     ("get_title", "data", "DataSource"),
                     ("get_author", "data", "DataSource"),
                     ("get_content", "data", "DataSource"),
                     ("get_footer", "data", "DataSource"),
                     ("format_output", "self", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "python", true);
         assert!(!findings.is_empty());
-        assert!(findings[0].suggestion.is_some(), "suggestion should be present when suggest=true");
+        assert!(
+            findings[0].suggestion.is_some(),
+            "suggestion should be present when suggest=true"
+        );
         let suggestion = findings[0].suggestion.as_ref().unwrap();
-        assert!(suggestion.contains("DataSource"), "Suggestion should mention the envied class");
+        assert!(
+            suggestion.contains("DataSource"),
+            "Suggestion should mention the envied class"
+        );
     }
 
     #[test]
@@ -4546,60 +5095,76 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "PureEnvy",
             None,
-            vec![
-                ("all_foreign", true, vec![
+            vec![(
+                "all_foreign",
+                true,
+                vec![
                     ("a", "other", "Other"),
                     ("b", "other", "Other"),
                     ("c", "other", "Other"),
                     ("d", "other", "Other"),
                     ("e", "other", "Other"),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(!findings.is_empty(), "5 foreign, 0 own should trigger (division by zero handled)");
+        assert!(
+            !findings.is_empty(),
+            "5 foreign, 0 own should trigger (division by zero handled)"
+        );
     }
 
     #[test]
     fn test_feature_envy_no_calls() {
         // Method with no calls at all => should NOT trigger
-        let file_ir = build_feature_envy_file_ir(
-            "Silent",
-            None,
-            vec![
-                ("no_calls_method", true, vec![]),
-            ],
-        );
+        let file_ir =
+            build_feature_envy_file_ir("Silent", None, vec![("no_calls_method", true, vec![])]);
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "python", false);
-        assert!(findings.is_empty(), "Method with no calls should not trigger");
+        assert!(
+            findings.is_empty(),
+            "Method with no calls should not trigger"
+        );
     }
 
     #[test]
     fn test_feature_envy_role_exclusions() {
         let excluded_names = [
-            "DataSerializer", "JsonDeserializer", "RequestHandler",
-            "AstVisitor", "HtmlRenderer", "UserValidator",
-            "TypeConverter", "ObjectMapper", "FormBuilder",
+            "DataSerializer",
+            "JsonDeserializer",
+            "RequestHandler",
+            "AstVisitor",
+            "HtmlRenderer",
+            "UserValidator",
+            "TypeConverter",
+            "ObjectMapper",
+            "FormBuilder",
         ];
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         for class_name in &excluded_names {
             let file_ir = build_feature_envy_file_ir(
                 class_name,
                 None,
-                vec![
-                    ("process", true, vec![
+                vec![(
+                    "process",
+                    true,
+                    vec![
                         ("a", "other", "Other"),
                         ("b", "other", "Other"),
                         ("c", "other", "Other"),
                         ("d", "other", "Other"),
                         ("e", "other", "Other"),
-                    ]),
-                ],
+                    ],
+                )],
             );
-            let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "python", false);
-            assert!(findings.is_empty(), "Class '{}' should be excluded by role-based filter", class_name);
+            let findings =
+                detect_feature_envy_from_callgraph(&file_ir, &thresholds, "python", false);
+            assert!(
+                findings.is_empty(),
+                "Class '{}' should be excluded by role-based filter",
+                class_name
+            );
         }
     }
 
@@ -4609,19 +5174,25 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "TsComponent",
             None,
-            vec![
-                ("render", true, vec![
+            vec![(
+                "render",
+                true,
+                vec![
                     ("getData", "service", "ApiService"),
                     ("getConfig", "service", "ApiService"),
                     ("getHeaders", "service", "ApiService"),
                     ("getTimeout", "service", "ApiService"),
                     ("setState", "this", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
-        let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "typescript", false);
-        assert!(!findings.is_empty(), "4 foreign vs 1 own (this) should trigger in TypeScript");
+        let findings =
+            detect_feature_envy_from_callgraph(&file_ir, &thresholds, "typescript", false);
+        assert!(
+            !findings.is_empty(),
+            "4 foreign vs 1 own (this) should trigger in TypeScript"
+        );
     }
 
     // --- Inappropriate Intimacy tests ---
@@ -4629,7 +5200,10 @@ class BigDataBag:
     #[test]
     fn test_inappropriate_intimacy_variant_exists() {
         let _ = SmellType::InappropriateIntimacy;
-        assert_eq!(SmellType::InappropriateIntimacy.to_string(), "Inappropriate Intimacy");
+        assert_eq!(
+            SmellType::InappropriateIntimacy.to_string(),
+            "Inappropriate Intimacy"
+        );
     }
 
     #[test]
@@ -4657,7 +5231,7 @@ class BigDataBag:
         same_file: bool,
         inheritance_edges: Vec<crate::types::inheritance::InheritanceEdge>,
     ) -> (CallGraphIR, InheritanceReport) {
-        use crate::callgraph::cross_file_types::{ClassDef, FuncDef, CallSite, CallType};
+        use crate::callgraph::cross_file_types::{CallSite, CallType, ClassDef, FuncDef};
         use crate::types::inheritance::InheritanceReport;
 
         let file_a_path = PathBuf::from("file_a.py");
@@ -4678,12 +5252,9 @@ class BigDataBag:
         ));
         for (i, method_name) in class_a.methods.iter().enumerate() {
             let line = (i as u32 * 3) + 2;
-            file_a_ir.funcs.push(FuncDef::method(
-                *method_name,
-                class_a.name,
-                line,
-                line + 2,
-            ));
+            file_a_ir
+                .funcs
+                .push(FuncDef::method(*method_name, class_a.name, line, line + 2));
         }
         // Add A->B calls
         for (from_method, target) in class_a.outbound_calls {
@@ -4714,12 +5285,9 @@ class BigDataBag:
             ));
             for (i, method_name) in class_b.methods.iter().enumerate() {
                 let line = offset + (i as u32 * 3) + 1;
-                file_a_ir.funcs.push(FuncDef::method(
-                    *method_name,
-                    class_b.name,
-                    line,
-                    line + 2,
-                ));
+                file_a_ir
+                    .funcs
+                    .push(FuncDef::method(*method_name, class_b.name, line, line + 2));
             }
             // Add B->A calls
             for (from_method, target) in class_b.outbound_calls {
@@ -4766,12 +5334,9 @@ class BigDataBag:
             ));
             for (i, method_name) in class_b.methods.iter().enumerate() {
                 let line = (i as u32 * 3) + 2;
-                file_b_ir.funcs.push(FuncDef::method(
-                    *method_name,
-                    class_b.name,
-                    line,
-                    line + 2,
-                ));
+                file_b_ir
+                    .funcs
+                    .push(FuncDef::method(*method_name, class_b.name, line, line + 2));
             }
             // Add B->A calls
             for (from_method, target) in class_b.outbound_calls {
@@ -4847,7 +5412,10 @@ class BigDataBag:
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_inappropriate_intimacy_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(!findings.is_empty(), "Bidirectional coupling (6+6=12) should trigger at default threshold (10)");
+        assert!(
+            !findings.is_empty(),
+            "Bidirectional coupling (6+6=12) should trigger at default threshold (10)"
+        );
         assert_eq!(findings[0].smell_type, SmellType::InappropriateIntimacy);
     }
 
@@ -4879,7 +5447,10 @@ class BigDataBag:
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_inappropriate_intimacy_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(findings.is_empty(), "One-way access should not trigger (need bidirectional)");
+        assert!(
+            findings.is_empty(),
+            "One-way access should not trigger (need bidirectional)"
+        );
     }
 
     #[test]
@@ -4903,7 +5474,10 @@ class BigDataBag:
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_inappropriate_intimacy_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(findings.is_empty(), "Low-count bidirectional access (1+1=2) should not trigger");
+        assert!(
+            findings.is_empty(),
+            "Low-count bidirectional access (1+1=2) should not trigger"
+        );
     }
 
     #[test]
@@ -4941,7 +5515,10 @@ class BigDataBag:
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_inappropriate_intimacy_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(!findings.is_empty(), "Multiple bidirectional method calls (5+5=10) should trigger");
+        assert!(
+            !findings.is_empty(),
+            "Multiple bidirectional method calls (5+5=10) should trigger"
+        );
     }
 
     #[test]
@@ -4965,9 +5542,12 @@ class BigDataBag:
             ("use_parent3", "_protected_e"),
         ];
         let edge = InheritanceEdge::project(
-            "Child", "Parent",
-            PathBuf::from("file_a.py"), 1,
-            PathBuf::from("file_a.py"), 1,
+            "Child",
+            "Parent",
+            PathBuf::from("file_a.py"),
+            1,
+            PathBuf::from("file_a.py"),
+            1,
         );
         let (cg, ir) = build_intimacy_test_data(
             IntimacyClassSpec {
@@ -4986,7 +5566,10 @@ class BigDataBag:
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_inappropriate_intimacy_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(findings.is_empty(), "Parent-child access should be excluded by inheritance edge");
+        assert!(
+            findings.is_empty(),
+            "Parent-child access should be excluded by inheritance edge"
+        );
     }
 
     // --- New Inappropriate Intimacy tests (Phase 5) ---
@@ -4996,13 +5579,17 @@ class BigDataBag:
         // A -> B (9 calls), B -> A (1 call)
         // Total = 10, but min per-direction = 1 < 3 -> should NOT trigger
         let a_to_b: Vec<(&str, &str)> = vec![
-            ("m1", "t1"), ("m1", "t2"), ("m1", "t3"),
-            ("m2", "t4"), ("m2", "t5"), ("m2", "t6"),
-            ("m3", "t7"), ("m3", "t8"), ("m3", "t9"),
+            ("m1", "t1"),
+            ("m1", "t2"),
+            ("m1", "t3"),
+            ("m2", "t4"),
+            ("m2", "t5"),
+            ("m2", "t6"),
+            ("m3", "t7"),
+            ("m3", "t8"),
+            ("m3", "t9"),
         ];
-        let b_to_a: Vec<(&str, &str)> = vec![
-            ("m1", "s1"),
-        ];
+        let b_to_a: Vec<(&str, &str)> = vec![("m1", "s1")];
         let (cg, ir) = build_intimacy_test_data(
             IntimacyClassSpec {
                 name: "A",
@@ -5014,12 +5601,16 @@ class BigDataBag:
                 methods: &["m1"],
                 outbound_calls: &b_to_a,
             },
-            true, vec![],
+            true,
+            vec![],
         );
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_inappropriate_intimacy_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(findings.is_empty(), "High total (10) but low per-direction (1) should not trigger");
+        assert!(
+            findings.is_empty(),
+            "High total (10) but low per-direction (1) should not trigger"
+        );
     }
 
     #[test]
@@ -5027,12 +5618,8 @@ class BigDataBag:
         // Use Strict thresholds: intimacy_min_total=6, intimacy_min_per_direction=2
         // Test severity 1: 3+3=6 total, min_dir=3
         // Severity from intimacy_severity(6, 3) -> 1 (below 12/3 threshold for sev 2)
-        let a_to_b_1: Vec<(&str, &str)> = vec![
-            ("m1", "t1"), ("m1", "t2"), ("m2", "t3"),
-        ];
-        let b_to_a_1: Vec<(&str, &str)> = vec![
-            ("m1", "s1"), ("m1", "s2"), ("m2", "s3"),
-        ];
+        let a_to_b_1: Vec<(&str, &str)> = vec![("m1", "t1"), ("m1", "t2"), ("m2", "t3")];
+        let b_to_a_1: Vec<(&str, &str)> = vec![("m1", "s1"), ("m1", "s2"), ("m2", "s3")];
         let (cg1, ir1) = build_intimacy_test_data(
             IntimacyClassSpec {
                 name: "A1",
@@ -5044,22 +5631,37 @@ class BigDataBag:
                 methods: &["m1", "m2"],
                 outbound_calls: &b_to_a_1,
             },
-            true, vec![],
+            true,
+            vec![],
         );
         let thresholds_strict = Thresholds::from_preset(ThresholdPreset::Strict);
-        let findings1 = detect_inappropriate_intimacy_from_callgraph(&cg1, &ir1, &thresholds_strict, false);
-        assert!(!findings1.is_empty(), "3+3=6 should trigger at strict threshold (6)");
+        let findings1 =
+            detect_inappropriate_intimacy_from_callgraph(&cg1, &ir1, &thresholds_strict, false);
+        assert!(
+            !findings1.is_empty(),
+            "3+3=6 should trigger at strict threshold (6)"
+        );
         assert_eq!(findings1[0].severity, 1, "6 total, 3 min_dir -> severity 1");
 
         // Test severity 2: 7+7=14 total, min_dir=7
         // Severity from intimacy_severity(14, 7) -> 2
         let a_to_b_2: Vec<(&str, &str)> = vec![
-            ("m1", "t1"), ("m1", "t2"), ("m1", "t3"), ("m1", "t4"),
-            ("m2", "t5"), ("m2", "t6"), ("m2", "t7"),
+            ("m1", "t1"),
+            ("m1", "t2"),
+            ("m1", "t3"),
+            ("m1", "t4"),
+            ("m2", "t5"),
+            ("m2", "t6"),
+            ("m2", "t7"),
         ];
         let b_to_a_2: Vec<(&str, &str)> = vec![
-            ("m1", "s1"), ("m1", "s2"), ("m1", "s3"), ("m1", "s4"),
-            ("m2", "s5"), ("m2", "s6"), ("m2", "s7"),
+            ("m1", "s1"),
+            ("m1", "s2"),
+            ("m1", "s3"),
+            ("m1", "s4"),
+            ("m2", "s5"),
+            ("m2", "s6"),
+            ("m2", "s7"),
         ];
         let (cg2, ir2) = build_intimacy_test_data(
             IntimacyClassSpec {
@@ -5072,11 +5674,16 @@ class BigDataBag:
                 methods: &["m1", "m2"],
                 outbound_calls: &b_to_a_2,
             },
-            true, vec![],
+            true,
+            vec![],
         );
-        let findings2 = detect_inappropriate_intimacy_from_callgraph(&cg2, &ir2, &thresholds_strict, false);
+        let findings2 =
+            detect_inappropriate_intimacy_from_callgraph(&cg2, &ir2, &thresholds_strict, false);
         assert!(!findings2.is_empty(), "7+7=14 should trigger");
-        assert_eq!(findings2[0].severity, 2, "14 total, 7 min_dir -> severity 2");
+        assert_eq!(
+            findings2[0].severity, 2,
+            "14 total, 7 min_dir -> severity 2"
+        );
 
         // Test severity 3: 12+12=24 total, min_dir=12
         // Severity from intimacy_severity(24, 12) -> 3
@@ -5097,23 +5704,34 @@ class BigDataBag:
                 methods: &["m1"],
                 outbound_calls: &b_to_a_3,
             },
-            true, vec![],
+            true,
+            vec![],
         );
-        let findings3 = detect_inappropriate_intimacy_from_callgraph(&cg3, &ir3, &thresholds_strict, false);
+        let findings3 =
+            detect_inappropriate_intimacy_from_callgraph(&cg3, &ir3, &thresholds_strict, false);
         assert!(!findings3.is_empty(), "12+12=24 should trigger");
-        assert_eq!(findings3[0].severity, 3, "24 total, 12 min_dir -> severity 3");
+        assert_eq!(
+            findings3[0].severity, 3,
+            "24 total, 12 min_dir -> severity 3"
+        );
     }
 
     #[test]
     fn test_intimacy_cross_file() {
         // Classes in different files that reference each other -> should find intimacy
         let a_to_b: Vec<(&str, &str)> = vec![
-            ("m1", "t1"), ("m1", "t2"), ("m1", "t3"),
-            ("m2", "t4"), ("m2", "t5"),
+            ("m1", "t1"),
+            ("m1", "t2"),
+            ("m1", "t3"),
+            ("m2", "t4"),
+            ("m2", "t5"),
         ];
         let b_to_a: Vec<(&str, &str)> = vec![
-            ("m1", "s1"), ("m1", "s2"), ("m1", "s3"),
-            ("m2", "s4"), ("m2", "s5"),
+            ("m1", "s1"),
+            ("m1", "s2"),
+            ("m1", "s3"),
+            ("m2", "s4"),
+            ("m2", "s5"),
         ];
         let (cg, ir) = build_intimacy_test_data(
             IntimacyClassSpec {
@@ -5126,13 +5744,16 @@ class BigDataBag:
                 methods: &["m1", "m2"],
                 outbound_calls: &b_to_a,
             },
-            false,  // Different files
+            false, // Different files
             vec![],
         );
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_inappropriate_intimacy_from_callgraph(&cg, &ir, &thresholds, false);
-        assert!(!findings.is_empty(), "Cross-file bidirectional coupling (5+5=10) should trigger");
+        assert!(
+            !findings.is_empty(),
+            "Cross-file bidirectional coupling (5+5=10) should trigger"
+        );
         assert_eq!(findings[0].smell_type, SmellType::InappropriateIntimacy);
     }
 
@@ -5186,7 +5807,7 @@ class BigDataBag:
     #[test]
     fn test_get_class_methods_robust_python() {
         // Python-like: ClassDef.methods populated
-        use crate::callgraph::cross_file_types::{ClassDef, FuncDef, FileIR};
+        use crate::callgraph::cross_file_types::{ClassDef, FileIR, FuncDef};
 
         let mut file_ir = FileIR::new(PathBuf::from("test.py"));
         file_ir.classes.push(ClassDef::new(
@@ -5196,8 +5817,12 @@ class BigDataBag:
             vec!["method_a".into(), "method_b".into()],
             vec![],
         ));
-        file_ir.funcs.push(FuncDef::method("method_a", "MyClass", 2, 5));
-        file_ir.funcs.push(FuncDef::method("method_b", "MyClass", 6, 10));
+        file_ir
+            .funcs
+            .push(FuncDef::method("method_a", "MyClass", 2, 5));
+        file_ir
+            .funcs
+            .push(FuncDef::method("method_b", "MyClass", 6, 10));
 
         let methods = get_class_methods_robust(&file_ir, "MyClass");
         assert_eq!(methods.len(), 2);
@@ -5209,16 +5834,24 @@ class BigDataBag:
     #[test]
     fn test_get_class_methods_robust_go_fallback() {
         // Go-like: ClassDef.methods is empty, methods are in FuncDef with class_name
-        use crate::callgraph::cross_file_types::{ClassDef, FuncDef, FileIR};
+        use crate::callgraph::cross_file_types::{ClassDef, FileIR, FuncDef};
 
         let mut file_ir = FileIR::new(PathBuf::from("server.go"));
         file_ir.classes.push(ClassDef::simple("Server", 1, 30));
-        file_ir.funcs.push(FuncDef::method("Start", "Server", 5, 10));
-        file_ir.funcs.push(FuncDef::method("Stop", "Server", 12, 18));
+        file_ir
+            .funcs
+            .push(FuncDef::method("Start", "Server", 5, 10));
+        file_ir
+            .funcs
+            .push(FuncDef::method("Stop", "Server", 12, 18));
         file_ir.funcs.push(FuncDef::function("main", 20, 30));
 
         let methods = get_class_methods_robust(&file_ir, "Server");
-        assert_eq!(methods.len(), 2, "Should find 2 methods via FuncDef.class_name fallback");
+        assert_eq!(
+            methods.len(),
+            2,
+            "Should find 2 methods via FuncDef.class_name fallback"
+        );
         let names: Vec<&str> = methods.iter().map(|m| m.name.as_str()).collect();
         assert!(names.contains(&"Start"));
         assert!(names.contains(&"Stop"));
@@ -5296,9 +5929,25 @@ class BigDataBag:
     #[test]
     fn test_is_constructor_excludes_regular() {
         // Regular method names should never be constructors
-        for lang in &["python", "javascript", "typescript", "rust", "go", "java", "csharp"] {
-            assert!(!is_constructor("process", lang), "process should not be constructor for {}", lang);
-            assert!(!is_constructor("get_data", lang), "get_data should not be constructor for {}", lang);
+        for lang in &[
+            "python",
+            "javascript",
+            "typescript",
+            "rust",
+            "go",
+            "java",
+            "csharp",
+        ] {
+            assert!(
+                !is_constructor("process", lang),
+                "process should not be constructor for {}",
+                lang
+            );
+            assert!(
+                !is_constructor("get_data", lang),
+                "get_data should not be constructor for {}",
+                lang
+            );
         }
     }
 
@@ -5340,7 +5989,7 @@ class BigDataBag:
         // Severity 3: extreme envy (foreign >= 8, ratio > 4.0)
         assert_eq!(feature_envy_severity(10, 1), 3);
         assert_eq!(feature_envy_severity(9, 2), 3); // 9>=8 and ratio 4.5>4.0 => sev 3
-        // Verify boundary: foreign=8 but ratio too low stays at 2
+                                                    // Verify boundary: foreign=8 but ratio too low stays at 2
         assert_eq!(feature_envy_severity(8, 3), 2); // ratio 2.67, foreign>=5 and ratio>2.5 => sev 2
     }
 
@@ -5405,55 +6054,94 @@ class BigDataBag:
         let relaxed = Thresholds::from_preset(ThresholdPreset::Relaxed);
 
         // Middle Man: lower ratio = stricter (triggers on less delegation)
-        assert!(strict.middle_man_delegation_ratio <= default.middle_man_delegation_ratio,
+        assert!(
+            strict.middle_man_delegation_ratio <= default.middle_man_delegation_ratio,
             "Strict MM ratio ({}) should be <= Default ({})",
-            strict.middle_man_delegation_ratio, default.middle_man_delegation_ratio);
-        assert!(default.middle_man_delegation_ratio <= relaxed.middle_man_delegation_ratio,
+            strict.middle_man_delegation_ratio,
+            default.middle_man_delegation_ratio
+        );
+        assert!(
+            default.middle_man_delegation_ratio <= relaxed.middle_man_delegation_ratio,
             "Default MM ratio ({}) should be <= Relaxed ({})",
-            default.middle_man_delegation_ratio, relaxed.middle_man_delegation_ratio);
+            default.middle_man_delegation_ratio,
+            relaxed.middle_man_delegation_ratio
+        );
 
         // Refused Bequest: HIGHER usage_ratio = stricter (triggers when more methods unused)
-        assert!(strict.refused_bequest_usage_ratio >= relaxed.refused_bequest_usage_ratio,
+        assert!(
+            strict.refused_bequest_usage_ratio >= relaxed.refused_bequest_usage_ratio,
             "Strict RB usage_ratio ({}) should be >= Relaxed ({})",
-            strict.refused_bequest_usage_ratio, relaxed.refused_bequest_usage_ratio);
+            strict.refused_bequest_usage_ratio,
+            relaxed.refused_bequest_usage_ratio
+        );
 
         // Refused Bequest: lower min_inherited can be stricter or same
-        assert!(strict.refused_bequest_min_inherited <= default.refused_bequest_min_inherited,
+        assert!(
+            strict.refused_bequest_min_inherited <= default.refused_bequest_min_inherited,
             "Strict RB min_inherited ({}) should be <= Default ({})",
-            strict.refused_bequest_min_inherited, default.refused_bequest_min_inherited);
-        assert!(default.refused_bequest_min_inherited <= relaxed.refused_bequest_min_inherited,
+            strict.refused_bequest_min_inherited,
+            default.refused_bequest_min_inherited
+        );
+        assert!(
+            default.refused_bequest_min_inherited <= relaxed.refused_bequest_min_inherited,
             "Default RB min_inherited ({}) should be <= Relaxed ({})",
-            default.refused_bequest_min_inherited, relaxed.refused_bequest_min_inherited);
+            default.refused_bequest_min_inherited,
+            relaxed.refused_bequest_min_inherited
+        );
 
         // Feature Envy: lower min_foreign = stricter (triggers on fewer foreign calls)
-        assert!(strict.feature_envy_min_foreign <= default.feature_envy_min_foreign,
+        assert!(
+            strict.feature_envy_min_foreign <= default.feature_envy_min_foreign,
             "Strict FE min_foreign ({}) should be <= Default ({})",
-            strict.feature_envy_min_foreign, default.feature_envy_min_foreign);
-        assert!(default.feature_envy_min_foreign <= relaxed.feature_envy_min_foreign,
+            strict.feature_envy_min_foreign,
+            default.feature_envy_min_foreign
+        );
+        assert!(
+            default.feature_envy_min_foreign <= relaxed.feature_envy_min_foreign,
             "Default FE min_foreign ({}) should be <= Relaxed ({})",
-            default.feature_envy_min_foreign, relaxed.feature_envy_min_foreign);
+            default.feature_envy_min_foreign,
+            relaxed.feature_envy_min_foreign
+        );
 
         // Feature Envy: lower ratio = stricter
-        assert!(strict.feature_envy_ratio <= default.feature_envy_ratio,
+        assert!(
+            strict.feature_envy_ratio <= default.feature_envy_ratio,
             "Strict FE ratio ({}) should be <= Default ({})",
-            strict.feature_envy_ratio, default.feature_envy_ratio);
-        assert!(default.feature_envy_ratio <= relaxed.feature_envy_ratio,
+            strict.feature_envy_ratio,
+            default.feature_envy_ratio
+        );
+        assert!(
+            default.feature_envy_ratio <= relaxed.feature_envy_ratio,
             "Default FE ratio ({}) should be <= Relaxed ({})",
-            default.feature_envy_ratio, relaxed.feature_envy_ratio);
+            default.feature_envy_ratio,
+            relaxed.feature_envy_ratio
+        );
 
         // Intimacy: lower min = stricter
-        assert!(strict.intimacy_min_total <= default.intimacy_min_total,
+        assert!(
+            strict.intimacy_min_total <= default.intimacy_min_total,
             "Strict II min_total ({}) should be <= Default ({})",
-            strict.intimacy_min_total, default.intimacy_min_total);
-        assert!(default.intimacy_min_total <= relaxed.intimacy_min_total,
+            strict.intimacy_min_total,
+            default.intimacy_min_total
+        );
+        assert!(
+            default.intimacy_min_total <= relaxed.intimacy_min_total,
             "Default II min_total ({}) should be <= Relaxed ({})",
-            default.intimacy_min_total, relaxed.intimacy_min_total);
-        assert!(strict.intimacy_min_per_direction <= default.intimacy_min_per_direction,
+            default.intimacy_min_total,
+            relaxed.intimacy_min_total
+        );
+        assert!(
+            strict.intimacy_min_per_direction <= default.intimacy_min_per_direction,
             "Strict II min_per_direction ({}) should be <= Default ({})",
-            strict.intimacy_min_per_direction, default.intimacy_min_per_direction);
-        assert!(default.intimacy_min_per_direction <= relaxed.intimacy_min_per_direction,
+            strict.intimacy_min_per_direction,
+            default.intimacy_min_per_direction
+        );
+        assert!(
+            default.intimacy_min_per_direction <= relaxed.intimacy_min_per_direction,
             "Default II min_per_direction ({}) should be <= Relaxed ({})",
-            default.intimacy_min_per_direction, relaxed.intimacy_min_per_direction);
+            default.intimacy_min_per_direction,
+            relaxed.intimacy_min_per_direction
+        );
     }
 
     // =========================================================================
@@ -5599,7 +6287,10 @@ class BigDataBag:
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "typescript", false);
-        assert!(!findings.is_empty(), "TypeScript class with 4/4 delegating non-constructor methods should be middle man");
+        assert!(
+            !findings.is_empty(),
+            "TypeScript class with 4/4 delegating non-constructor methods should be middle man"
+        );
         assert_eq!(findings[0].smell_type, SmellType::MiddleMan);
     }
 
@@ -5618,7 +6309,10 @@ class BigDataBag:
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "rust", false);
-        assert!(!findings.is_empty(), "Rust struct with 4/4 delegating non-constructor methods should be middle man");
+        assert!(
+            !findings.is_empty(),
+            "Rust struct with 4/4 delegating non-constructor methods should be middle man"
+        );
         assert_eq!(findings[0].smell_type, SmellType::MiddleMan);
     }
 
@@ -5637,7 +6331,10 @@ class BigDataBag:
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "go", false);
-        assert!(!findings.is_empty(), "Go struct with 4/4 delegating non-constructor methods should be middle man");
+        assert!(
+            !findings.is_empty(),
+            "Go struct with 4/4 delegating non-constructor methods should be middle man"
+        );
         assert_eq!(findings[0].smell_type, SmellType::MiddleMan);
     }
 
@@ -5656,7 +6353,10 @@ class BigDataBag:
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "ruby", false);
-        assert!(!findings.is_empty(), "Ruby class with 4/4 delegating non-constructor methods should be middle man");
+        assert!(
+            !findings.is_empty(),
+            "Ruby class with 4/4 delegating non-constructor methods should be middle man"
+        );
         assert_eq!(findings[0].smell_type, SmellType::MiddleMan);
     }
 
@@ -5675,7 +6375,10 @@ class BigDataBag:
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "php", false);
-        assert!(!findings.is_empty(), "PHP class with 4/4 delegating non-constructor methods should be middle man");
+        assert!(
+            !findings.is_empty(),
+            "PHP class with 4/4 delegating non-constructor methods should be middle man"
+        );
         assert_eq!(findings[0].smell_type, SmellType::MiddleMan);
     }
 
@@ -5694,7 +6397,10 @@ class BigDataBag:
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "swift", false);
-        assert!(!findings.is_empty(), "Swift class with 4/4 delegating non-constructor methods should be middle man");
+        assert!(
+            !findings.is_empty(),
+            "Swift class with 4/4 delegating non-constructor methods should be middle man"
+        );
         assert_eq!(findings[0].smell_type, SmellType::MiddleMan);
     }
 
@@ -5713,7 +6419,10 @@ class BigDataBag:
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "scala", false);
-        assert!(!findings.is_empty(), "Scala class with 4/4 delegating non-constructor methods should be middle man");
+        assert!(
+            !findings.is_empty(),
+            "Scala class with 4/4 delegating non-constructor methods should be middle man"
+        );
         assert_eq!(findings[0].smell_type, SmellType::MiddleMan);
     }
 
@@ -5727,19 +6436,25 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Invoice",
             Some("constructor"),
-            vec![
-                ("calculateDiscount", true, vec![
+            vec![(
+                "calculateDiscount",
+                true,
+                vec![
                     ("loyaltyPoints", "customer", "Customer"),
                     ("discountRate", "customer", "Customer"),
                     ("yearsActive", "customer", "Customer"),
                     ("bonusMultiplier", "customer", "Customer"),
                     ("amount", "this", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
-        let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "typescript", false);
-        assert!(!findings.is_empty(), "TypeScript method using 'this' for own + 4 foreign should trigger feature envy");
+        let findings =
+            detect_feature_envy_from_callgraph(&file_ir, &thresholds, "typescript", false);
+        assert!(
+            !findings.is_empty(),
+            "TypeScript method using 'this' for own + 4 foreign should trigger feature envy"
+        );
         assert_eq!(findings[0].smell_type, SmellType::FeatureEnvy);
     }
 
@@ -5749,19 +6464,24 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Invoice",
             None, // Java constructor needs class name context, so skip
-            vec![
-                ("calculateDiscount", true, vec![
+            vec![(
+                "calculateDiscount",
+                true,
+                vec![
                     ("getLoyaltyPoints", "customer", "Customer"),
                     ("getDiscountRate", "customer", "Customer"),
                     ("getYearsActive", "customer", "Customer"),
                     ("getBonusMultiplier", "customer", "Customer"),
                     ("getAmount", "this", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "java", false);
-        assert!(!findings.is_empty(), "Java method using 'this' for own + 4 foreign should trigger feature envy");
+        assert!(
+            !findings.is_empty(),
+            "Java method using 'this' for own + 4 foreign should trigger feature envy"
+        );
         assert_eq!(findings[0].smell_type, SmellType::FeatureEnvy);
     }
 
@@ -5771,19 +6491,24 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Invoice",
             Some("initialize"),
-            vec![
-                ("calculate_discount", true, vec![
+            vec![(
+                "calculate_discount",
+                true,
+                vec![
                     ("loyalty_points", "customer", "Customer"),
                     ("discount_rate", "customer", "Customer"),
                     ("years_active", "customer", "Customer"),
                     ("bonus_multiplier", "customer", "Customer"),
                     ("amount", "self", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "ruby", false);
-        assert!(!findings.is_empty(), "Ruby method using 'self' for own + 4 foreign should trigger feature envy");
+        assert!(
+            !findings.is_empty(),
+            "Ruby method using 'self' for own + 4 foreign should trigger feature envy"
+        );
         assert_eq!(findings[0].smell_type, SmellType::FeatureEnvy);
     }
 
@@ -5793,19 +6518,24 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Invoice",
             Some("init"),
-            vec![
-                ("calculateDiscount", true, vec![
+            vec![(
+                "calculateDiscount",
+                true,
+                vec![
                     ("loyaltyPoints", "customer", "Customer"),
                     ("discountRate", "customer", "Customer"),
                     ("yearsActive", "customer", "Customer"),
                     ("bonusMultiplier", "customer", "Customer"),
                     ("amount", "self", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "swift", false);
-        assert!(!findings.is_empty(), "Swift method using 'self' for own + 4 foreign should trigger feature envy");
+        assert!(
+            !findings.is_empty(),
+            "Swift method using 'self' for own + 4 foreign should trigger feature envy"
+        );
         assert_eq!(findings[0].smell_type, SmellType::FeatureEnvy);
     }
 
@@ -5821,23 +6551,44 @@ class BigDataBag:
         let mut file_ir = FileIR::new(PathBuf::from("order_forwarder.go"));
 
         // Add FuncDefs with class_name (Go receiver methods)
-        file_ir.funcs.push(FuncDef::method("GetTotal", "OrderForwarder", 1, 3));
-        file_ir.funcs.push(FuncDef::method("GetItems", "OrderForwarder", 4, 6));
-        file_ir.funcs.push(FuncDef::method("GetCustomer", "OrderForwarder", 7, 9));
-        file_ir.funcs.push(FuncDef::method("GetStatus", "OrderForwarder", 10, 12));
+        file_ir
+            .funcs
+            .push(FuncDef::method("GetTotal", "OrderForwarder", 1, 3));
+        file_ir
+            .funcs
+            .push(FuncDef::method("GetItems", "OrderForwarder", 4, 6));
+        file_ir
+            .funcs
+            .push(FuncDef::method("GetCustomer", "OrderForwarder", 7, 9));
+        file_ir
+            .funcs
+            .push(FuncDef::method("GetStatus", "OrderForwarder", 10, 12));
 
         // Add delegation calls for each method
-        for (method, target) in [("GetTotal", "GetTotal"), ("GetItems", "GetItems"),
-                                  ("GetCustomer", "GetCustomer"), ("GetStatus", "GetStatus")] {
+        for (method, target) in [
+            ("GetTotal", "GetTotal"),
+            ("GetItems", "GetItems"),
+            ("GetCustomer", "GetCustomer"),
+            ("GetStatus", "GetStatus"),
+        ] {
             let qualified = format!("OrderForwarder.{}", method);
-            file_ir.calls.insert(qualified.clone(), vec![
-                CallSite::method(qualified, target, "order", Some("Order".to_string()), Some(2)),
-            ]);
+            file_ir.calls.insert(
+                qualified.clone(),
+                vec![CallSite::method(
+                    qualified,
+                    target,
+                    "order",
+                    Some("Order".to_string()),
+                    Some(2),
+                )],
+            );
         }
 
         // ClassDef with EMPTY methods vec — simulating Go struct (no methods list)
         file_ir.classes.push(ClassDef::new(
-            "OrderForwarder".to_string(), 1, 12,
+            "OrderForwarder".to_string(),
+            1,
+            12,
             vec![], // empty methods — triggers fallback path
             vec![],
         ));
@@ -5857,24 +6608,47 @@ class BigDataBag:
         let mut file_ir = FileIR::new(PathBuf::from("order_forwarder.rs"));
 
         // Add "new" constructor and 4 delegating methods
-        file_ir.funcs.push(FuncDef::method("new", "OrderForwarder", 1, 3));
-        file_ir.funcs.push(FuncDef::method("get_total", "OrderForwarder", 4, 6));
-        file_ir.funcs.push(FuncDef::method("get_items", "OrderForwarder", 7, 9));
-        file_ir.funcs.push(FuncDef::method("get_customer", "OrderForwarder", 10, 12));
-        file_ir.funcs.push(FuncDef::method("get_status", "OrderForwarder", 13, 15));
+        file_ir
+            .funcs
+            .push(FuncDef::method("new", "OrderForwarder", 1, 3));
+        file_ir
+            .funcs
+            .push(FuncDef::method("get_total", "OrderForwarder", 4, 6));
+        file_ir
+            .funcs
+            .push(FuncDef::method("get_items", "OrderForwarder", 7, 9));
+        file_ir
+            .funcs
+            .push(FuncDef::method("get_customer", "OrderForwarder", 10, 12));
+        file_ir
+            .funcs
+            .push(FuncDef::method("get_status", "OrderForwarder", 13, 15));
 
         // Add delegation calls
-        for (method, target) in [("get_total", "get_total"), ("get_items", "get_items"),
-                                  ("get_customer", "get_customer"), ("get_status", "get_status")] {
+        for (method, target) in [
+            ("get_total", "get_total"),
+            ("get_items", "get_items"),
+            ("get_customer", "get_customer"),
+            ("get_status", "get_status"),
+        ] {
             let qualified = format!("OrderForwarder.{}", method);
-            file_ir.calls.insert(qualified.clone(), vec![
-                CallSite::method(qualified, target, "order", Some("Order".to_string()), Some(5)),
-            ]);
+            file_ir.calls.insert(
+                qualified.clone(),
+                vec![CallSite::method(
+                    qualified,
+                    target,
+                    "order",
+                    Some("Order".to_string()),
+                    Some(5),
+                )],
+            );
         }
 
         // ClassDef with EMPTY methods vec — simulating Rust impl block
         file_ir.classes.push(ClassDef::new(
-            "OrderForwarder".to_string(), 1, 15,
+            "OrderForwarder".to_string(),
+            1,
+            15,
             vec![], // empty methods — triggers fallback path
             vec![],
         ));
@@ -5894,23 +6668,60 @@ class BigDataBag:
         let mut file_ir = FileIR::new(PathBuf::from("invoice.go"));
 
         // Method with Go receiver pattern
-        file_ir.funcs.push(FuncDef::method("CalculateDiscount", "Invoice", 1, 8));
+        file_ir
+            .funcs
+            .push(FuncDef::method("CalculateDiscount", "Invoice", 1, 8));
 
         let qualified = "Invoice.CalculateDiscount".to_string();
-        file_ir.calls.insert(qualified.clone(), vec![
-            // Foreign calls to customer (receiver is "c" — a named Go variable)
-            CallSite::method(qualified.clone(), "GetLoyaltyPoints", "c", Some("Customer".to_string()), Some(2)),
-            CallSite::method(qualified.clone(), "GetDiscountRate", "c", Some("Customer".to_string()), Some(3)),
-            CallSite::method(qualified.clone(), "GetYearsActive", "c", Some("Customer".to_string()), Some(4)),
-            CallSite::method(qualified.clone(), "GetBonusMultiplier", "c", Some("Customer".to_string()), Some(5)),
-            // Own-class call using named receiver "i" — Go has no "self"
-            // Since Go's is_self_reference returns false for all receivers,
-            // this would be classified as foreign unless receiver_type matches class name
-            CallSite::method(qualified.clone(), "GetAmount", "i", Some("Invoice".to_string()), Some(6)),
-        ]);
+        file_ir.calls.insert(
+            qualified.clone(),
+            vec![
+                // Foreign calls to customer (receiver is "c" — a named Go variable)
+                CallSite::method(
+                    qualified.clone(),
+                    "GetLoyaltyPoints",
+                    "c",
+                    Some("Customer".to_string()),
+                    Some(2),
+                ),
+                CallSite::method(
+                    qualified.clone(),
+                    "GetDiscountRate",
+                    "c",
+                    Some("Customer".to_string()),
+                    Some(3),
+                ),
+                CallSite::method(
+                    qualified.clone(),
+                    "GetYearsActive",
+                    "c",
+                    Some("Customer".to_string()),
+                    Some(4),
+                ),
+                CallSite::method(
+                    qualified.clone(),
+                    "GetBonusMultiplier",
+                    "c",
+                    Some("Customer".to_string()),
+                    Some(5),
+                ),
+                // Own-class call using named receiver "i" — Go has no "self"
+                // Since Go's is_self_reference returns false for all receivers,
+                // this would be classified as foreign unless receiver_type matches class name
+                CallSite::method(
+                    qualified.clone(),
+                    "GetAmount",
+                    "i",
+                    Some("Invoice".to_string()),
+                    Some(6),
+                ),
+            ],
+        );
 
         file_ir.classes.push(ClassDef::new(
-            "Invoice".to_string(), 1, 8,
+            "Invoice".to_string(),
+            1,
+            8,
             vec![], // Go uses empty methods (fallback path)
             vec![],
         ));
@@ -5931,12 +6742,19 @@ class BigDataBag:
         // C has no classes — FileIR with only free functions should produce no middle man findings
         let mut file_ir = FileIR::new(PathBuf::from("utils.c"));
         file_ir.funcs.push(FuncDef::function("process_data", 1, 10));
-        file_ir.funcs.push(FuncDef::function("validate_input", 11, 20));
-        file_ir.funcs.push(FuncDef::function("format_output", 21, 30));
+        file_ir
+            .funcs
+            .push(FuncDef::function("validate_input", 11, 20));
+        file_ir
+            .funcs
+            .push(FuncDef::function("format_output", 21, 30));
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "c", false);
-        assert!(findings.is_empty(), "C file with no classes should produce no middle man findings");
+        assert!(
+            findings.is_empty(),
+            "C file with no classes should produce no middle man findings"
+        );
     }
 
     #[test]
@@ -5948,20 +6766,32 @@ class BigDataBag:
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "lua", false);
-        assert!(findings.is_empty(), "Lua file with no classes should produce no feature envy findings");
+        assert!(
+            findings.is_empty(),
+            "Lua file with no classes should produce no feature envy findings"
+        );
     }
 
     #[test]
     fn test_middle_man_elixir_no_classes() {
         // Elixir uses modules, not classes — should produce no middle man findings
         let mut file_ir = FileIR::new(PathBuf::from("order.ex"));
-        file_ir.funcs.push(FuncDef::function("process_order", 1, 15));
-        file_ir.funcs.push(FuncDef::function("validate_order", 16, 30));
-        file_ir.funcs.push(FuncDef::function("format_receipt", 31, 45));
+        file_ir
+            .funcs
+            .push(FuncDef::function("process_order", 1, 15));
+        file_ir
+            .funcs
+            .push(FuncDef::function("validate_order", 16, 30));
+        file_ir
+            .funcs
+            .push(FuncDef::function("format_receipt", 31, 45));
 
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_middle_man_from_callgraph(&file_ir, &thresholds, "elixir", false);
-        assert!(findings.is_empty(), "Elixir file with no classes should produce no middle man findings");
+        assert!(
+            findings.is_empty(),
+            "Elixir file with no classes should produce no middle man findings"
+        );
     }
 
     // =========================================================================
@@ -5974,17 +6804,23 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Account",
             Some("constructor"),
-            vec![
-                ("calculateInterest", true, vec![
+            vec![(
+                "calculateInterest",
+                true,
+                vec![
                     ("balance", "this", ""),
                     ("rate", "this", ""),
                     ("fees", "this", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
-        let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "typescript", false);
-        assert!(findings.is_empty(), "TypeScript method using only 'this' (own) should not trigger feature envy");
+        let findings =
+            detect_feature_envy_from_callgraph(&file_ir, &thresholds, "typescript", false);
+        assert!(
+            findings.is_empty(),
+            "TypeScript method using only 'this' (own) should not trigger feature envy"
+        );
     }
 
     #[test]
@@ -5993,17 +6829,22 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Account",
             Some("initialize"),
-            vec![
-                ("calculate_interest", true, vec![
+            vec![(
+                "calculate_interest",
+                true,
+                vec![
                     ("balance", "self", ""),
                     ("rate", "self", ""),
                     ("fees", "self", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "ruby", false);
-        assert!(findings.is_empty(), "Ruby method using only 'self' (own) should not trigger feature envy");
+        assert!(
+            findings.is_empty(),
+            "Ruby method using only 'self' (own) should not trigger feature envy"
+        );
     }
 
     #[test]
@@ -6012,17 +6853,22 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Account",
             Some("init"),
-            vec![
-                ("calculateInterest", true, vec![
+            vec![(
+                "calculateInterest",
+                true,
+                vec![
                     ("balance", "self", ""),
                     ("rate", "self", ""),
                     ("fees", "self", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "swift", false);
-        assert!(findings.is_empty(), "Swift method using only 'self' (own) should not trigger feature envy");
+        assert!(
+            findings.is_empty(),
+            "Swift method using only 'self' (own) should not trigger feature envy"
+        );
     }
 
     #[test]
@@ -6031,17 +6877,22 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Account",
             None, // C++ constructor needs class name context
-            vec![
-                ("calculateInterest", true, vec![
+            vec![(
+                "calculateInterest",
+                true,
+                vec![
                     ("balance", "this", ""),
                     ("rate", "this", ""),
                     ("fees", "this", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "cpp", false);
-        assert!(findings.is_empty(), "C++ method using only 'this' (own) should not trigger feature envy");
+        assert!(
+            findings.is_empty(),
+            "C++ method using only 'this' (own) should not trigger feature envy"
+        );
     }
 
     #[test]
@@ -6050,19 +6901,24 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Invoice",
             Some("__construct"),
-            vec![
-                ("calculateDiscount", true, vec![
+            vec![(
+                "calculateDiscount",
+                true,
+                vec![
                     ("getLoyaltyPoints", "customer", "Customer"),
                     ("getDiscountRate", "customer", "Customer"),
                     ("getYearsActive", "customer", "Customer"),
                     ("getBonusMultiplier", "customer", "Customer"),
                     ("getAmount", "this", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "php", false);
-        assert!(!findings.is_empty(), "PHP method using 'this' for own + 4 foreign should trigger feature envy");
+        assert!(
+            !findings.is_empty(),
+            "PHP method using 'this' for own + 4 foreign should trigger feature envy"
+        );
         assert_eq!(findings[0].smell_type, SmellType::FeatureEnvy);
     }
 
@@ -6072,19 +6928,24 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Invoice",
             Some("<init>"),
-            vec![
-                ("calculateDiscount", true, vec![
+            vec![(
+                "calculateDiscount",
+                true,
+                vec![
                     ("loyaltyPoints", "customer", "Customer"),
                     ("discountRate", "customer", "Customer"),
                     ("yearsActive", "customer", "Customer"),
                     ("bonusMultiplier", "customer", "Customer"),
                     ("amount", "this", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "scala", false);
-        assert!(!findings.is_empty(), "Scala method using 'this' for own + 4 foreign should trigger feature envy");
+        assert!(
+            !findings.is_empty(),
+            "Scala method using 'this' for own + 4 foreign should trigger feature envy"
+        );
         assert_eq!(findings[0].smell_type, SmellType::FeatureEnvy);
     }
 
@@ -6094,19 +6955,24 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Invoice",
             None, // Kotlin constructor needs class name context
-            vec![
-                ("calculateDiscount", true, vec![
+            vec![(
+                "calculateDiscount",
+                true,
+                vec![
                     ("getLoyaltyPoints", "customer", "Customer"),
                     ("getDiscountRate", "customer", "Customer"),
                     ("getYearsActive", "customer", "Customer"),
                     ("getBonusMultiplier", "customer", "Customer"),
                     ("getAmount", "this", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "kotlin", false);
-        assert!(!findings.is_empty(), "Kotlin method using 'this' for own + 4 foreign should trigger feature envy");
+        assert!(
+            !findings.is_empty(),
+            "Kotlin method using 'this' for own + 4 foreign should trigger feature envy"
+        );
         assert_eq!(findings[0].smell_type, SmellType::FeatureEnvy);
     }
 
@@ -6116,19 +6982,24 @@ class BigDataBag:
         let file_ir = build_feature_envy_file_ir(
             "Invoice",
             None, // C# constructor needs class name context
-            vec![
-                ("CalculateDiscount", true, vec![
+            vec![(
+                "CalculateDiscount",
+                true,
+                vec![
                     ("GetLoyaltyPoints", "customer", "Customer"),
                     ("GetDiscountRate", "customer", "Customer"),
                     ("GetYearsActive", "customer", "Customer"),
                     ("GetBonusMultiplier", "customer", "Customer"),
                     ("GetAmount", "this", ""),
-                ]),
-            ],
+                ],
+            )],
         );
         let thresholds = Thresholds::from_preset(ThresholdPreset::Default);
         let findings = detect_feature_envy_from_callgraph(&file_ir, &thresholds, "csharp", false);
-        assert!(!findings.is_empty(), "C# method using 'this' for own + 4 foreign should trigger feature envy");
+        assert!(
+            !findings.is_empty(),
+            "C# method using 'this' for own + 4 foreign should trigger feature envy"
+        );
         assert_eq!(findings[0].smell_type, SmellType::FeatureEnvy);
     }
 }

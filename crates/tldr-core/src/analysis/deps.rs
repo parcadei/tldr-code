@@ -36,8 +36,8 @@ use std::path::{Path, PathBuf};
 use crate::ast::imports::get_imports;
 use crate::fs::tree::{collect_files, get_file_tree};
 use crate::types::{IgnoreSpec, ImportInfo, Language};
-use std::str::FromStr as _;
 use crate::TldrResult;
+use std::str::FromStr as _;
 
 // =============================================================================
 // Core Types
@@ -591,8 +591,16 @@ pub fn analyze_dependencies(path: &Path, options: &DepsOptions) -> TldrResult<De
         total_external_deps,
         max_depth,
         cycles_found,
-        leaf_files: if options.collapse_packages { leaf_files_calc } else { leaf_files },
-        root_files: if options.collapse_packages { root_files_calc } else { root_files },
+        leaf_files: if options.collapse_packages {
+            leaf_files_calc
+        } else {
+            leaf_files
+        },
+        root_files: if options.collapse_packages {
+            root_files_calc
+        } else {
+            root_files
+        },
     };
 
     Ok(DepsReport {
@@ -699,13 +707,7 @@ fn dfs_find_cycles(
             } else if !visited.contains(neighbor) {
                 // Recurse to unvisited neighbor
                 dfs_find_cycles(
-                    neighbor,
-                    deps,
-                    visited,
-                    rec_stack,
-                    rec_set,
-                    cycles,
-                    max_length,
+                    neighbor, deps, visited, rec_stack, rec_set, cycles, max_length,
                 );
             }
             // If visited but not in rec_set, it's a cross-edge or forward-edge, not a back-edge
@@ -1089,10 +1091,7 @@ fn index_rust_module(index: &mut HashMap<String, PathBuf>, file_path: &Path, rel
         if let Some(parent) = stem.parent() {
             if let Some(pkg_name) = parent.file_name() {
                 index.insert(pkg_name.to_string_lossy().to_string(), fp.clone());
-                index.insert(
-                    format!("crate::{}", pkg_name.to_string_lossy()),
-                    fp.clone(),
-                );
+                index.insert(format!("crate::{}", pkg_name.to_string_lossy()), fp.clone());
             }
         }
     }
@@ -1106,11 +1105,10 @@ fn strip_jvm_prefix<'a>(path: &'a str, prefixes: &[&str]) -> &'a str {
     let mut best_prefix_len: usize = 0;
     for prefix in prefixes {
         if let Some(pos) = path.find(prefix) {
-            if (pos == 0 || path.as_bytes()[pos - 1] == b'/')
-                && prefix.len() > best_prefix_len {
-                    best_prefix_len = prefix.len();
-                    best_end = Some(pos + prefix.len());
-                }
+            if (pos == 0 || path.as_bytes()[pos - 1] == b'/') && prefix.len() > best_prefix_len {
+                best_prefix_len = prefix.len();
+                best_end = Some(pos + prefix.len());
+            }
         }
     }
     if let Some(end) = best_end {
@@ -1124,7 +1122,10 @@ fn index_java_module(index: &mut HashMap<String, PathBuf>, file_path: &Path, rel
     let fp = file_path.to_path_buf();
     let stem = relative.with_extension("");
     let path_str = stem.to_string_lossy();
-    let cleaned = strip_jvm_prefix(&path_str, &["src/main/java/", "src/test/java/", "src/", "lib/", "app/"]);
+    let cleaned = strip_jvm_prefix(
+        &path_str,
+        &["src/main/java/", "src/test/java/", "src/", "lib/", "app/"],
+    );
     let qualified_name = cleaned.replace(['/', '\\'], ".");
     if !qualified_name.is_empty() {
         index.insert(qualified_name, fp.clone());
@@ -1144,7 +1145,16 @@ fn index_kotlin_module(index: &mut HashMap<String, PathBuf>, file_path: &Path, r
     // Also strip .kts if with_extension("") didn't catch it (e.g. "build.gradle.kts")
     let path_str_ref: &str = &path_str;
     let stripped = path_str_ref.strip_suffix(".kts").unwrap_or(path_str_ref);
-    let cleaned = strip_jvm_prefix(stripped, &["src/main/kotlin/", "src/test/kotlin/", "src/", "lib/", "app/"]);
+    let cleaned = strip_jvm_prefix(
+        stripped,
+        &[
+            "src/main/kotlin/",
+            "src/test/kotlin/",
+            "src/",
+            "lib/",
+            "app/",
+        ],
+    );
     let qualified_name = cleaned.replace(['/', '\\'], ".");
     if !qualified_name.is_empty() {
         index.insert(qualified_name, fp.clone());
@@ -1223,7 +1233,10 @@ fn index_scala_module(index: &mut HashMap<String, PathBuf>, file_path: &Path, re
     let fp = file_path.to_path_buf();
     let stem = relative.with_extension("");
     let path_str = stem.to_string_lossy();
-    let cleaned = strip_jvm_prefix(&path_str, &["src/main/scala/", "src/test/scala/", "src/", "lib/", "app/"]);
+    let cleaned = strip_jvm_prefix(
+        &path_str,
+        &["src/main/scala/", "src/test/scala/", "src/", "lib/", "app/"],
+    );
     let qualified = cleaned.replace(['/', '\\'], ".");
     if !qualified.is_empty() {
         index.insert(qualified, fp.clone());
@@ -2030,9 +2043,22 @@ fn is_php_stdlib(module_name: &str) -> bool {
     let first_part = module_name.split('\\').next().unwrap_or(module_name);
     matches!(
         first_part,
-        "PDO" | "DateTime" | "Exception" | "Error" | "Throwable" | "Iterator" | "Closure"
-            | "stdClass" | "Generator" | "SplFixedArray" | "SplStack" | "SplQueue"
-            | "SplHeap" | "SplPriorityQueue" | "ArrayObject" | "ArrayIterator"
+        "PDO"
+            | "DateTime"
+            | "Exception"
+            | "Error"
+            | "Throwable"
+            | "Iterator"
+            | "Closure"
+            | "stdClass"
+            | "Generator"
+            | "SplFixedArray"
+            | "SplStack"
+            | "SplQueue"
+            | "SplHeap"
+            | "SplPriorityQueue"
+            | "ArrayObject"
+            | "ArrayIterator"
     )
 }
 
@@ -2477,10 +2503,7 @@ fn group_go_files_by_package(root: &Path, files: &[PathBuf]) -> HashMap<String, 
                 .parent()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
-            groups
-                .entry(pkg_dir)
-                .or_default()
-                .push(file_path.clone());
+            groups.entry(pkg_dir).or_default().push(file_path.clone());
         }
     }
     groups
@@ -2561,7 +2584,6 @@ fn is_recoverable_error(err: &crate::error::TldrError) -> bool {
     matches!(err, crate::error::TldrError::ParseError { .. })
 }
 
-
 // =============================================================================
 // Output Formatting (Phase 6)
 // =============================================================================
@@ -2596,10 +2618,7 @@ const LARGE_GRAPH_THRESHOLD: usize = 500;
 pub fn format_deps_text(report: &DepsReport) -> String {
     let mut output = String::new();
 
-    output.push_str(&format!(
-        "Dependency Analysis: {}\n",
-        report.root.display()
-    ));
+    output.push_str(&format!("Dependency Analysis: {}\n", report.root.display()));
     output.push_str(&format!(
         "Language: {}\n\n",
         capitalize_first(&report.language)
@@ -2633,10 +2652,7 @@ pub fn format_deps_text(report: &DepsReport) -> String {
             }
         }
 
-        output.push_str(&format!(
-            "External Packages ({}):\n",
-            package_counts.len()
-        ));
+        output.push_str(&format!("External Packages ({}):\n", package_counts.len()));
         // Sort by count descending, then alphabetically
         let mut packages: Vec<_> = package_counts.iter().collect();
         packages.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
@@ -2662,7 +2678,11 @@ pub fn format_deps_text(report: &DepsReport) -> String {
                 .first()
                 .map(|p| p.display().to_string())
                 .unwrap_or_default();
-            output.push_str(&format!("  [CYCLE] {} -> {}\n", cycle_str.join(" -> "), first));
+            output.push_str(&format!(
+                "  [CYCLE] {} -> {}\n",
+                cycle_str.join(" -> "),
+                first
+            ));
         }
         output.push('\n');
     } else {
@@ -2828,7 +2848,7 @@ mod tests {
         let node2 = DepNode::with_name(
             PathBuf::from("src/auth.py"),
             "different_name".to_string(), // Different name, same path
-            DepKind::External,             // Different kind, same path
+            DepKind::External,            // Different kind, same path
         );
         let node3 = DepNode::with_name(
             PathBuf::from("src/utils.py"),
@@ -3069,10 +3089,7 @@ mod tests {
             "src/utils.h".to_string(),
             PathBuf::from("/project/src/utils.h"),
         );
-        index.insert(
-            "utils.h".to_string(),
-            PathBuf::from("/project/src/utils.h"),
-        );
+        index.insert("utils.h".to_string(), PathBuf::from("/project/src/utils.h"));
 
         let import = ImportInfo {
             module: "utils.h".to_string(),
@@ -3133,10 +3150,7 @@ mod tests {
             &index,
         );
         assert!(result.is_some());
-        assert_eq!(
-            result.unwrap(),
-            PathBuf::from("/project/src/net/socket.h")
-        );
+        assert_eq!(result.unwrap(), PathBuf::from("/project/src/net/socket.h"));
     }
 
     // =========================================================================
@@ -3192,10 +3206,7 @@ mod tests {
     #[test]
     fn test_resolve_ruby_require_relative() {
         let mut index = HashMap::new();
-        index.insert(
-            "utils".to_string(),
-            PathBuf::from("/project/lib/utils.rb"),
-        );
+        index.insert("utils".to_string(), PathBuf::from("/project/lib/utils.rb"));
 
         let import = ImportInfo {
             module: "utils".to_string(),
@@ -3371,10 +3382,7 @@ mod tests {
     #[test]
     fn test_resolve_import_dispatches_c() {
         let mut index = HashMap::new();
-        index.insert(
-            "utils.h".to_string(),
-            PathBuf::from("/project/src/utils.h"),
-        );
+        index.insert("utils.h".to_string(), PathBuf::from("/project/src/utils.h"));
 
         let import = ImportInfo {
             module: "utils.h".to_string(),
@@ -3419,10 +3427,7 @@ mod tests {
     #[test]
     fn test_resolve_import_dispatches_ruby() {
         let mut index = HashMap::new();
-        index.insert(
-            "utils".to_string(),
-            PathBuf::from("/project/lib/utils.rb"),
-        );
+        index.insert("utils".to_string(), PathBuf::from("/project/lib/utils.rb"));
 
         let import = ImportInfo {
             module: "utils".to_string(),
