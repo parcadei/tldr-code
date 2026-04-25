@@ -8,11 +8,12 @@
 //!
 //! - [`cache`] - L1 in-process cache for tool results
 //! - [`protocol`] - JSON-RPC 2.0 protocol handling
+//! - [`server`] - JSON-RPC dispatch loop (`run` for stdio; `process_request` for tests)
 //! - [`tools`] - Tool definitions and registry
 
 pub mod cache;
 pub mod protocol;
+pub mod server;
 pub mod tools;
 
-mod server;
 pub use server::run;

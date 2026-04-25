@@ -21,14 +21,21 @@ use serde_json::Value;
 /// JSON-RPC version string
 pub const JSONRPC_VERSION: &str = "2.0";
 
-/// JSON-RPC request structure
+/// JSON-RPC request structure.
+///
+/// Per JSON-RPC 2.0 + MCP 2024-11-05, requests with an `id` expect a paired
+/// response, while *notifications* (e.g. `notifications/initialized`) omit
+/// `id` entirely and MUST NOT receive a response. `id` is therefore optional
+/// at deserialization time; the dispatcher (`server::process_request`) treats
+/// `id == None` as the notification path and emits no response frame.
 #[derive(Debug, Clone, Deserialize)]
 pub struct JsonRpcRequest {
     pub jsonrpc: String,
     pub method: String,
     #[serde(default)]
     pub params: Option<Value>,
-    pub id: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<Value>,
 }
 
 /// JSON-RPC response structure
@@ -294,7 +301,23 @@ mod tests {
         let request = parse_request(input).unwrap();
         assert_eq!(request.jsonrpc, "2.0");
         assert_eq!(request.method, "tools/list");
-        assert_eq!(request.id, serde_json::json!(1));
+        assert_eq!(request.id, Some(serde_json::json!(1)));
+    }
+
+    /// Notifications (per JSON-RPC 2.0 / MCP `notifications/initialized`)
+    /// omit the `id` field entirely; deserialization must succeed and
+    /// `request.id` must be `None`.
+    #[test]
+    fn test_parse_notification_has_no_id() {
+        let input = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
+        let request = parse_request(input).unwrap();
+        assert_eq!(request.jsonrpc, "2.0");
+        assert_eq!(request.method, "notifications/initialized");
+        assert!(
+            request.id.is_none(),
+            "notification frame must deserialize with id == None, got {:?}",
+            request.id
+        );
     }
 
     #[test]

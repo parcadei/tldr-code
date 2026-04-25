@@ -1,0 +1,76 @@
+{
+  "milestone": "M3",
+  "assertion": "VAL-003",
+  "issue": "parcadei/tldr-code#12",
+  "status": "passed",
+  "worker": "kraken (M3 VAL-003)",
+  "starting_head": "00ee2dc",
+  "test_file": "crates/tldr-mcp/tests/mcp_lifecycle_test.rs",
+  "test_names": [
+    "notification_frame_emits_no_response",
+    "lifecycle_handshake_three_frames",
+    "unknown_notification_method_emits_no_response",
+    "unknown_request_method_emits_method_not_found"
+  ],
+  "additional_unit_test": {
+    "file": "crates/tldr-mcp/src/protocol.rs",
+    "name": "protocol::tests::test_parse_notification_has_no_id",
+    "purpose": "Lock down that JsonRpcRequest deserializes notification frames (no id) with id == None"
+  },
+  "verified_pre_fix_line_numbers": {
+    "protocol.rs:31": "pub id: Value (non-optional, no #[serde(default)]) — matches triage",
+    "server.rs:34-41": "process_request always returned String written to stdout regardless of incoming id — matches triage",
+    "server.rs:65": "literal route '\"initialized\" => handle_initialized(&request)' — matches triage"
+  },
+  "fix_summary": {
+    "protocol.rs": "Changed pub id: Value to pub id: Option<Value> with #[serde(default, skip_serializing_if = \"Option::is_none\")] (also added doc comment explaining notification semantics).",
+    "server.rs": "(a) Added route arm for \"notifications/initialized\" (replacing legacy bare \"initialized\" — never spec-correct per MCP 2024-11-05). (b) Refactored process_request signature String → Option<String>: returns None for notifications (id is None), Some(json) for requests. (c) Refactored run() to skip writeln! when process_request returns None. (d) Notification with wrong jsonrpc version is silently dropped (cannot respond by definition). (e) Notification dispatched through any handler (including unknown method) drops the result without emitting a response.",
+    "lib.rs": "Made `mod server` `pub mod server` (was private with only `pub use server::run` exposed) so integration tests in tests/mcp_lifecycle_test.rs can call process_request directly. Updated module-level docstring to reflect the new public surface."
+  },
+  "spec_decision": {
+    "method_name": "notifications/initialized",
+    "decision": "REPLACED bare 'initialized' (NOT kept as legacy alias)",
+    "rationale": "Per MCP 2024-11-05 lifecycle spec, the canonical client→server post-handshake notification method is 'notifications/initialized' (namespaced). The bare 'initialized' route was never spec-correct (no MCP draft used it) — it was a v0.1.x typo. Spec-compliant clients (Claude Code, mcp-python-sdk) send only the namespaced form. Keeping the legacy route would silently accept malformed clients while masking the underlying spec violation. Removed cleanly."
+  },
+  "red_reason_gate": {
+    "gate_a_missing_field_id": true,
+    "gate_b_more_than_zero_frames_between_b_and_c": true,
+    "gate_c_unknown_method_notifications_initialized": false,
+    "passed": true,
+    "red_stdout_excerpt_notification_test": "panicked at crates/tldr-mcp/tests/mcp_lifecycle_test.rs:57:5: notification frame produced response (must be None per JSON-RPC 2.0 §4.1): Some(\"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"error\\\":{\\\"code\\\":-32700,\\\"message\\\":\\\"missing field `id` at line 1 column 54\\\"},\\\"id\\\":null}\")",
+    "red_stdout_excerpt_lifecycle_test": "assertion `left == right` failed: expected exactly 2 emitted frames (initialize + tools/list, no response for notification), got 3: [<initialize ok>, <parse error 'missing field `id` at line 1 column 54' for notification>, <tools/list ok>]\n  left: 3\n right: 2",
+    "notes": "Gate (c) 'unknown method' is not exercised because the bug short-circuits earlier at deserialization (gate (a)). Gates (a) and (b) both fire on the lifecycle_handshake_three_frames panic — the unwanted middle frame contains the literal substring 'missing field `id`'."
+  },
+  "green_proof": {
+    "reproduction_tests": "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "all_mcp_tests": "45 lib + 4 integration + 0 main + 0 doc = 49 tests, 49 passed, 0 failed"
+  },
+  "gates": {
+    "reproduction_test_red_on_head": "PASS (3 failures with documented symptoms; 1 contrast test passes both red and green)",
+    "reproduction_test_green_after_fix": "PASS (4/4)",
+    "all_existing_mcp_tests_still_pass": "PASS (44 baseline lib tests + 1 new (test_parse_notification_has_no_id) = 45 lib tests, all green)",
+    "exhaustive_matrix": "PASS (730/730)",
+    "language_command_matrix": "PASS (234/234)",
+    "matrix_total_964": "PASS (730 + 234 = 964, identical to baseline)",
+    "clippy_workspace_all_features_tests": "PASS (clean)",
+    "files_touched_le_5": "PASS (4 files: protocol.rs, server.rs, lib.rs, tests/mcp_lifecycle_test.rs)",
+    "source_files_touched_le_2_plus_scaffold": "PASS (2 source: protocol.rs + server.rs; lib.rs is scaffold-only — 1-line module visibility change to expose process_request for integration testing; tests file does not count toward source cap)",
+    "no_allow_no_ignore_no_underscore_no_weakened_assertions": "PASS",
+    "m4_coordination_initializeresult_untouched": "PASS (only JsonRpcRequest changed in protocol.rs; InitializeResult and ServerInfo deliberately left at original snake_case shape — that is M4 VAL-004's territory)"
+  },
+  "files_modified": [
+    "crates/tldr-mcp/src/protocol.rs",
+    "crates/tldr-mcp/src/server.rs",
+    "crates/tldr-mcp/src/lib.rs",
+    "crates/tldr-mcp/tests/mcp_lifecycle_test.rs"
+  ],
+  "files_modified_count": 4,
+  "artifacts": [
+    "continuum/autonomous/v0.2.1-hotfix/reports/m3-issue-12-mcp-lifecycle.md",
+    "continuum/autonomous/v0.2.1-hotfix/validation/m3-mcp-lifecycle.json"
+  ],
+  "spec_gotchas_for_m4": {
+    "initializeresult_snake_case_observed_in_red": "During the lifecycle_handshake_three_frames RED panic the captured initialize response shows the literal string '\"protocol_version\":\"2024-11-05\"' and '\"server_info\":{\"name\":\"tldr-mcp\"...}' — confirming M4's bug pre-condition. M4 must change InitializeResult fields' serde rename, not the JsonRpcRequest struct M3 owns.",
+    "notification_method_naming": "MCP 2024-11-05 uses 'notifications/initialized'. There is NO legacy alias in the spec — bare 'initialized' was a v0.1.x typo, not a spec form. M4's broader audit should similarly reject any other bare-method-name (no slash) routes if it discovers them while walking the response surface."
+  }
+}

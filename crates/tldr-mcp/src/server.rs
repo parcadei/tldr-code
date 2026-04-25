@@ -31,48 +31,90 @@ pub fn run() {
             continue;
         }
 
-        let response = process_request(&line, &registry);
-
-        if let Err(e) = writeln!(stdout_handle, "{}", response) {
-            eprintln!("Error writing to stdout: {}", e);
-        }
-        if let Err(e) = stdout_handle.flush() {
-            eprintln!("Error flushing stdout: {}", e);
+        // `process_request` returns `None` for JSON-RPC notifications
+        // (frames without `id`) — those MUST NOT receive a response per
+        // JSON-RPC 2.0 §4.1, so we silently skip writing a frame.
+        if let Some(response) = process_request(&line, &registry) {
+            if let Err(e) = writeln!(stdout_handle, "{}", response) {
+                eprintln!("Error writing to stdout: {}", e);
+            }
+            if let Err(e) = stdout_handle.flush() {
+                eprintln!("Error flushing stdout: {}", e);
+            }
         }
     }
 }
 
-fn process_request(input: &str, registry: &ToolRegistry) -> String {
+/// Dispatch a single JSON-RPC frame.
+///
+/// Returns `Some(serialized_response)` for requests (frames carrying an `id`)
+/// and `None` for notifications (frames without `id`). Per JSON-RPC 2.0 §4.1
+/// and MCP 2024-11-05 lifecycle, the server MUST NOT emit a response frame
+/// for notifications such as `notifications/initialized`.
+///
+/// If the frame fails to parse as JSON, a parse-error response with
+/// `id: null` is emitted (per JSON-RPC 2.0, parse errors return `id: null`
+/// because the id is unknown). An `invalid_request` error response is
+/// emitted when a request frame uses the wrong `jsonrpc` version. A
+/// notification frame with the wrong `jsonrpc` version is silently dropped
+/// (the client is not waiting for a response by definition).
+pub fn process_request(input: &str, registry: &ToolRegistry) -> Option<String> {
     let request = match parse_request(input) {
         Ok(req) => req,
         Err(err) => {
-            return serialize_response(&JsonRpcResponse::error(Value::Null, err));
+            // Parse errors lose the id (frame may be unparseable), so we
+            // cannot tell if the sender intended a notification. Per JSON-RPC
+            // 2.0, parse errors are returned with id:null. We do so.
+            return Some(serialize_response(&JsonRpcResponse::error(
+                Value::Null,
+                err,
+            )));
         }
     };
 
+    let is_notification = request.id.is_none();
+
     if request.jsonrpc != JSONRPC_VERSION {
-        return serialize_response(&JsonRpcResponse::error(
-            request.id,
+        if is_notification {
+            // Notifications never receive a response, even on error.
+            return None;
+        }
+        return Some(serialize_response(&JsonRpcResponse::error(
+            request.id.clone().unwrap_or(Value::Null),
             JsonRpcError::invalid_request(format!(
                 "Invalid JSON-RPC version: expected {}, got {}",
                 JSONRPC_VERSION, request.jsonrpc
             )),
-        ));
+        )));
     }
 
     let result = match request.method.as_str() {
         "initialize" => handle_initialize(&request),
-        "initialized" => handle_initialized(&request),
+        // MCP 2024-11-05 spec uses the namespaced method name
+        // `notifications/initialized` for the post-handshake client → server
+        // notification. The legacy bare `"initialized"` route was never
+        // spec-correct and is removed; spec-compliant clients use the
+        // namespaced form.
+        "notifications/initialized" => handle_initialized(&request),
         "tools/list" => handle_tools_list(&request, registry),
         "tools/call" => handle_tools_call(&request, registry),
         "shutdown" => handle_shutdown(&request),
         _ => Err(JsonRpcError::method_not_found(&request.method)),
     };
 
-    match result {
-        Ok(value) => serialize_response(&JsonRpcResponse::success(request.id, value)),
-        Err(err) => serialize_response(&JsonRpcResponse::error(request.id, err)),
+    if is_notification {
+        // Per JSON-RPC 2.0 §4.1: a server MUST NOT reply to a notification,
+        // even when the dispatched handler returned an error. Side-effects
+        // (e.g. logging in `handle_initialized`) have already executed above.
+        return None;
     }
+
+    // Safety: `is_notification == false` ⟹ `request.id.is_some()`.
+    let id = request.id.unwrap_or(Value::Null);
+    Some(match result {
+        Ok(value) => serialize_response(&JsonRpcResponse::success(id, value)),
+        Err(err) => serialize_response(&JsonRpcResponse::error(id, err)),
+    })
 }
 
 fn handle_initialize(request: &JsonRpcRequest) -> Result<Value, JsonRpcError> {
