@@ -1869,45 +1869,46 @@ fn test_inheritance_on_ocaml() { check_inheritance("ocaml"); }
 
 // ---------------------------------------------------------------- definition
 //
-// definition currently only supports Python — the language gates at
-// crates/tldr-cli/src/commands/remaining/definition.rs:317 and :377
-// reject any non-Python language with `unsupported language: <Lang>`.
-// The other 17 cells are #[ignore]-d with that citation.
+// VAL-015 generalised `tldr definition` from Python-only to all 18
+// languages. The dispatch reuses each language handler's
+// `CallGraphLanguageSupport::extract_definitions` API to locate the
+// definition site of the requested symbol, with a project walk for
+// cross-file resolution.
 #[test]
 fn test_definition_on_python() { check_definition("python"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_typescript() { check_definition("typescript"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_javascript() { check_definition("javascript"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_go() { check_definition("go"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_rust() { check_definition("rust"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_java() { check_definition("java"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_c() { check_definition("c"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_cpp() { check_definition("cpp"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_ruby() { check_definition("ruby"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_kotlin() { check_definition("kotlin"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_swift() { check_definition("swift"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_csharp() { check_definition("csharp"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_scala() { check_definition("scala"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_php() { check_definition("php"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_lua() { check_definition("lua"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_luau() { check_definition("luau"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_elixir() { check_definition("elixir"); }
-#[test] #[ignore = "definition supports only Python (definition.rs:317, :377)"]
+#[test]
 fn test_definition_on_ocaml() { check_definition("ocaml"); }
 
 // ---------------------------------------------------------------- cohesion
