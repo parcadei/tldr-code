@@ -542,6 +542,32 @@ fn check_dead(lang: &str) {
             &stderr,
         );
     }
+    // VAL-018: tightened — every fixture defines `dead_helper` (or
+    // `deadHelper`/`dead_helper` per language convention) which is
+    // never called, so the analyzer must report at least 1 dead or
+    // possibly-dead function. Accept either bucket — some languages
+    // (e.g. dynamic-dispatch ones) classify into `possibly_dead`
+    // instead of `dead_functions`. See `fixtures/mod.rs` for the
+    // canonical 4-function invariant added in VAL-018.
+    let total_dead = json
+        .get("total_dead")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let total_possibly_dead = json
+        .get("total_possibly_dead")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    if total_dead + total_possibly_dead == 0 {
+        fail_cell(
+            "dead",
+            lang,
+            &format!(
+                "total_dead={total_dead} total_possibly_dead={total_possibly_dead} — fixture defines `dead_helper` (never called) so >= 1 was expected",
+            ),
+            &stdout,
+            &stderr,
+        );
+    }
 }
 
 fn check_references(lang: &str) {

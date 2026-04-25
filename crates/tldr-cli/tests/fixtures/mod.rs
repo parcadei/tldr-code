@@ -3,18 +3,31 @@
 //! Each fixture writes 2 source files + (where applicable) a manifest into
 //! the provided `root` tempdir, with these invariants:
 //!
-//! 1. **3 functions total** across 2 files.
-//! 2. **File A** (entry) defines `helper` (returns a constant) and `main`
-//!    (calls `helper` and also calls `b_util` from file B).
+//! 1. **4 functions total** across 2 files.
+//! 2. **File A** (entry) defines:
+//!    - `helper` (returns a constant; called by `main`).
+//!    - `main` (calls `helper` and `b_util`).
+//!    - `dead_helper` (returns a constant; **never called from anywhere**
+//!      — exists solely so `tldr dead` reports >= 1 unreachable function).
 //! 3. **File B** defines `b_util` (returns a constant) — imported by File A.
 //! 4. Total **2 call edges**: `main -> helper` and `main -> b_util`.
+//! 5. **1 unreachable function**: `dead_helper`.
 //!
 //! These invariants let the (command × language) matrix in
-//! `language_command_matrix.rs` make strong semantic assertions:
+//! `language_command_matrix.rs` and `exhaustive_matrix.rs` make strong
+//! semantic assertions:
 //! * `structure` must extract >= 1 function from at least one file.
-//! * `calls` must find >= 1 edge.
+//! * `calls` must find >= 2 edges (main->helper, main->b_util).
+//! * `dead` must report >= 1 dead function (`dead_helper`).
 //! * `references helper` must find >= 1 call.
 //! * `impact helper` must locate a target.
+//!
+//! VAL-018: `dead_helper` was added to all 18 fixtures so that
+//! `check_dead` can be tightened from "total_functions > 0" to
+//! "total_dead >= 1", catching dead-code analyzers that silently emit an
+//! empty `dead_functions` array. Existing matrix assertions about
+//! function counts (where present) are tolerant of the increase
+//! (`>= N` form), so the addition is backward-compatible.
 //!
 //! Each language's fixture uses its canonical manifest (matching
 //! `Language::from_directory`'s manifest precedence table in
@@ -257,7 +270,8 @@ fn build_python(root: &Path) {
         &root.join("main.py"),
         "from util import b_util\n\n\
          def helper():\n    return 1\n\n\
-         def main():\n    helper()\n    b_util()\n",
+         def main():\n    helper()\n    b_util()\n\n\
+         def dead_helper():\n    return 99\n",
     );
     write_file(&root.join("util.py"), "def b_util():\n    return 2\n");
 }
@@ -272,7 +286,8 @@ fn build_typescript(root: &Path) {
         &root.join("main.ts"),
         "import { b_util } from './util';\n\n\
          export function helper(): number { return 1; }\n\n\
-         export function main(): void {\n  helper();\n  b_util();\n}\n",
+         export function main(): void {\n  helper();\n  b_util();\n}\n\n\
+         export function dead_helper(): number { return 99; }\n",
     );
     write_file(
         &root.join("util.ts"),
@@ -293,7 +308,8 @@ fn build_javascript(root: &Path) {
         &root.join("main.js"),
         "import { b_util } from './util.js';\n\n\
          export function helper() { return 1; }\n\n\
-         export function main() {\n  helper();\n  b_util();\n}\n",
+         export function main() {\n  helper();\n  b_util();\n}\n\n\
+         export function dead_helper() { return 99; }\n",
     );
     write_file(
         &root.join("util.js"),
@@ -314,7 +330,8 @@ fn build_go(root: &Path) {
         &root.join("main.go"),
         "package main\n\nimport \"example.com/x/util\"\n\n\
          func helper() int { return 1 }\n\n\
-         func main() {\n  helper()\n  util.BUtil()\n}\n",
+         func main() {\n  helper()\n  util.BUtil()\n}\n\n\
+         func dead_helper() int { return 99 }\n",
     );
     write_file(
         &root.join("util/util.go"),
@@ -335,7 +352,8 @@ fn build_rust(root: &Path) {
         &root.join("src/main.rs"),
         "mod util;\n\n\
          fn helper() -> i32 { 1 }\n\n\
-         fn main() {\n    let _ = helper();\n    let _ = util::b_util();\n}\n",
+         fn main() {\n    let _ = helper();\n    let _ = util::b_util();\n}\n\n\
+         fn dead_helper() -> i32 { 99 }\n",
     );
     write_file(
         &root.join("src/util.rs"),
@@ -358,6 +376,7 @@ fn build_java(root: &Path) {
          \x20       helper();\n\
          \x20       Util.bUtil();\n\
          \x20   }\n\
+         \x20   public static int deadHelper() { return 99; }\n\
          }\n",
     );
     write_file(
@@ -381,7 +400,8 @@ fn build_c(root: &Path) {
         &root.join("main.c"),
         "#include \"util.h\"\n\n\
          int helper(void) { return 1; }\n\n\
-         int main(void) {\n    helper();\n    b_util();\n    return 0;\n}\n",
+         int main(void) {\n    helper();\n    b_util();\n    return 0;\n}\n\n\
+         int dead_helper(void) { return 99; }\n",
     );
     write_file(&root.join("util.h"), "int b_util(void);\n");
     write_file(
@@ -403,7 +423,8 @@ fn build_cpp(root: &Path) {
         &root.join("main.cpp"),
         "#include \"util.hpp\"\n\n\
          int helper() { return 1; }\n\n\
-         int main() {\n    helper();\n    b_util();\n    return 0;\n}\n",
+         int main() {\n    helper();\n    b_util();\n    return 0;\n}\n\n\
+         int dead_helper() { return 99; }\n",
     );
     write_file(&root.join("util.hpp"), "int b_util();\n");
     write_file(
@@ -428,7 +449,8 @@ fn build_ruby(root: &Path) {
         &root.join("main.rb"),
         "require_relative 'util'\n\n\
          def helper\n  1\nend\n\n\
-         def main\n  helper\n  b_util\nend\n",
+         def main\n  helper\n  b_util\nend\n\n\
+         def dead_helper\n  99\nend\n",
     );
     write_file(
         &root.join("util.rb"),
@@ -446,7 +468,8 @@ fn build_kotlin(root: &Path) {
     write_file(
         &root.join("Main.kt"),
         "fun helper(): Int = 1\n\n\
-         fun main() {\n    helper()\n    bUtil()\n}\n",
+         fun main() {\n    helper()\n    bUtil()\n}\n\n\
+         fun deadHelper(): Int = 99\n",
     );
     write_file(
         &root.join("Util.kt"),
@@ -467,6 +490,7 @@ fn build_swift(root: &Path) {
         &root.join("Main.swift"),
         "func helper() -> Int { return 1 }\n\n\
          func main() {\n    _ = helper()\n    _ = bUtil()\n}\n\n\
+         func deadHelper() -> Int { return 99 }\n\n\
          main()\n",
     );
     write_file(
@@ -495,6 +519,7 @@ fn build_csharp(root: &Path) {
          \x20       helper();\n\
          \x20       Util.b_util();\n\
          \x20   }\n\
+         \x20   static int dead_helper() { return 99; }\n\
          }\n",
     );
     write_file(
@@ -522,6 +547,7 @@ fn build_scala(root: &Path) {
          \x20   helper()\n\
          \x20   Util.bUtil()\n\
          \x20 }\n\
+         \x20 def deadHelper(): Int = 99\n\
          }\n",
     );
     write_file(
@@ -542,7 +568,8 @@ fn build_php(root: &Path) {
         &root.join("main.php"),
         "<?php\nrequire_once 'util.php';\n\n\
          function helper() { return 1; }\n\n\
-         function main() {\n    helper();\n    b_util();\n}\n",
+         function main() {\n    helper();\n    b_util();\n}\n\n\
+         function dead_helper() { return 99; }\n",
     );
     write_file(
         &root.join("util.php"),
@@ -563,7 +590,8 @@ fn build_lua(root: &Path) {
         &root.join("main.lua"),
         "local util = require('util')\n\n\
          function helper()\n    return 1\nend\n\n\
-         function main()\n    helper()\n    util.b_util()\nend\n",
+         function main()\n    helper()\n    util.b_util()\nend\n\n\
+         function dead_helper()\n    return 99\nend\n",
     );
     write_file(
         &root.join("util.lua"),
@@ -586,7 +614,8 @@ fn build_luau(root: &Path) {
         &root.join("main.luau"),
         "local util = require('./util')\n\n\
          local function helper(): number\n    return 1\nend\n\n\
-         local function main()\n    helper()\n    util.b_util()\nend\n",
+         local function main()\n    helper()\n    util.b_util()\nend\n\n\
+         local function dead_helper(): number\n    return 99\nend\n",
     );
     write_file(
         &root.join("util.luau"),
@@ -613,6 +642,7 @@ fn build_elixir(root: &Path) {
          \x20   helper()\n\
          \x20   Util.b_util()\n\
          \x20 end\n\
+         \x20 def dead_helper, do: 99\n\
          end\n",
     );
     write_file(
@@ -635,7 +665,8 @@ fn build_ocaml(root: &Path) {
          let main () =\n\
          \x20 let _ = helper () in\n\
          \x20 let _ = Util.b_util () in\n\
-         \x20 ()\n",
+         \x20 ()\n\n\
+         let dead_helper () = 99\n",
     );
     write_file(
         &root.join("util.ml"),

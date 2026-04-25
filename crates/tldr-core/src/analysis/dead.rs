@@ -910,13 +910,33 @@ fn is_framework_entry_file(path: &Path, language: crate::types::Language) -> boo
                 || file_name.ends_with("ViewModel.kt")
         }
         Language::CSharp => {
-            // ASP.NET conventions
-            file_name.ends_with("Controller.cs")
+            // ASP.NET conventions. VAL-018: `Program.cs` and `Startup.cs`
+            // are also the conventional entry point names for non-ASP.NET
+            // C# applications (console apps, libraries with a CLI driver),
+            // where they are NOT framework-rescued. Disambiguate by
+            // reading the file: only treat `Program.cs`/`Startup.cs` as
+            // ASP.NET when they reference ASP.NET-specific APIs.
+            // Without this, dead-code analysis silently rescues every
+            // public method in `Program.cs` even in plain console apps,
+            // hiding real dead functions.
+            if file_name.ends_with("Controller.cs")
                 || file_name.ends_with("Hub.cs")
                 || file_name.ends_with("Middleware.cs")
                 || (path_str.contains("/Pages/") && file_name.ends_with(".cshtml.cs"))
-                || file_name == "Program.cs"
-                || file_name == "Startup.cs"
+            {
+                return true;
+            }
+            if file_name == "Program.cs" || file_name == "Startup.cs" {
+                if let Ok(content) = std::fs::read_to_string(path) {
+                    return content.contains("Microsoft.AspNetCore")
+                        || content.contains("WebApplication")
+                        || content.contains("IApplicationBuilder")
+                        || content.contains("IHostBuilder")
+                        || content.contains("IWebHostBuilder")
+                        || content.contains("IServiceCollection");
+                }
+            }
+            false
         }
         Language::Go => {
             // Go HTTP handlers are typically in handler files
