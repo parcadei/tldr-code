@@ -127,8 +127,21 @@ impl JsonRpcError {
     }
 }
 
-/// MCP initialize request parameters
+/// MCP initialize request parameters.
+///
+/// Per MCP 2024-11-05 wire format, the `initialize` request params object
+/// uses camelCase field names (`protocolVersion`, `clientInfo`). The
+/// struct-level `#[serde(rename_all = "camelCase")]` is load-bearing —
+/// without it, serde silently fails to bind `protocolVersion`/`clientInfo`
+/// from a spec-compliant client (e.g. Claude Code) and every field
+/// defaults to `None` (because each field carries `#[serde(default)]`),
+/// so the server processes a degraded request without realizing — the
+/// diagnostic `eprintln!` paths in `server::handle_initialize` become
+/// dead code when the live client is spec-compliant. See parcadei/tldr-code#19
+/// (M7 VAL-007 — request-side audit, symmetric to M4's response-side
+/// fix on `InitializeResult`).
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InitializeParams {
     #[serde(default)]
     pub protocol_version: Option<String>,

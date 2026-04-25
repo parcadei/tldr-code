@@ -1,0 +1,155 @@
+{
+  "milestone": "mcp-initialize-params-audit",
+  "assertion": "VAL-007",
+  "issue": "parcadei/tldr-code#19 (request-side audit — extends M4's response-side fix)",
+  "worker": "kraken (M7 VAL-007)",
+  "starting_head": "a573504",
+  "status": "passed",
+  "audit": {
+    "structs_examined": [
+      {
+        "name": "JsonRpcRequest",
+        "location": "crates/tldr-mcp/src/protocol.rs:32",
+        "role": "wraps every incoming request",
+        "snake_case_fields": [],
+        "rename_all_present": false,
+        "issues_found": 0,
+        "scope": "M3 territory (id field handled in M3 fix)",
+        "verdict": "OK"
+      },
+      {
+        "name": "InitializeParams",
+        "location": "crates/tldr-mcp/src/protocol.rs:142",
+        "role": "params for initialize method (server.rs:121-124)",
+        "snake_case_fields": ["protocol_version", "client_info"],
+        "rename_all_present_pre_fix": false,
+        "rename_all_present_post_fix": true,
+        "rename_all_value": "camelCase",
+        "issues_found": 2,
+        "verdict": "FIXED",
+        "fix": "added #[serde(rename_all = \"camelCase\")] at struct level"
+      },
+      {
+        "name": "ClientCapabilities",
+        "location": "crates/tldr-mcp/src/protocol.rs:154",
+        "role": "nested in InitializeParams.capabilities",
+        "snake_case_fields": [],
+        "rename_all_present": false,
+        "issues_found": 0,
+        "scope": "single field 'experimental' is single-word — no rename needed",
+        "verdict": "OK"
+      },
+      {
+        "name": "ClientInfo",
+        "location": "crates/tldr-mcp/src/protocol.rs:161",
+        "role": "nested in InitializeParams.client_info",
+        "snake_case_fields": [],
+        "rename_all_present": false,
+        "issues_found": 0,
+        "scope": "fields 'name', 'version' are single-word — no rename needed",
+        "verdict": "OK"
+      },
+      {
+        "name": "ToolsCallParams",
+        "location": "crates/tldr-mcp/src/protocol.rs:239",
+        "role": "params for tools/call method (server.rs:166-172)",
+        "snake_case_fields": [],
+        "rename_all_present": false,
+        "issues_found": 0,
+        "scope": "fields 'name', 'arguments' are single-word — no rename needed",
+        "verdict": "OK"
+      }
+    ],
+    "structs_excluded_serialize_only": [
+      "JsonRpcResponse",
+      "JsonRpcError",
+      "InitializeResult",
+      "ServerCapabilities",
+      "ToolsCapability",
+      "ServerInfo",
+      "ToolsListResult",
+      "ToolDefinition",
+      "ToolsCallResult",
+      "ContentItem"
+    ],
+    "structs_total_examined": 5,
+    "structs_total_with_issues": 1,
+    "fields_total_with_issues": 2
+  },
+  "tests": {
+    "file": "crates/tldr-mcp/tests/mcp_request_params_test.rs",
+    "test_names": [
+      "initialize_params_accepts_camelcase_keys",
+      "initialize_request_via_process_request_accepts_camelcase_params",
+      "initialize_params_snake_case_keys_no_longer_bind_post_fix"
+    ],
+    "test_count": 3,
+    "red_on_starting_head": {
+      "head": "a573504",
+      "passed": 1,
+      "failed": 2,
+      "primary_test_red": true,
+      "primary_test_panic_substring": "parsed.protocol_version was None despite protocolVersion=\"2024-11-05\" being sent in JSON",
+      "primary_test_payload_contains": ["protocolVersion", "clientInfo"],
+      "negative_control_test_red": true,
+      "negative_control_test_panic_substring": "the legacy snake_case key protocol_version must no longer bind to InitializeParams.protocol_version, got: Some(\"2024-11-05\")",
+      "supplementary_test_red": false,
+      "supplementary_test_explanation": "handler at server.rs:120-145 tolerantly swallows None via .and_then(|p| from_value(p).ok()) — initialize succeeds while internally degrading; this is the silent-loss bug surface",
+      "red_reason_gate_satisfied": true
+    },
+    "green_post_fix": {
+      "passed": 3,
+      "failed": 0
+    }
+  },
+  "fix": {
+    "files_touched": ["crates/tldr-mcp/src/protocol.rs"],
+    "files_touched_count": 1,
+    "shape": "added #[serde(rename_all = \"camelCase\")] to InitializeParams struct + expanded module docstring",
+    "rationale_choice": "struct-level rename_all over per-field rename: covers both fields in one attribute, future-proof against new fields silently regressing"
+  },
+  "regression_checks": {
+    "tldr_mcp_full_suite": {
+      "result": "all pass",
+      "lib_tests": 45,
+      "mcp_camelcase_test_m4": 5,
+      "mcp_lifecycle_test_m3": 4,
+      "mcp_request_params_test_m7_new": 3,
+      "total": 57
+    },
+    "exhaustive_matrix": {"passed": 730, "failed": 0, "baseline": 730, "delta": 0},
+    "language_command_matrix": {"passed": 234, "failed": 0, "baseline": 234, "delta": 0},
+    "matrix_combined_baseline": 964,
+    "matrix_combined_actual": 964,
+    "matrix_delta": 0,
+    "clippy": {
+      "command": "cargo clippy --workspace --all-features --tests -- -D warnings",
+      "result": "clean",
+      "warnings": 0,
+      "errors": 0
+    }
+  },
+  "stop_conditions_checked": {
+    "structs_needing_fixing_le_4": {"value": 1, "threshold": 4, "ok": true},
+    "m3_tests_still_pass": {"ok": true},
+    "m4_tests_still_pass": {"ok": true},
+    "matrix_unchanged": {"ok": true},
+    "no_clippy_warning_introduced": {"ok": true},
+    "source_files_touched_le_3": {"value": 1, "threshold": 3, "ok": true}
+  },
+  "coordination": {
+    "disjoint_from_m6": "M6 touches crates/tldr-daemon/src/handlers/*; M7 touches crates/tldr-mcp/src/protocol.rs. Zero file overlap.",
+    "m4_response_side_intact": "InitializeResult #[serde(rename = ...)] attributes unchanged (M4 territory not modified).",
+    "m3_jsonrpcrequest_intact": "JsonRpcRequest.id Option<Value> shape unchanged (M3 territory not modified).",
+    "no_cargo_or_changelog_changes": "version + CHANGELOG updates deferred to M8."
+  },
+  "acceptance_criteria_checked": [
+    {"id": 1, "criterion": "audit complete: every params-side struct documented", "result": "PASS"},
+    {"id": 2, "criterion": "reproduction test passes after fix", "result": "PASS (3/3)"},
+    {"id": 3, "criterion": "M3 mcp_lifecycle_test still passes", "result": "PASS (4/4)"},
+    {"id": 4, "criterion": "M4 mcp_camelcase_test still passes", "result": "PASS (5/5)"},
+    {"id": 5, "criterion": "cargo test -p tldr-mcp passes", "result": "PASS (57/57)"},
+    {"id": 6, "criterion": "full matrix unchanged", "result": "PASS (964/964)"},
+    {"id": 7, "criterion": "clippy clean", "result": "PASS"}
+  ]
+}
