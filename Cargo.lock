@@ -3339,7 +3339,7 @@ dependencies = [
 
 [[package]]
 name = "tldr-cli"
-version = "0.1.6"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -3400,7 +3400,7 @@ dependencies = [
 
 [[package]]
 name = "tldr-core"
-version = "0.1.6"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "bitvec",
@@ -3449,7 +3449,7 @@ dependencies = [
 
 [[package]]
 name = "tldr-daemon"
-version = "0.1.6"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -3473,7 +3473,7 @@ dependencies = [
 
 [[package]]
 name = "tldr-mcp"
-version = "0.1.6"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "serde",
