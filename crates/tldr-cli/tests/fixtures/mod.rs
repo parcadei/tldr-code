@@ -239,19 +239,14 @@ fn build_ruby(root: &Path) {
         &root.join("Gemfile"),
         "source 'https://rubygems.org'\n",
     );
-    // Use parenthesized calls (`helper()`, not bare `helper`) so the
-    // tree-sitter-ruby grammar emits a `call` node — the Ruby handler's
-    // `extract_calls_from_node` only walks `call` nodes.
-    //
-    // See `crates/tldr-core/src/callgraph/languages/ruby.rs:256` — the
-    // iteration filters to `child.kind() == "call"`, and bareword method
-    // dispatch `helper` (no parens) parses as an `identifier`, not a
-    // `call` node, so edges would be missed.
+    // Idiomatic bareword Ruby method dispatch: `helper`/`b_util` (no parens).
+    // VAL-012 ensures the Ruby callgraph handler resolves these
+    // identifiers to method calls (not local variable reads).
     write_file(
         &root.join("main.rb"),
         "require_relative 'util'\n\n\
          def helper\n  1\nend\n\n\
-         def main\n  helper()\n  b_util()\nend\n",
+         def main\n  helper\n  b_util\nend\n",
     );
     write_file(
         &root.join("util.rb"),

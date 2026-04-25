@@ -242,6 +242,21 @@ impl RubyHandler {
     }
 
     /// Extract calls from a method body node.
+    ///
+    /// Handles two Ruby method-dispatch shapes:
+    ///
+    /// 1. Parenthesized / sugared / receiver calls — `helper()`, `puts "x"`,
+    ///    `obj.method`, `Class.new`, `Module::method` — all parsed as `call`
+    ///    nodes by tree-sitter-ruby and processed by the existing `call` arm.
+    ///
+    /// 2. **Bareword** method dispatch — `helper` (no parens) — parsed as a
+    ///    plain `identifier`. Ruby's semantics: any identifier in expression
+    ///    position that is NOT bound as a local variable or parameter is a
+    ///    method call (see Ruby spec, "Bareword method invocation"). The
+    ///    bareword arm collects local bindings from the surrounding scope and
+    ///    emits a `CallSite` for any identifier that is not bound, not a
+    ///    declaration site, and not already counted as part of an enclosing
+    ///    `call` node.
     fn extract_calls_from_node(
         &self,
         node: &Node,
@@ -250,8 +265,67 @@ impl RubyHandler {
         defined_classes: &HashSet<String>,
         caller: &str,
     ) -> Vec<CallSite> {
+        self.extract_calls_from_node_with_params(
+            node,
+            source,
+            defined_methods,
+            defined_classes,
+            caller,
+            None,
+        )
+    }
+
+    /// Like `extract_calls_from_node`, but also factors method parameters
+    /// (declared on the surrounding `method`/`singleton_method` node) into the
+    /// local-binding set used for bareword filtering.
+    ///
+    /// Callers that have access to the parameters node (the per-method
+    /// dispatch in `extract_calls`) should use this entry point. Module-level
+    /// and class-body callers — which have no parameters — go through the
+    /// thin wrapper `extract_calls_from_node`.
+    fn extract_calls_from_node_with_params(
+        &self,
+        node: &Node,
+        source: &[u8],
+        defined_methods: &HashSet<String>,
+        defined_classes: &HashSet<String>,
+        caller: &str,
+        params_node: Option<Node>,
+    ) -> Vec<CallSite> {
         let mut calls = Vec::new();
 
+        // -----------------------------------------------------------------
+        // First pass: collect local bindings (parameters + assignment LHS).
+        //
+        // Ruby's bareword-vs-local-variable disambiguation depends on which
+        // names are bound in the surrounding scope. We approximate the scope
+        // by collecting:
+        //   * Method parameters (positional, optional, keyword, splat,
+        //     block, hash-splat) from the method's `method_parameters` node.
+        //   * Block parameters declared inside the body.
+        //   * Identifiers on the LHS of assignment / operator_assignment /
+        //     left_assignment_list (multi-assign).
+        //   * Loop induction variables (`for x in …` desugars to a
+        //     `for`/`left_assignment_list` shape).
+        // Nested-block bindings are conservatively hoisted into the enclosing
+        // method's binding set — this is a documented approximation that
+        // matches Ruby's lexical scope for top-level method bodies and only
+        // produces false negatives (a real method call that happens to share
+        // a name with a block-local variable would be missed). Tests cover
+        // the common shapes; broader scoping can be refined later.
+        // -----------------------------------------------------------------
+        let mut bindings: HashSet<String> = HashSet::new();
+
+        if let Some(params) = params_node {
+            collect_param_bindings(&params, source, &mut bindings);
+        }
+        collect_body_bindings(node, source, &mut bindings);
+
+        // -----------------------------------------------------------------
+        // Second pass: walk the body, emit one CallSite per `call` node and
+        // (new) one CallSite per bareword `identifier` node in expression
+        // position not bound to a local.
+        // -----------------------------------------------------------------
         for child in walk_tree(*node) {
             if child.kind() == "call" {
                 let line = child.start_position().row as u32 + 1;
@@ -343,6 +417,42 @@ impl RubyHandler {
                         ));
                     }
                 }
+            } else if child.kind() == "identifier"
+                && is_bareword_method_call(&child, source, &bindings)
+            {
+                let text = get_node_text(&child, source).to_string();
+
+                // Skip import-related barewords (defensive — these usually
+                // appear with arguments and so parse as `call`, but cover
+                // the edge case).
+                if matches!(
+                    text.as_str(),
+                    "require"
+                        | "require_relative"
+                        | "load"
+                        | "include"
+                        | "extend"
+                        | "prepend"
+                ) {
+                    continue;
+                }
+
+                let line = child.start_position().row as u32 + 1;
+                let call_type =
+                    if defined_methods.contains(&text) || defined_classes.contains(&text) {
+                        CallType::Intra
+                    } else {
+                        CallType::Direct
+                    };
+                calls.push(CallSite::new(
+                    caller.to_string(),
+                    text,
+                    call_type,
+                    Some(line),
+                    None,
+                    None,
+                    None,
+                ));
             }
         }
 
@@ -427,6 +537,284 @@ impl RubyHandler {
 
         (methods, bases)
     }
+}
+
+// =============================================================================
+// Bareword method-call helpers (VAL-012)
+// =============================================================================
+
+/// Collect identifier names declared as method/lambda/block parameters.
+///
+/// Walks the parameters subtree and accumulates the leaf `identifier` from
+/// every parameter shape: positional, optional (`x = default`), keyword
+/// (`x:`), keyword-with-default (`x: default`), splat (`*args`), double-splat
+/// (`**opts`), block (`&blk`), and destructured tuple parameters.
+fn collect_param_bindings(params: &Node, source: &[u8], bindings: &mut HashSet<String>) {
+    for node in walk_tree(*params) {
+        if node.kind() != "identifier" {
+            // Splat / block / hash-splat parameters wrap their identifier in
+            // the parameter shape itself; the inner `identifier` is caught
+            // when the walker yields it.
+            continue;
+        }
+
+        // Only count this identifier if its parent is a parameter shape —
+        // not, e.g., a default-value expression like `def foo(x = bar)`
+        // where `bar` should NOT be added as a binding.
+        let Some(parent) = node.parent() else { continue };
+        if !is_param_shape(parent.kind()) {
+            continue;
+        }
+
+        // For optional/keyword parameters, the identifier is typically the
+        // FIRST named child (the name), not any subsequent expression
+        // children. tree-sitter-ruby emits the name as the leftmost
+        // identifier, so we only add it when this node is the first
+        // identifier child of the parameter shape.
+        if is_first_identifier_child(&parent, &node) {
+            bindings.insert(get_node_text(&node, source).to_string());
+        }
+    }
+}
+
+/// Walk the body and add all locally-bound identifiers (assignment LHS,
+/// block parameters, for-loop induction vars) to the bindings set.
+///
+/// This is approximate: nested-block bindings are conservatively hoisted to
+/// the enclosing scope rather than being properly lexically scoped. The
+/// approximation favors correctness for the call-graph use case (a binding
+/// flagged anywhere in the body causes us to NOT emit a spurious call edge).
+fn collect_body_bindings(body: &Node, source: &[u8], bindings: &mut HashSet<String>) {
+    for node in walk_tree(*body) {
+        match node.kind() {
+            "assignment" => {
+                if let Some(lhs) = node.child_by_field_name("left") {
+                    add_lhs_bindings(&lhs, source, bindings);
+                }
+            }
+            "operator_assignment" => {
+                // `x += 1` — the LHS is also a binding (and a read, but the
+                // read uses the existing binding so no false positive).
+                if let Some(lhs) = node.child_by_field_name("left") {
+                    add_lhs_bindings(&lhs, source, bindings);
+                }
+            }
+            "left_assignment_list" => {
+                // Inside `multiple_assignment`: `a, b = 1, 2` — every leaf
+                // identifier is a new binding.
+                for c in walk_tree(node) {
+                    if c.kind() == "identifier" {
+                        bindings.insert(get_node_text(&c, source).to_string());
+                    }
+                }
+            }
+            "block_parameters" | "lambda_parameters" => {
+                // `do |x, y| … end` / `->(x) { … }` — each identifier is a
+                // block-local binding. Conservative hoisting (see fn doc).
+                collect_param_bindings(&node, source, bindings);
+            }
+            "for" => {
+                // `for x in items; … end` — `x` is the induction variable.
+                // tree-sitter-ruby exposes it as a `pattern` field, but we
+                // can also catch it via the leftmost identifier child.
+                if let Some(pat) = node.child_by_field_name("pattern") {
+                    add_lhs_bindings(&pat, source, bindings);
+                }
+            }
+            "rescue" => {
+                // `rescue => e` — the captured exception name is a binding.
+                // tree-sitter-ruby uses an `exception_variable` shape.
+                for i in 0..node.named_child_count() {
+                    if let Some(c) = node.named_child(i) {
+                        if c.kind() == "exception_variable" {
+                            for cc in walk_tree(c) {
+                                if cc.kind() == "identifier" {
+                                    bindings
+                                        .insert(get_node_text(&cc, source).to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Add identifier bindings from a generic LHS expression (single var,
+/// destructured tuple, splat-target, etc.).
+fn add_lhs_bindings(lhs: &Node, source: &[u8], bindings: &mut HashSet<String>) {
+    match lhs.kind() {
+        "identifier" => {
+            bindings.insert(get_node_text(lhs, source).to_string());
+        }
+        // Destructured / splat / nested LHS — collect every leaf identifier.
+        _ => {
+            for c in walk_tree(*lhs) {
+                if c.kind() == "identifier" {
+                    bindings.insert(get_node_text(&c, source).to_string());
+                }
+            }
+        }
+    }
+}
+
+/// True iff the given node kind is one of the parameter container kinds.
+fn is_param_shape(kind: &str) -> bool {
+    matches!(
+        kind,
+        "method_parameters"
+            | "block_parameters"
+            | "lambda_parameters"
+            | "optional_parameter"
+            | "keyword_parameter"
+            | "splat_parameter"
+            | "block_parameter"
+            | "hash_splat_parameter"
+            | "destructured_parameter"
+    )
+}
+
+/// True iff `child` is the first `identifier` child of `parent`.
+fn is_first_identifier_child(parent: &Node, child: &Node) -> bool {
+    for i in 0..parent.child_count() {
+        if let Some(c) = parent.child(i) {
+            if c.kind() == "identifier" {
+                return c.id() == child.id();
+            }
+        }
+    }
+    false
+}
+
+/// Decide whether an `identifier` node represents a bareword method call.
+///
+/// Filter rules (any → not a call):
+///   1. The identifier text is bound as a local variable / parameter in
+///      `bindings`.
+///   2. The identifier's parent is itself a `call` node (the identifier is
+///      already accounted for by the call-arm — as the method name or
+///      receiver — so emitting a separate edge would double-count).
+///   3. The identifier sits in a parameter declaration position (parent is
+///      one of the `*_parameter` / `*_parameters` kinds).
+///   4. The identifier is the name of a method/class/module/lambda
+///      definition (parent is `method` / `singleton_method` / `class` /
+///      `module` / `block` etc., and node is the name field).
+///   5. The identifier is the LHS of an assignment (parent is `assignment`
+///      / `operator_assignment` / `left_assignment_list` and node is on the
+///      left side).
+///   6. The identifier is part of a `scope_resolution` (`Module::method`)
+///      receiver-side — the call arm already handles this.
+///   7. The identifier is a hash-key (parent is `pair` and node is the
+///      `key` field) or a symbol (`:foo` is a `simple_symbol`, not an
+///      identifier — naturally excluded).
+///   8. The identifier is a label (`foo:` in keyword arg syntax) — these
+///      tree-sitter-ruby surfaces as `hash_key_symbol` not `identifier`,
+///      so naturally excluded.
+///   9. The identifier is the receiver of an existing `call` chain
+///      (`helper.foo` — `helper` is the receiver; the call arm does not
+///      currently emit an edge for the bareword receiver, but the
+///      identifier's parent IS the `call` node, so rule 2 covers this).
+fn is_bareword_method_call(node: &Node, source: &[u8], bindings: &HashSet<String>) -> bool {
+    debug_assert_eq!(node.kind(), "identifier");
+
+    let text = get_node_text(node, source);
+
+    // Rule 1: local variable / parameter
+    if bindings.contains(text) {
+        return false;
+    }
+
+    let Some(parent) = node.parent() else {
+        return false;
+    };
+
+    let parent_kind = parent.kind();
+
+    // Rule 2: parent is a `call` (identifier is part of that call's
+    // method name / receiver — already counted by the call arm).
+    if parent_kind == "call" {
+        return false;
+    }
+
+    // Rule 3: parameter declaration position.
+    if is_param_shape(parent_kind) {
+        return false;
+    }
+
+    // Rule 4: name of a definition.
+    if matches!(
+        parent_kind,
+        "method" | "singleton_method" | "class" | "module" | "alias"
+    ) {
+        // tree-sitter-ruby uses field names like `name` for the method
+        // identifier; if the field name is `name`, this is a declaration.
+        if let Some(name_field) = parent.child_by_field_name("name") {
+            if name_field.id() == node.id() {
+                return false;
+            }
+        }
+        // Fallback: first identifier child of a method definition is its
+        // name.
+        if is_first_identifier_child(&parent, node) {
+            return false;
+        }
+    }
+
+    // Rule 5: LHS of assignment.
+    if matches!(parent_kind, "assignment" | "operator_assignment") {
+        if let Some(left) = parent.child_by_field_name("left") {
+            if left.id() == node.id() {
+                return false;
+            }
+        }
+    }
+    if parent_kind == "left_assignment_list" {
+        return false;
+    }
+
+    // Rule 6: part of scope_resolution.
+    if parent_kind == "scope_resolution" {
+        return false;
+    }
+
+    // Rule 7: hash key.
+    if parent_kind == "pair" {
+        if let Some(key) = parent.child_by_field_name("key") {
+            if key.id() == node.id() {
+                return false;
+            }
+        }
+    }
+
+    // Rule 8: rescue exception variable / for-loop pattern — also a
+    // declaration, not a use.
+    if parent_kind == "exception_variable" {
+        return false;
+    }
+    if parent_kind == "for" {
+        if let Some(pat) = parent.child_by_field_name("pattern") {
+            if pat.id() == node.id() {
+                return false;
+            }
+        }
+    }
+
+    // Rule 9: argument keyword label — `foo(name: value)`.
+    // tree-sitter-ruby surfaces these as `hash_key_symbol` for `name:`,
+    // so naturally excluded; nothing to do here.
+
+    // Rule 10: ancestor is already a `call` whose method/receiver we've
+    // processed. The body walk processes a `call` node and its child
+    // identifiers later. We must not double-count when an identifier is
+    // a child of a `call` (handled by Rule 2 above), but we DO want to
+    // emit edges for identifiers nested deeper inside the call's argument
+    // list (`puts helper` → `helper` is inside `argument_list` whose
+    // parent is the `call`; `helper`'s parent is `argument_list`, not
+    // `call`, so Rule 2 doesn't apply and we emit `helper` correctly).
+
+    true
 }
 
 impl CallGraphLanguageSupport for RubyHandler {
@@ -590,14 +978,18 @@ impl CallGraphLanguageSupport for RubyHandler {
 
                         let mut all_calls = Vec::new();
 
-                        // Extract calls from method body
+                        // Extract calls from method body, with the surrounding
+                        // method's parameters factored into the bareword
+                        // bindings set so parameter reads aren't misclassified
+                        // as method calls.
                         if let Some(body_node) = body {
-                            let calls = handler.extract_calls_from_node(
+                            let calls = handler.extract_calls_from_node_with_params(
                                 &body_node,
                                 source,
                                 defined_methods,
                                 defined_classes,
                                 &full_name,
+                                params,
                             );
                             all_calls.extend(calls);
                         }
@@ -944,6 +1336,83 @@ result = helper()
             assert!(calls.contains_key("<module>"));
             let module_calls = calls.get("<module>").unwrap();
             assert!(module_calls.iter().any(|c| c.target == "helper"));
+        }
+
+        // ---------------------------------------------------------------
+        // VAL-012: Bareword (parens-free) method dispatch
+        //
+        // tree-sitter-ruby parses `helper` (no parens) as an `identifier`
+        // node, not a `call` node. The handler must resolve barewords in
+        // expression position to method calls — but must NOT misclassify
+        // local-variable reads or parameter references as method calls.
+        // ---------------------------------------------------------------
+
+        #[test]
+        fn test_extract_calls_bareword_free_function() {
+            let source = "def helper\n  1\nend\n\ndef main\n  helper\nend\n";
+            let calls = extract_calls(source);
+            let main_calls = calls
+                .get("main")
+                .expect("main should have at least one call");
+            assert!(
+                main_calls.iter().any(|c| c.target == "helper"),
+                "bareword `helper` should be extracted as a call from main. Got: {:?}",
+                main_calls,
+            );
+            // `helper` is defined in this file, so the edge type is Intra.
+            let helper_call = main_calls
+                .iter()
+                .find(|c| c.target == "helper")
+                .expect("helper call must exist");
+            assert_eq!(helper_call.call_type, CallType::Intra);
+        }
+
+        #[test]
+        fn test_extract_calls_bareword_does_not_trigger_for_local_var() {
+            let source = "def main\n  x = 1\n  x\nend\n";
+            let calls = extract_calls(source);
+            // `x` is a local variable bound by assignment; reading it must
+            // NOT produce a call edge.
+            if let Some(main_calls) = calls.get("main") {
+                assert!(
+                    !main_calls.iter().any(|c| c.target == "x"),
+                    "local variable read `x` should NOT be a call. Got: {:?}",
+                    main_calls,
+                );
+            }
+        }
+
+        #[test]
+        fn test_extract_calls_bareword_does_not_trigger_for_parameter() {
+            let source = "def main(x)\n  x\nend\n";
+            let calls = extract_calls(source);
+            // `x` is a method parameter; reading it must NOT produce a call.
+            if let Some(main_calls) = calls.get("main") {
+                assert!(
+                    !main_calls.iter().any(|c| c.target == "x"),
+                    "parameter read `x` should NOT be a call. Got: {:?}",
+                    main_calls,
+                );
+            }
+        }
+
+        #[test]
+        fn test_extract_calls_bareword_in_argument_position() {
+            let source = "def main\n  puts helper\nend\n";
+            let calls = extract_calls(source);
+            let main_calls = calls
+                .get("main")
+                .expect("main should have at least one call");
+            assert!(
+                main_calls.iter().any(|c| c.target == "puts"),
+                "`puts` call should be extracted. Got: {:?}",
+                main_calls,
+            );
+            assert!(
+                main_calls.iter().any(|c| c.target == "helper"),
+                "bareword `helper` in argument position should be extracted. Got: {:?}",
+                main_calls,
+            );
         }
     }
 
