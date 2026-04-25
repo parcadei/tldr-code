@@ -100,7 +100,7 @@ fn run_tldr_timed(args: &[&str], timeout: Duration) -> CellResult {
     // while keeping the wall-clock guard.
     let start = Instant::now();
     let handle = thread::spawn(move || {
-        let mut cmd = Command::new(&bin);
+        let mut cmd = Command::new(bin);
         cmd.args(&argv);
         let res = cmd.output();
         let _ = tx.send(res);
@@ -173,7 +173,7 @@ fn is_panic(exit: i32, stderr: &str) -> bool {
 /// * 30-39      — network/daemon errors
 /// * 40-49      — serialization errors
 /// * 60-69      — diagnostics-specific (60=no tools, 61=all failed —
-///                see crates/tldr-cli/src/commands/diagnostics.rs:193, :212)
+///   see crates/tldr-cli/src/commands/diagnostics.rs:193, :212)
 ///
 /// Plus subcommand-specific codes:
 /// * `change-impact` exits 3 on NoBaseline (VAL-005)
