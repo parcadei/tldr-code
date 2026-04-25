@@ -205,6 +205,8 @@ pub fn get_relevant_context(
                 project,
                 language,
                 include_docstrings,
+                Some(&call_graph),
+                &file,
             );
             functions.push(func_context);
         }
@@ -425,6 +427,7 @@ fn find_function_info<'a>(
 }
 
 /// Build function context with all metadata
+#[allow(clippy::too_many_arguments)]
 fn build_function_context(
     file: &Path,
     func_name: &str,
@@ -433,17 +436,48 @@ fn build_function_context(
     project: &Path,
     language: Language,
     include_docstrings: bool,
+    project_call_graph: Option<&ProjectCallGraph>,
+    relative_file: &Path,
 ) -> FunctionContext {
     // Build signature
     let signature = build_signature(func_info, language);
 
-    // Get calls from intra-file call graph
-    let calls = module_info
-        .call_graph
-        .calls
-        .get(&func_info.name)
-        .cloned()
-        .unwrap_or_default();
+    // VAL-018: prefer the project call graph (which is populated for ALL
+    // 18 languages by the dedicated language handlers in
+    // crates/tldr-core/src/callgraph/) over `module_info.call_graph`,
+    // which is built by `extract.rs::build_intra_file_call_graph` and
+    // historically only populated for Python/TS/JS/Go/Rust/Java.
+    //
+    // The project call graph keys edges by (file, func), so we need to
+    // match the file too when resolving calls.
+    let mut calls: Vec<String> = Vec::new();
+    if let Some(graph) = project_call_graph {
+        for edge in graph.edges() {
+            let edge_file_matches = edge.src_file == relative_file
+                || edge.src_file == *file
+                || file.ends_with(&edge.src_file);
+            let edge_func_matches = edge.src_func == func_info.name
+                || edge.src_func == func_name
+                || edge
+                    .src_func
+                    .ends_with(&format!(".{}", func_info.name));
+            if edge_file_matches && edge_func_matches {
+                calls.push(edge.dst_func.clone());
+            }
+        }
+        calls.sort();
+        calls.dedup();
+    }
+    if calls.is_empty() {
+        // Fall back to the intra-file call graph for languages where the
+        // project call graph might miss intra-file edges.
+        calls = module_info
+            .call_graph
+            .calls
+            .get(&func_info.name)
+            .cloned()
+            .unwrap_or_default();
+    }
 
     // Get CFG metrics (best effort - don't fail if unavailable)
     let (blocks, cyclomatic) = get_cfg_metrics(file, func_name, language);

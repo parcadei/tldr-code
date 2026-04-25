@@ -222,8 +222,18 @@ impl Bm25Index {
             .follow_links(false)
             .into_iter()
             .filter_entry(|e| {
+                // VAL-018: never reject the WalkDir root (depth 0). The
+                // user-supplied root may legitimately have a leading dot
+                // (e.g. `.tmpXXXXXX` from tempfile, or any path under a
+                // hidden parent). Filtering by depth 0 keeps the
+                // hidden-skip semantics for descendants while not
+                // silently producing 0 results when the project root
+                // itself starts with `.`.
+                if e.depth() == 0 {
+                    return true;
+                }
                 let name = e.file_name().to_string_lossy();
-                // Skip hidden and default skip directories
+                // Skip hidden and default skip directories below the root.
                 if name.starts_with('.') && name != "." {
                     return false;
                 }

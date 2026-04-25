@@ -2346,14 +2346,20 @@ fn get_definition_node_name(node: Node, source: &str) -> Option<String> {
 
     // OCaml: value_definition contains a let_binding child with a "pattern" field.
     // The pattern field holds the function/value name (e.g. `let top_level x = ...`
-    // has pattern="top_level"). Skip anonymous bindings like `let () = ...`.
+    // has pattern="top_level"). Skip anonymous bindings:
+    //   - `let () = ...` (unit pattern, used for top-level imperative blocks)
+    //   - `let _ = ...` (wildcard pattern, used to discard expression results
+    //     inside function bodies — these are NOT named definitions, and they
+    //     surface as duplicate "_" entries when a function body uses
+    //     `let _ = expr in ...` chains. VAL-018: filter at extraction time
+    //     so structure/diff/callgraph all see consistent function names).
     if node.kind() == "value_definition" {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             if child.kind() == "let_binding" {
                 if let Some(pattern_node) = child.child_by_field_name("pattern") {
                     let text = pattern_node.utf8_text(source.as_bytes()).ok()?;
-                    if text != "()" && !text.is_empty() {
+                    if text != "()" && text != "_" && !text.is_empty() {
                         return Some(text.to_string());
                     }
                 }

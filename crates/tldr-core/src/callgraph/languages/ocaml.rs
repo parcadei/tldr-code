@@ -310,6 +310,15 @@ impl OcamlHandler {
                                         {
                                             let func_name =
                                                 get_node_text(&binding_child, source).to_string();
+                                            // VAL-018: skip `_`/`()` wildcard
+                                            // bindings (see process_let_binding_calls
+                                            // for the rationale).
+                                            if func_name == "_"
+                                                || func_name == "()"
+                                                || func_name.is_empty()
+                                            {
+                                                continue;
+                                            }
                                             definitions.insert(func_name.clone());
                                             // Also add qualified name
                                             if !module_path.is_empty() {
@@ -327,6 +336,12 @@ impl OcamlHandler {
                                 || child.kind() == "value_pattern"
                             {
                                 let func_name = get_node_text(&child, source).to_string();
+                                if func_name == "_"
+                                    || func_name == "()"
+                                    || func_name.is_empty()
+                                {
+                                    continue;
+                                }
                                 definitions.insert(func_name.clone());
                                 if !module_path.is_empty() {
                                     let qualified =
@@ -700,6 +715,15 @@ impl OcamlHandler {
         let Some(name) = Self::extract_binding_name(&binding, source) else {
             return;
         };
+        // VAL-018: `let _ = expr in body` is a wildcard binding used to
+        // discard a value (typically inside function bodies). It is NOT
+        // a named definition and must not surface as a caller in the
+        // call graph — its calls were already attributed to the
+        // enclosing function via `extract_calls_from_node` walking
+        // through this node. Skip without inserting.
+        if name == "_" {
+            return;
+        }
         let module_prefix = if module_path.is_empty() {
             None
         } else {
@@ -975,6 +999,19 @@ impl CallGraphLanguageSupport for OcamlHandler {
                                         if bc.kind() == "value_name" || bc.kind() == "value_pattern"
                                         {
                                             let func_name = get_node_text(&bc, source).to_string();
+                                            // VAL-018: skip wildcard `_` and unit `()`
+                                            // patterns. `let _ = expr in body` is a
+                                            // value-discard expression, not a function
+                                            // definition. Without this filter, the
+                                            // resolver picks `_` over the enclosing
+                                            // function (smaller line span wins) and
+                                            // produces edges with src_func="_".
+                                            if func_name == "_"
+                                                || func_name == "()"
+                                                || func_name.is_empty()
+                                            {
+                                                continue;
+                                            }
                                             let line = node.start_position().row as u32 + 1;
                                             let end_line = node.end_position().row as u32 + 1;
 
@@ -997,6 +1034,13 @@ impl CallGraphLanguageSupport for OcamlHandler {
                                 || child.kind() == "value_pattern"
                             {
                                 let func_name = get_node_text(&child, source).to_string();
+                                // VAL-018: same filter as above branch (see comment).
+                                if func_name == "_"
+                                    || func_name == "()"
+                                    || func_name.is_empty()
+                                {
+                                    continue;
+                                }
                                 let line = node.start_position().row as u32 + 1;
                                 let end_line = node.end_position().row as u32 + 1;
 

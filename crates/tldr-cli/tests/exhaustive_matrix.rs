@@ -651,6 +651,21 @@ fn check_search(lang: &str) {
             truncate(&stdout, 400)
         );
     }
+    // VAL-018: tightened — searching for "helper" must return >= 1
+    // result. The canonical fixture defines `helper` in File A; if the
+    // search command can't find a function literally named "helper",
+    // the search pipeline is broken for this language.
+    let results_len = json
+        .get("results")
+        .and_then(Value::as_array)
+        .map(|a| a.len())
+        .unwrap_or(0);
+    if results_len == 0 {
+        panic!(
+            "[search × {lang}] SILENT_FAIL — search for 'helper' returned 0 results, but fixture defines `helper` in File A\n--- stdout ---\n{}\n--- stderr ---\n{stderr}",
+            truncate(&stdout, 400)
+        );
+    }
 }
 
 fn check_context(lang: &str) {
@@ -664,6 +679,32 @@ fn check_context(lang: &str) {
     if !json.is_object() || json.get("entry_point").is_none() {
         panic!(
             "[context × {lang}] SILENT_FAIL — missing `entry_point` field\n--- stdout ---\n{}\n--- stderr ---\n{stderr}",
+            truncate(&stdout, 400)
+        );
+    }
+    // VAL-018: tightened — context for the entry function `main` must
+    // surface its known callees in the canonical fixture: `helper`
+    // (intra-file) and the cross-file utility function (whose name
+    // varies per language convention). The simplest check is that the
+    // rendered JSON string references both names.
+    //
+    // Cross-file utility name per fixture (see `fixtures/mod.rs`):
+    // - python/typescript/javascript/c/cpp/php/lua/luau/ruby/csharp/elixir/ocaml: `b_util`
+    // - go: `BUtil` (Go exported names start uppercase; fixture calls
+    //   `util.BUtil()`, see `fixtures/mod.rs::build_go`)
+    // - java/kotlin/scala: `bUtil` (camelCase per JLS / Kotlin / Scala)
+    // - swift: `bUtil` (Swift convention)
+    // - rust: `b_util` (snake_case)
+    let canonical = serde_json::to_string(&json).unwrap_or_default();
+    let mentions_helper = canonical.contains("\"helper\"")
+        || canonical.contains("'helper'")
+        || canonical.contains("helper(")
+        || canonical.contains(": helper");
+    let b_util_names = ["b_util", "bUtil", "BUtil"];
+    let mentions_b_util = b_util_names.iter().any(|n| canonical.contains(n));
+    if !mentions_helper || !mentions_b_util {
+        panic!(
+            "[context × {lang}] SILENT_FAIL — context for entry function `{func}` must reference both callees `helper` and one of {b_util_names:?}; mentions_helper={mentions_helper} mentions_b_util={mentions_b_util}\n--- stdout ---\n{}\n--- stderr ---\n{stderr}",
             truncate(&stdout, 400)
         );
     }
