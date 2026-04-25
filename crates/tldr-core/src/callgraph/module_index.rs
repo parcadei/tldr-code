@@ -500,6 +500,18 @@ impl ModuleIndex {
                 if module.contains('/') {
                     aliases.push(module.replace('/', "."));
                 }
+                // VAL-011: Luau commonly uses Rojo-style relative requires
+                // such as `require('./util')`. Index `./<module>` so the
+                // import-resolver can find the file regardless of which
+                // form the source uses.
+                let leading = format!("./{}", module);
+                aliases.push(leading);
+                if module.contains('.') {
+                    aliases.push(format!("./{}", module.replace('.', "/")));
+                }
+                if module.contains('/') {
+                    aliases.push(format!("./{}", module.replace('/', ".")));
+                }
             }
             "c" | "cpp" => {
                 if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
@@ -528,6 +540,21 @@ impl ModuleIndex {
             "elixir" => {
                 if !module.starts_with("Elixir.") {
                     aliases.push(format!("Elixir.{}", module));
+                }
+            }
+            "ocaml" => {
+                // VAL-011: OCaml derives module name from file basename with
+                // first letter capitalized. `util.ml` → module `Util`. Add
+                // capitalized aliases so cross-file calls `Util.b_util()`
+                // resolve through `module_imports["Util"] = "Util"` →
+                // `func_index["Util"]["b_util"]`.
+                let capitalized = module
+                    .split('.')
+                    .map(capitalize_first_ocaml_segment)
+                    .collect::<Vec<_>>()
+                    .join(".");
+                if capitalized != module {
+                    aliases.push(capitalized);
                 }
             }
             _ => {}
@@ -1636,6 +1663,26 @@ fn snake_to_camel(segment: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("")
+}
+
+/// Capitalize the first letter of an OCaml module segment.
+///
+/// OCaml derives the module name from the file basename by capitalizing
+/// the first letter only — underscores stay underscores. So `util.ml`
+/// becomes module `Util`, and `my_helper.ml` becomes `My_helper` (NOT
+/// `MyHelper`, which would be the snake_to_camel transform). This is the
+/// conversion used by both `dune` and `ocamlfind`.
+fn capitalize_first_ocaml_segment(segment: &str) -> String {
+    let mut chars = segment.chars();
+    match chars.next() {
+        Some(first) => {
+            let mut out = String::new();
+            out.push(first.to_ascii_uppercase());
+            out.push_str(chars.as_str());
+            out
+        }
+        None => String::new(),
+    }
 }
 
 fn swift_module_from_sources(rest: &str) -> String {

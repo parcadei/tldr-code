@@ -415,11 +415,17 @@ fn check_calls(lang: &str) {
         .get("total_edges")
         .and_then(Value::as_u64)
         .unwrap_or(0);
-    if total == 0 {
+    // VAL-011: tightened from `>= 1` to `>= 2`. The canonical fixture has
+    // `main -> helper` (intra-file) and `main -> b_util` (cross-file), so
+    // any handler that skips the cross-file edge now FAILS instead of
+    // silently passing as WEAK.
+    if total < 2 {
         fail_cell(
             "calls",
             lang,
-            "total_edges=0 but fixture has main -> helper and main -> b_util",
+            &format!(
+                "total_edges={total} but fixture has main -> helper (intra) and main -> b_util (cross-file); expected >= 2",
+            ),
             &stdout,
             &stderr,
         );

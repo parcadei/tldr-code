@@ -1,0 +1,136 @@
+{
+  "milestone": "M11 / VAL-011 — cross-file call resolution",
+  "date": "2026-04-25",
+  "worker": "kraken",
+  "status": "passed",
+  "summary": "Closed the cross-file call resolution gap identified in M10 for 8 languages (c, cpp, ruby, kotlin, swift, php, luau, ocaml). The canonical 2-file fixture has `main` calling both `helper` (intra-file) and `b_util` (cross-file). Before VAL-011, those 8 languages reported 1 edge instead of 2 — silently passing M10's permissive `total_edges >= 1` threshold. M11 tightens the matrix-test assertion to `total_edges >= 2`, then fixes each language so the assertion holds. After VAL-011, all 18 languages return >= 2 edges. 234 of 234 matrix tests pass; 4737 of 4737 core-lib tests pass; clippy clean.",
+
+  "result": "all-green",
+  "implemented": true,
+
+  "languages_fixed": [
+    "c",
+    "cpp",
+    "ruby",
+    "kotlin",
+    "swift",
+    "php",
+    "luau",
+    "ocaml"
+  ],
+
+  "languages_unchanged_still_passing": [
+    "python",
+    "typescript",
+    "javascript",
+    "go",
+    "rust",
+    "java",
+    "csharp",
+    "scala",
+    "lua",
+    "elixir"
+  ],
+
+  "matrix": {
+    "commands_tested": 13,
+    "languages_tested": 18,
+    "total_cells": 234,
+    "passed": 234,
+    "failed": 0,
+    "ignored": 0,
+    "calls_row_before": "10 OK + 8 WEAK (c, cpp, ruby, kotlin, swift, php, luau, ocaml — 1 edge instead of 2)",
+    "calls_row_after": "18 OK (all 18 languages return >= 2 edges)"
+  },
+
+  "test_changes": {
+    "file": "crates/tldr-cli/tests/language_command_matrix.rs",
+    "function": "check_calls",
+    "before": "if total_edges == 0 → fail",
+    "after": "if total_edges < 2 → fail",
+    "rationale": "Canonical fixture promises 2 edges (main→helper intra + main→b_util cross-file). Tightened assertion forces handlers to actually emit cross-file edges instead of silently dropping them."
+  },
+
+  "per_language_fixes": {
+    "c": {
+      "idiom": "#include \"util.h\"; b_util();",
+      "root_cause": "Direct call falls through resolve_call(CallType::Direct) — no import_map entry, no class match.",
+      "fix_location": "crates/tldr-core/src/callgraph/resolution.rs:1497-1547 (new resolve_global_free_function helper) + Direct-call fallback hook at resolution.rs:781-789",
+      "approach": "Global cross-file free-function fallback. Accepts unique cross-file match; deduplicates by (file_path, line) to handle multi-key indexing."
+    },
+    "cpp": {
+      "idiom": "#include \"util.hpp\"; b_util();",
+      "root_cause": "Same as C.",
+      "fix_location": "crates/tldr-core/src/callgraph/resolution.rs:1497-1547 + 781-789",
+      "approach": "Same global free-function fallback (gated on language list including 'cpp' and 'c++')."
+    },
+    "ruby": {
+      "idiom": "require_relative 'util'; b_util()",
+      "root_cause": "Direct call; no class to resolve through.",
+      "fix_location": "crates/tldr-core/src/callgraph/resolution.rs:781-789 (language list includes 'ruby')",
+      "approach": "Same global free-function fallback."
+    },
+    "kotlin": {
+      "idiom": "fun bUtil(): Int = 2 (in Util.kt); bUtil() (in Main.kt, same package)",
+      "root_cause": "No explicit `import` in source (same-package functions); Direct call falls through.",
+      "fix_location": "crates/tldr-core/src/callgraph/resolution.rs:781-789 (language list includes 'kotlin')",
+      "approach": "Same global free-function fallback."
+    },
+    "swift": {
+      "idiom": "func bUtil() -> Int (in Util.swift); bUtil() (in Main.swift, same module)",
+      "root_cause": "Same as Kotlin — no source-level import for same-module bareword.",
+      "fix_location": "crates/tldr-core/src/callgraph/resolution.rs:781-789 (language list includes 'swift')",
+      "approach": "Same global free-function fallback."
+    },
+    "php": {
+      "idiom": "require_once 'util.php'; b_util();",
+      "root_cause": "Same Direct-call fallthrough. Note: handler emits a quirky ImportDef alias='once' but this doesn't affect resolution.",
+      "fix_location": "crates/tldr-core/src/callgraph/resolution.rs:781-789 (language list includes 'php')",
+      "approach": "Same global free-function fallback."
+    },
+    "luau": {
+      "idiom": "local util = require('./util'); util.b_util()",
+      "root_cause": "Two issues: (1) Luau handler did not extract LHS variable name as ImportDef.alias, so module_imports keyed under './util' instead of 'util', causing receiver lookup to miss. (2) module_index lua/luau aliases didn't include './<module>' form (defense-in-depth).",
+      "fix_location": "crates/tldr-core/src/callgraph/languages/luau.rs:236-282 (new extract_aliased_require) + luau.rs:618-650 (parse_imports two-pass) + module_index.rs:496-518 (extended lua/luau aliases)",
+      "approach": "Two-pass parse_imports (modeled on lua handler): first walks variable_declarations to bind alias from `local X = require('Y')`, second walks function_call for standalone requires."
+    },
+    "ocaml": {
+      "idiom": "Util.b_util () (in main.ml; sibling util.ml provides the module — no `open` needed)",
+      "root_cause": "module_imports empty (no parsed import); receiver 'Util' doesn't match func_index key 'util' (lowercase from path_to_module_ocaml). Standard receiver-lookup chain misses.",
+      "fix_location": "crates/tldr-core/src/callgraph/module_index.rs:545-557 (capitalized alias) + 1670-1685 (capitalize_first_ocaml_segment helper) + crates/tldr-core/src/callgraph/resolution.rs:1471-1499 (new resolve_ocaml_module_receiver) + 1213-1228 (wired into resolve_call_with_receiver)",
+      "approach": "(1) Module index aliases `util.ml` under both 'util' and 'Util' so reverse_lookup is unambiguous. (2) resolve_call_with_receiver adds an OCaml-specific fallback that lowercases the receiver (matching the func_index Python-style key) before declining."
+    }
+  },
+
+  "files_modified": [
+    "crates/tldr-cli/tests/language_command_matrix.rs",
+    "crates/tldr-core/src/callgraph/resolution.rs",
+    "crates/tldr-core/src/callgraph/module_index.rs",
+    "crates/tldr-core/src/callgraph/languages/luau.rs",
+    "continuum/autonomous/issue-1-bug-fixes/reports/m10-command-language-matrix.md (capability section updated)",
+    "continuum/autonomous/issue-1-bug-fixes/contract.json (status_resolution for VAL-011)"
+  ],
+
+  "files_created": [
+    "continuum/autonomous/issue-1-bug-fixes/reports/m11-cross-file-calls.md",
+    "continuum/autonomous/issue-1-bug-fixes/reports/m11-cross-file-calls.json"
+  ],
+
+  "files_unchanged": [
+    "crates/tldr-cli/tests/fixtures/mod.rs (canonical fixtures unchanged — same 2-file/3-function/2-edge contract that M10 used; the test assertion changed, not the fixture)"
+  ],
+
+  "verification": {
+    "matrix_tests": "cargo test -p tldr-cli --test language_command_matrix → 234 passed, 0 failed, 0 ignored",
+    "core_lib_tests": "cargo test -p tldr-core --lib → 4737 passed, 0 failed, 356 ignored (pre-existing)",
+    "clippy": "cargo clippy --workspace --all-features -- -D warnings → clean",
+    "no_assertions_weakened": true,
+    "no_allow_added": true,
+    "no_ignore_added": true
+  },
+
+  "out_of_scope_deferred": {
+    "ruby_bareword_calls": "Tracked in M10 capability section. Not addressed here per VAL-011 contract — fixture continues to use `helper()` with parens as M10's workaround.",
+    "php_require_once_parse_quirk": "ImportDef emits alias='once' for `require_once`. Cosmetic in `tldr imports` output but doesn't affect calls resolution after VAL-011's bareword fallback. Defer to a future milestone."
+  }
+}

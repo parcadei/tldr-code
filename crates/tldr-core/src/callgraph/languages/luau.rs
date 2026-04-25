@@ -211,6 +211,68 @@ impl LuauHandler {
         None
     }
 
+    /// VAL-011: Extract an aliased require from a variable_declaration.
+    ///
+    /// In Luau, `local util = require('./util')` desugars to:
+    /// ```
+    /// variable_declaration
+    ///   assignment_statement
+    ///     variable_list -> identifier "util"   (the alias)
+    ///     expression_list -> function_call -> require("./util")
+    /// ```
+    ///
+    /// Returns `(alias, ImportDef, call_node_id)` so the caller can mark
+    /// the require call as already-processed and avoid double-emitting.
+    fn extract_aliased_require(
+        &self,
+        node: &Node,
+        source: &[u8],
+    ) -> Option<(String, ImportDef, usize)> {
+        for i in 0..node.child_count() {
+            let assignment = node.child(i)?;
+            if assignment.kind() != "assignment_statement" {
+                continue;
+            }
+
+            let mut var_name: Option<String> = None;
+            let mut import_info: Option<(ImportDef, usize)> = None;
+
+            for j in 0..assignment.child_count() {
+                let Some(child) = assignment.child(j) else {
+                    continue;
+                };
+                match child.kind() {
+                    "variable_list" => {
+                        for k in 0..child.child_count() {
+                            if let Some(var) = child.child(k) {
+                                if var.kind() == "identifier" {
+                                    var_name = Some(get_node_text(&var, source).to_string());
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    "expression_list" => {
+                        for inner in walk_tree(child) {
+                            if inner.kind() == "function_call" {
+                                if let Some(imp) = self.parse_luau_import_node(&inner, source) {
+                                    import_info = Some((imp, inner.id()));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            if let (Some(alias), Some((import_def, call_id))) = (var_name, import_info) {
+                return Some((alias, import_def, call_id));
+            }
+        }
+        None
+    }
+
     /// Collect all function definitions from the AST.
     fn collect_definitions(&self, tree: &Tree, source: &[u8]) -> HashSet<String> {
         let mut functions = HashSet::new();
@@ -600,8 +662,33 @@ impl CallGraphLanguageSupport for LuauHandler {
         let source_bytes = source.as_bytes();
         let mut imports = Vec::new();
 
+        // VAL-011: Two-pass extraction (parity with Lua handler).
+        //
+        // First pass: walk variable_declarations to capture aliased requires
+        // (`local util = require('./util')`). Without this, the import
+        // emitted has no `alias`, and `build_import_map` keys
+        // `module_imports` under the literal `./util` rather than the
+        // bound name `util`. Receiver lookup then misses.
+        let mut processed_calls: HashSet<usize> = HashSet::new();
+        for node in walk_tree(tree.root_node()) {
+            if node.kind() == "variable_declaration" {
+                if let Some((alias, mut import_def, call_id)) =
+                    self.extract_aliased_require(&node, source_bytes)
+                {
+                    import_def.alias = Some(alias);
+                    imports.push(import_def);
+                    processed_calls.insert(call_id);
+                }
+            }
+        }
+
+        // Second pass: standalone `require(...)` calls not bound to a local.
         for node in walk_tree(tree.root_node()) {
             if node.kind() == "function_call" {
+                let call_id = node.id();
+                if processed_calls.contains(&call_id) {
+                    continue;
+                }
                 if let Some(imp) = self.parse_luau_import_node(&node, source_bytes) {
                     imports.push(imp);
                 }

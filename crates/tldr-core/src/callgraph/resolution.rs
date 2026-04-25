@@ -16,7 +16,7 @@ use crate::types::Language;
 // From new sibling modules:
 use super::imports::{ImportMap, ModuleImports};
 use super::module_path::path_to_module;
-use super::types::{capitalize_first, ClassEntry, ClassIndex, FuncIndex};
+use super::types::{capitalize_first, ClassEntry, ClassIndex, FuncEntry, FuncIndex};
 
 // =============================================================================
 // Phase 14e: Call Extraction and Resolution (Spec Section 14.6)
@@ -760,6 +760,34 @@ pub fn resolve_call(
                 });
             }
 
+            // VAL-011: Cross-file free-function fallback for languages with
+            // implicit cross-file visibility (no explicit import required).
+            //
+            // Languages where a top-level/free function defined in file A is
+            // callable bareword from file B without an `import`:
+            // - C / C++: external linkage by default; `#include` declares but
+            //   the linker matches names across translation units.
+            // - Kotlin / Swift: top-level functions in the same package /
+            //   module are visible without an explicit import.
+            // - Ruby: `require_relative` loads the file and any top-level
+            //   `def` becomes globally callable.
+            // - PHP: `require_once` includes the file; functions defined at
+            //   file scope become globally available.
+            //
+            // For these languages, when local + import_map + class_index all
+            // miss, search the global FuncIndex by name and accept a unique
+            // free-function match.
+            if matches!(
+                language,
+                "c" | "cpp" | "c++" | "kotlin" | "swift" | "ruby" | "php"
+            ) {
+                if let Some(resolved) =
+                    resolve_global_free_function(target, func_index, current_file)
+                {
+                    return Some(resolved);
+                }
+            }
+
             // Not found - likely external/stdlib
             None
         }
@@ -1182,6 +1210,25 @@ pub fn resolve_call_with_receiver(
         return Some(resolved);
     }
 
+    // VAL-011: OCaml module-of-file resolution (no explicit imports).
+    //
+    // OCaml derives the module name from a file's basename with the first
+    // letter capitalized (e.g. `util.ml` → module `Util`). Sibling modules
+    // are visible without an `open` statement, and the canonical call
+    // syntax is `Util.b_util ()`.
+    //
+    // The class_index doesn't help (OCaml has no classes), and
+    // module_imports is empty (no `import` statement was parsed), so the
+    // standard receiver-lookup chain produces nothing. We bridge that gap
+    // by looking up the receiver lower-cased as a func_index module key.
+    if language == "ocaml" {
+        if let Some(resolved) =
+            resolve_ocaml_module_receiver(receiver, bare_target, func_index)
+        {
+            return Some(resolved);
+        }
+    }
+
     let type_filter = receiver_type_filter(receiver_type, receiver, class_index);
     if let Some(resolved) = resolve_local_fuzzy_match(
         bare_target,
@@ -1401,6 +1448,47 @@ fn resolve_capitalized_receiver(
     resolve_method_in_class_or_bases(&capitalized, bare_target, class_index, func_index, language)
 }
 
+/// VAL-011: Resolve a `Module.target` receiver call for OCaml.
+///
+/// OCaml requires no explicit `open` for sibling modules — `Util.b_util ()`
+/// in `main.ml` directly references the `b_util` function defined in
+/// `util.ml`. The func_index keys lowercase module names (`util`), so we
+/// try the lowercase form, the bare receiver, and the dot-segment lower
+/// transforms before giving up.
+///
+/// We accept the match unconditionally (no ambiguity-check) because OCaml
+/// module names are file-bound: at most one `util.ml` exists per directory,
+/// so `Util.b_util` cannot collide.
+fn resolve_ocaml_module_receiver(
+    receiver: &str,
+    bare_target: &str,
+    func_index: &FuncIndex,
+) -> Option<ResolvedTarget> {
+    let lowercase = receiver.to_ascii_lowercase();
+    // Try direct lowercase ("Util" → "util")
+    if let Some(entry) = func_index.get(&lowercase, bare_target) {
+        return Some(ResolvedTarget {
+            file: entry.file_path.clone(),
+            name: bare_target.to_string(),
+            line: Some(entry.line),
+            is_method: entry.is_method,
+            class_name: entry.class_name.clone(),
+        });
+    }
+    // Try bare receiver as-is (in case the index already used the
+    // capitalized alias from `compute_module_aliases`)
+    if let Some(entry) = func_index.get(receiver, bare_target) {
+        return Some(ResolvedTarget {
+            file: entry.file_path.clone(),
+            name: bare_target.to_string(),
+            line: Some(entry.line),
+            is_method: entry.is_method,
+            class_name: entry.class_name.clone(),
+        });
+    }
+    None
+}
+
 fn receiver_type_filter<'a>(
     receiver_type: Option<&'a str>,
     receiver: &str,
@@ -1454,6 +1542,60 @@ fn resolve_local_fuzzy_match(
         });
     }
     None
+}
+
+/// VAL-011: Cross-file free-function fallback for languages with implicit
+/// cross-file visibility.
+///
+/// Searches the global FuncIndex for a non-method function named `target`
+/// defined in any file other than `current_file`. Returns the unique match
+/// when exactly one cross-file definition exists (avoids ambiguity).
+///
+/// This is the keystone of cross-file Direct call resolution for C, C++,
+/// Kotlin, Swift, Ruby, and PHP — languages where bareword `foo()` in file
+/// A may resolve to `foo` defined in file B without an explicit import in
+/// the source.
+///
+/// Why "unique cross-file match" rather than "first match":
+/// - If `target` is also defined in `current_file`, we already returned at
+///   the local-module check earlier in `resolve_call`.
+/// - If multiple cross-file definitions exist, the call is genuinely
+///   ambiguous (e.g. C overload by header convention) and we decline to
+///   guess; callers fall through to "unresolved" rather than picking wrong.
+///
+/// Note: `func_index` keys functions under multiple module aliases (e.g.
+/// `util.c` AND the simple-name alias `c`), so the same function can appear
+/// multiple times via `find_by_name`. We deduplicate by `(file_path, line)`
+/// before deciding ambiguity.
+fn resolve_global_free_function(
+    target: &str,
+    func_index: &FuncIndex,
+    current_file: &Path,
+) -> Option<ResolvedTarget> {
+    let mut seen: HashSet<(PathBuf, u32)> = HashSet::new();
+    let mut unique: Vec<&FuncEntry> = Vec::new();
+    for entry in func_index.find_by_name(target) {
+        if entry.is_method || entry.file_path == current_file {
+            continue;
+        }
+        let key = (entry.file_path.clone(), entry.line);
+        if seen.insert(key) {
+            unique.push(entry);
+            if unique.len() > 1 {
+                // Ambiguous: multiple distinct cross-file definitions.
+                return None;
+            }
+        }
+    }
+
+    let first = unique.into_iter().next()?;
+    Some(ResolvedTarget {
+        file: first.file_path.clone(),
+        name: target.to_string(),
+        line: Some(first.line),
+        is_method: false,
+        class_name: None,
+    })
 }
 
 fn resolve_global_fuzzy_match(

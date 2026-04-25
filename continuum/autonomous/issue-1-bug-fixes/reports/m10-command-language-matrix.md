@@ -31,16 +31,21 @@ documented capability limit (partial output, see Capability Observations).
 | cognitive   | OK     | OK | OK | OK | OK   | OK   | OK   | OK   | OK   | OK     | OK    | OK   | OK    | OK   | OK  | OK   | OK     | OK    |
 | halstead    | OK     | OK | OK | OK | OK   | OK   | OK   | OK   | OK   | OK     | OK    | OK   | OK    | OK   | OK  | OK   | OK     | OK    |
 | smells      | OK     | OK | OK | OK | OK   | OK   | OK   | OK   | OK   | OK     | OK    | OK   | OK    | OK   | OK  | OK   | OK     | OK    |
-| calls       | OK     | OK | OK | OK | OK   | OK   | WEAK | WEAK | WEAK | WEAK   | WEAK  | OK   | OK    | WEAK | OK  | WEAK | OK     | WEAK  |
+| calls       | OK     | OK | OK | OK | OK   | OK   | OK*  | OK*  | OK*  | OK*    | OK*   | OK   | OK    | OK*  | OK  | OK*  | OK     | OK*   |
 | dead        | OK     | OK | OK | OK | OK   | OK   | OK   | OK   | OK   | OK     | OK    | OK   | OK    | OK   | OK  | OK   | OK     | OK    |
 | references  | OK     | OK | OK | OK | OK   | OK   | OK   | OK   | OK   | OK     | OK    | OK   | OK    | OK   | OK  | OK   | OK     | OK    |
 | impact      | OK     | OK | OK | OK | OK   | OK   | OK   | OK   | OK   | OK     | OK    | OK   | OK    | OK   | OK  | OK   | OK     | OK    |
 | patterns    | OK     | OK | OK | OK | OK   | OK   | OK   | OK   | OK   | OK     | OK    | OK   | OK    | OK   | OK  | OK   | OK     | OK    |
 
 Every cell meets the test-level acceptance criteria (exit 0, valid JSON,
-minimum-sanity check). `WEAK` cells pass the minimum threshold but return
-less-than-complete output relative to the 3-function / 2-edge fixture — see
-"Capability observations" below for details.
+minimum-sanity check). Originally `WEAK` cells in the `calls` row passed
+the permissive `>= 1` threshold but returned only 1 of the 2 fixture
+edges; see "Capability observations" below for the original analysis.
+
+`OK*` marks cells where M10 originally reported `WEAK` and the cross-file
+call resolution gap has been closed in **VAL-011 / M11**
+(`reports/m11-cross-file-calls.md`). The matrix-test threshold for the
+`calls` row was tightened to `>= 2` and now all 18 languages pass.
 
 ## Per-language end-to-end probe (beyond the minimum-sanity assertions)
 
@@ -79,33 +84,38 @@ what fixture semantics would imply. All 234 tests still pass because the
 thresholds (`total_edges >= 1`, etc.) are intentionally permissive to admit
 these gaps as `WEAK` not `FAIL`.
 
-### 1. Cross-file call resolution is incomplete for 8 languages
+### 1. Cross-file call resolution is incomplete for 8 languages — RESOLVED IN VAL-011
 
-**Symptom:** `calls` command finds only 1 edge (`main → helper`, intra-file)
-for fixtures where 2 edges are expected. The second edge `main → b_util` in
-File B is not resolved across the import.
+**Symptom (original):** `calls` command finds only 1 edge (`main → helper`,
+intra-file) for fixtures where 2 edges are expected. The second edge
+`main → b_util` in File B was not resolved across the import.
 
-**Languages affected:** `c`, `cpp`, `ruby`, `kotlin`, `swift`, `php`,
-`luau`, `ocaml`.
+**Languages affected (original):** `c`, `cpp`, `ruby`, `kotlin`, `swift`,
+`php`, `luau`, `ocaml`.
 
-**Likely cause (unverified):** The cross-file resolution path in
-`crates/tldr-core/src/callgraph/builder_v2.rs` uses the module index +
-import resolver to map call-site targets to defining files. For these 8
-languages, either:
-- the language handler's `parse_imports` doesn't emit a usable `ImportDef`
-  for the fixture's import style, OR
-- `resolve_method_or_attr_call` / `resolve_intra_call` in
-  `crates/tldr-core/src/callgraph/builder_v2.rs:376-495` doesn't use the
-  imports to look up cross-file targets for these language dispatch styles.
+**Resolution (VAL-011 / M11):** All 8 languages now resolve the
+cross-file edge correctly. The matrix-test assertion was tightened from
+`total_edges >= 1` to `total_edges >= 2` (RED), then per-language fixes
+applied (GREEN). See `reports/m11-cross-file-calls.md` for the
+per-language breakdown.
 
-The 10 languages that DO resolve cross-file (`python`, `typescript`,
-`javascript`, `go`, `rust`, `java`, `csharp`, `scala`, `lua`, `elixir`)
-all return 2 edges as expected.
-
-**Action for a follow-up milestone:** For each of the 8 languages, write
-a per-language unit test in `crates/tldr-core/src/callgraph/languages/<lang>.rs`
-covering a minimal cross-file import scenario, then trace resolution
-through `builder_v2::resolve_call_site_for_builder`.
+The fixes broke down into three categories:
+- **C, C++, Ruby, Kotlin, Swift, PHP**: A single new
+  `resolve_global_free_function` fallback in
+  `crates/tldr-core/src/callgraph/resolution.rs:1497-1547` handles all
+  six. These languages share the property that bareword `foo()` may
+  resolve to a function defined in another file via implicit cross-file
+  visibility (linker matching for C/C++; same-package for
+  Kotlin/Swift; `require_relative` / `require_once` for Ruby/PHP).
+- **Luau**: Required two-pass `parse_imports` in
+  `crates/tldr-core/src/callgraph/languages/luau.rs` so that
+  `local util = require('./util')` correctly registers `util` as the
+  alias for the imported module (matching the existing lua handler's
+  approach).
+- **OCaml**: Required `Util` ↔ `util` capitalization aliasing in
+  `crates/tldr-core/src/callgraph/module_index.rs` plus a new
+  `resolve_ocaml_module_receiver` fallback that lowercases the receiver
+  before func_index lookup.
 
 ### 2. Ruby top-level method calls require explicit parentheses
 

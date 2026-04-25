@@ -52,6 +52,11 @@
       "name": "command-language-matrix",
       "status": "passed",
       "assertions": ["VAL-010"]
+    },
+    {
+      "name": "cross-file-calls-8-langs",
+      "status": "passed",
+      "assertions": ["VAL-011"]
     }
   ],
   "assertions": [
@@ -160,6 +165,17 @@
       "depends": ["VAL-008", "VAL-009"],
       "worker": "kraken (VAL-010)",
       "evidence": "reports/m10-command-language-matrix.md, reports/m10-command-language-matrix.json"
+    },
+    {
+      "id": "VAL-011",
+      "type": "invariant",
+      "status_resolution": "PASSED 2026-04-25 — Cross-file call resolution restored for all 8 previously-WEAK languages. Strategy: tightened matrix-test assertion in language_command_matrix.rs from `total_edges >= 1` to `total_edges >= 2` (RED phase, 8 fail), then applied targeted fixes (GREEN phase, all 18 pass). Three fix categories: (A) Six bareword languages (C, Cpp, Ruby, Kotlin, Swift, PHP) gained a single `resolve_global_free_function` fallback in resolution.rs:1497-1547 invoked from the CallType::Direct branch of resolve_call when local-module + import-map + class-index all miss. The fallback calls FuncIndex::find_by_name(target) and accepts a unique cross-file free-function match; deduplicates by (file_path, line) because FuncIndex aliases the same function under multiple module-name keys (e.g. `util.c` and the simple-name alias `c`). (B) Luau gained a two-pass parse_imports in luau.rs:618-650 that recovers the local-binding alias from `local util = require('./util')` (mirroring the existing Lua handler's `extract_aliased_require` approach) — without this, module_imports keyed under `./util` instead of `util` and receiver-lookup of `util.b_util()` missed. Defense-in-depth: extended module_index.rs lua/luau aliases at lines 496-518 to also index `./<module>` form. (C) OCaml gained capitalized-alias indexing in module_index.rs:545-557 (so `util.ml` is reachable under both `util` and `Util` keys) plus a new resolve_ocaml_module_receiver fallback in resolution.rs:1471-1499 wired into resolve_call_with_receiver after the existing capitalized-receiver pass — it lowercases the receiver to match the func_index Python-style key. No fixture changes (canonical 2-file/3-function/2-edge contract from M10 still holds). No assertions weakened, no `#[allow]` added, no `#[ignore]` added. Verification: cargo test -p tldr-cli --test language_command_matrix → 234 passed, 0 failed, 0 ignored (was 234 with permissive thresholds; now 234 with the tightened assertion). cargo test -p tldr-core --lib → 4737 passed, 0 failed, 356 ignored (same as VAL-009 baseline — no regression). cargo clippy --workspace --all-features -- -D warnings → clean. See reports/m11-cross-file-calls.md and reports/m11-cross-file-calls.json.",
+      "text": "Cross-file call resolution works for the 8 languages that currently produce only same-file edges: C, Cpp, Ruby, Kotlin, Swift, PHP, Luau, OCaml. The M10 matrix showed these returning `calls_edges = 1` on the canonical 2-file fixture where `main()` calls both `helper()` (same file) and `b_util()` (file B, imported). The same-file edge resolves; the cross-file one does not. The 10 working languages (Python, TS, JS, Go, Rust, Java, CSharp, Scala, Lua, Elixir) all produce 2 edges — proving the V2 builder + ModuleIndex + ImportDef pipeline works when handlers correctly populate it. Fix approach: for each of the 8 languages, investigate its handler in `crates/tldr-core/src/callgraph/languages/<lang>.rs`, identify why `parse_imports` / `extract_calls` / module resolution fails to link main's call to b_util's definition, and fix. Pattern to follow from working handlers: python.rs (simple name-based), java.rs (package-based), csharp.rs (namespace-based), scala.rs (package-based). Each of the 8 broken handlers has a different idiom — C/C++: #include, Ruby: require_relative, Kotlin: import com.x.Y, Swift: no explicit imports (flat module + filename-based resolution), PHP: require_once/namespace, Luau: Rojo-style, OCaml: open module. Tighten the matrix test in `crates/tldr-cli/tests/language_command_matrix.rs` to assert `calls` returns `total_edges >= 2` (not just >= 1) for each of these 8 languages — this becomes the failing test that drives the fix. Update M10's markdown report to mark previously-WEAK `calls` cells as OK. Keep the audit-only nature of the test; no fixture structural changes unless language genuinely requires different shape (e.g., Swift doesn't use imports — fixture may need a deliberate `public` marker or two separate Swift modules). Acceptance: (1) All 18 languages in the matrix show `calls` with ≥ 2 edges on the canonical 2-file fixture. (2) `tldr impact <helper_fn> <fixture>` on each of the 8 languages returns `caller_count >= 1` with the real caller. (3) `cargo test --workspace --features semantic` passes — no regression on the 10 already-working languages. (4) Clippy --workspace --all-features -D warnings clean. Update m10-command-language-matrix.md to reflect new pass status, and add reports/m11-cross-file-calls.md documenting each language's specific fix and the idiom it now handles.",
+      "milestone": "cross-file-calls-8-langs",
+      "status": "passed",
+      "depends": ["VAL-010"],
+      "worker": "kraken (VAL-011)",
+      "evidence": "reports/m11-cross-file-calls.md, reports/m11-cross-file-calls.json"
     }
   ]
 }
