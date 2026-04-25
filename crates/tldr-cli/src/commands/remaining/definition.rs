@@ -529,9 +529,9 @@ fn find_symbol_in_file_generic(
         .map_err(|e| RemainingError::parse_error(file.to_path_buf(), e.to_string()))?;
 
     let registry = LanguageRegistry::with_defaults();
-    let handler = registry.get(language.as_str()).ok_or_else(|| {
-        RemainingError::unsupported_language(format!("{:?}", language))
-    })?;
+    let handler = registry
+        .get(language.as_str())
+        .ok_or_else(|| RemainingError::unsupported_language(format!("{:?}", language)))?;
 
     let (funcs, classes) = handler
         .extract_definitions(source, file, &tree)
@@ -725,8 +725,7 @@ fn resolve_cross_file_python(
     let imports = extract_imports(&source);
 
     for (module_path, imported_names) in imports {
-        let is_imported =
-            imported_names.is_empty() || imported_names.contains(&symbol.to_string());
+        let is_imported = imported_names.is_empty() || imported_names.contains(&symbol.to_string());
 
         if is_imported {
             if let Some(resolved_path) =
@@ -1340,11 +1339,7 @@ from . import types
         // Classes must surface as SymbolKind::Class regardless of language.
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("widget.ts");
-        fs::write(
-            &file,
-            "export class Widget {\n    render(): void {}\n}\n",
-        )
-        .unwrap();
+        fs::write(&file, "export class Widget {\n    render(): void {}\n}\n").unwrap();
 
         let result = find_definition_by_name("Widget", &file, None, "typescript")
             .expect("definition lookup should succeed for TS class");
@@ -1410,9 +1405,8 @@ from . import types
             ("a.ml", "auto", Language::Ocaml),
         ];
         for (path, hint, expected) in cases {
-            let got = detect_language(Path::new(path), hint).unwrap_or_else(|e| {
-                panic!("detect_language failed for {}: {:?}", path, e)
-            });
+            let got = detect_language(Path::new(path), hint)
+                .unwrap_or_else(|e| panic!("detect_language failed for {}: {:?}", path, e));
             assert_eq!(got, *expected, "wrong language for {}", path);
         }
     }

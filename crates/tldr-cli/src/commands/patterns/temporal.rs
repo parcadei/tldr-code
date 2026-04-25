@@ -989,8 +989,7 @@ fn analyze_temporal_directory(
                         canonical.join(file_path)
                     };
                     let file_key = abs_path.to_string_lossy().to_string();
-                    let scoped =
-                        sequences_from_callsite_map(&file_key, &file_ir.calls);
+                    let scoped = sequences_from_callsite_map(&file_key, &file_ir.calls);
 
                     aggregate_file_sequences(
                         &scoped,
@@ -1050,11 +1049,10 @@ fn analyze_temporal_directory(
             // Analyze file
             let file_path_str = entry_path.to_string_lossy().to_string();
             if let Ok(source) = read_file_safe(entry_path) {
-                let file_seqs =
-                    match extract_sequences_for_file(entry_path, &source, entry_lang) {
-                        Ok(s) => s,
-                        Err(_) => continue,
-                    };
+                let file_seqs = match extract_sequences_for_file(entry_path, &source, entry_lang) {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
 
                 aggregate_file_sequences(
                     &file_seqs.sequences,
@@ -1226,9 +1224,7 @@ pub fn run(args: TemporalArgs, global_format: GlobalOutputFormat) -> anyhow::Res
     // flag (see `args.lang`); `--source-lang` is preserved only for
     // backward compatibility with the original Python-only CLI.
     let source_lang_norm = args.source_lang.to_lowercase();
-    if source_lang_norm != "auto"
-        && source_lang_norm.parse::<Language>().is_err()
-    {
+    if source_lang_norm != "auto" && source_lang_norm.parse::<Language>().is_err() {
         return Err(PatternsError::UnsupportedLanguage {
             language: args.source_lang.clone(),
         }
@@ -1521,10 +1517,9 @@ def read_config(path):
     /// adjacency in some scope. Built on top of `windows(2)` so it stays
     /// agnostic to scope/key formatting differences across languages.
     fn assert_helper_then_b_util(seqs: &[Vec<String>], language_label: &str) {
-        let found = seqs.iter().any(|seq| {
-            seq.windows(2)
-                .any(|w| w[0] == "helper" && w[1] == "b_util")
-        });
+        let found = seqs
+            .iter()
+            .any(|seq| seq.windows(2).any(|w| w[0] == "helper" && w[1] == "b_util"));
         assert!(
             found,
             "[{}] expected `helper -> b_util` bigram, got: {:?}",
@@ -1563,18 +1558,14 @@ class Main {
 ";
         // We call the helper b_util via `bUtil` (Java idiom). Adjust the
         // assertion accordingly.
-        let mut tmp = tempfile::Builder::new()
-            .suffix(".java")
-            .tempfile()
-            .unwrap();
+        let mut tmp = tempfile::Builder::new().suffix(".java").tempfile().unwrap();
         tmp.write_all(source.as_bytes()).unwrap();
         let path = tmp.path().to_path_buf();
-        let file_seqs =
-            extract_sequences_for_file(&path, source, Language::Java).expect("extract");
+        let file_seqs = extract_sequences_for_file(&path, source, Language::Java).expect("extract");
         let seqs: Vec<Vec<String>> = file_seqs.sequences.into_values().collect();
-        let found = seqs.iter().any(|seq| {
-            seq.windows(2).any(|w| w[0] == "helper" && w[1] == "bUtil")
-        });
+        let found = seqs
+            .iter()
+            .any(|seq| seq.windows(2).any(|w| w[0] == "helper" && w[1] == "bUtil"));
         assert!(
             found,
             "[java] expected `helper -> bUtil` bigram, got: {:?}",
@@ -1646,10 +1637,7 @@ def read_config(path):
     f.close()
     return content
 ";
-        let mut tmp = tempfile::Builder::new()
-            .suffix(".py")
-            .tempfile()
-            .unwrap();
+        let mut tmp = tempfile::Builder::new().suffix(".py").tempfile().unwrap();
         tmp.write_all(source.as_bytes()).unwrap();
         let path = tmp.path().to_path_buf();
         let file_seqs =

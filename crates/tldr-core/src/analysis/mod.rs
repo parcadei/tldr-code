@@ -55,7 +55,7 @@ pub use architecture::{
 };
 pub use change_impact::{
     change_impact, change_impact_extended, ChangeImpactMetadata, ChangeImpactReport,
-    DetectionMethod, TestFunction,
+    ChangeImpactStatus, DetectionMethod, TestFunction,
 };
 pub use clones::{
     classify_clone_type, compute_dice_similarity, compute_rolling_hashes, detect_clones,

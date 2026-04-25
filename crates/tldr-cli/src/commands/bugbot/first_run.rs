@@ -150,10 +150,7 @@ pub fn create_state_db(project_root: &Path) -> Result<BugbotState> {
 ///
 /// The `writer_fn` parameter emits progress messages. In production this
 /// is wired to `OutputWriter::progress`; in tests it can capture output.
-pub fn run_first_run_scan<F>(
-    project_root: &Path,
-    writer_fn: &F,
-) -> Result<FirstRunResult>
+pub fn run_first_run_scan<F>(project_root: &Path, writer_fn: &F) -> Result<FirstRunResult>
 where
     F: Fn(&str),
 {
@@ -418,9 +415,7 @@ fn build_temporal_baseline(project_root: &Path) -> Result<()> {
         let lang = tldr_core::Language::from_path(file);
         if let Some(language) = lang {
             let _structure = tldr_core::ast::get_code_structure(
-                file,
-                language,
-                0, // no depth limit
+                file, language, 0, // no depth limit
                 None,
             );
         }
@@ -579,7 +574,10 @@ mod tests {
         .unwrap();
 
         let status = detect_first_run(tmp.path());
-        assert!(status.is_first_run(), "baseline_built=false should be treated as first run");
+        assert!(
+            status.is_first_run(),
+            "baseline_built=false should be treated as first run"
+        );
     }
 
     // =========================================================================
@@ -656,11 +654,7 @@ mod tests {
         // Create a minimal source file so baseline builders have something to scan
         let src_dir = tmp.path().join("src");
         fs::create_dir_all(&src_dir).unwrap();
-        fs::write(
-            src_dir.join("main.py"),
-            "def hello():\n    return 42\n",
-        )
-        .unwrap();
+        fs::write(src_dir.join("main.py"), "def hello():\n    return 42\n").unwrap();
 
         let messages: RefCell<Vec<String>> = RefCell::new(Vec::new());
         let writer = |msg: &str| messages.borrow_mut().push(msg.to_string());
@@ -676,7 +670,10 @@ mod tests {
         assert_eq!(total, 4, "Should attempt all 4 baseline categories");
 
         // Elapsed time should be populated
-        assert!(result.elapsed_ms < 30_000, "Scan should complete in reasonable time");
+        assert!(
+            result.elapsed_ms < 30_000,
+            "Scan should complete in reasonable time"
+        );
     }
 
     #[test]
@@ -692,7 +689,9 @@ mod tests {
 
         // Must print the specific progress message from the spec
         assert!(
-            messages.iter().any(|m| m.contains("Building initial baselines")),
+            messages
+                .iter()
+                .any(|m| m.contains("Building initial baselines")),
             "Must print progress message containing 'Building initial baselines'. Got: {:?}",
             messages
         );
@@ -755,8 +754,8 @@ mod tests {
     #[test]
     fn test_is_source_file_recognizes_all_extensions() {
         let extensions = vec![
-            "rs", "py", "js", "ts", "tsx", "jsx", "go", "java", "c", "cpp",
-            "h", "hpp", "rb", "php", "kt", "swift", "cs", "scala", "ex", "exs", "lua",
+            "rs", "py", "js", "ts", "tsx", "jsx", "go", "java", "c", "cpp", "h", "hpp", "rb",
+            "php", "kt", "swift", "cs", "scala", "ex", "exs", "lua",
         ];
 
         for ext in &extensions {
@@ -873,7 +872,10 @@ mod tests {
         save_baseline_call_graph(tmp.path(), &cg, "abc123", "python").unwrap();
 
         let loaded = load_cached_baseline_call_graph(tmp.path(), "def456");
-        assert!(loaded.is_none(), "Cache should not load with different commit");
+        assert!(
+            loaded.is_none(),
+            "Cache should not load with different commit"
+        );
     }
 
     #[test]
@@ -906,6 +908,8 @@ mod tests {
 
         assert!(bugbot_dir(tmp.path()).exists());
         assert!(bugbot_dir(tmp.path()).join(BASELINE_CG_FILENAME).exists());
-        assert!(bugbot_dir(tmp.path()).join(BASELINE_CG_META_FILENAME).exists());
+        assert!(bugbot_dir(tmp.path())
+            .join(BASELINE_CG_META_FILENAME)
+            .exists());
     }
 }

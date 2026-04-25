@@ -183,7 +183,10 @@ mod tests {
         // tldr_core returns an empty CFG when the function is not found
         assert!(result.is_ok(), "should return Ok with empty CFG");
         let cfg = result.unwrap();
-        assert!(cfg.blocks.is_empty(), "CFG should have no blocks for nonexistent function");
+        assert!(
+            cfg.blocks.is_empty(),
+            "CFG should have no blocks for nonexistent function"
+        );
     }
 
     #[test]
@@ -206,10 +209,7 @@ mod tests {
         let fid = FunctionId::new("src/example.py", "missing", 1);
         let result = build_dfg_for_function(PYTHON_SOURCE, &fid, Language::Python);
 
-        assert!(
-            result.is_err(),
-            "DFG should fail for nonexistent function"
-        );
+        assert!(result.is_err(), "DFG should fail for nonexistent function");
     }
 
     #[test]

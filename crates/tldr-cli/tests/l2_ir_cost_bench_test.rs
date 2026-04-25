@@ -274,31 +274,46 @@ fn l2_ir_cost_bench_01_parse() {
     let small_avg = measure_avg(warmup, iterations, || {
         let _ = parse(SMALL_FN, Language::Python).unwrap();
     });
-    eprintln!("  Parse (small,  ~6 lines):   {:>8.3}ms", small_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  Parse (small,  ~6 lines):   {:>8.3}ms",
+        small_avg.as_secs_f64() * 1000.0
+    );
 
     // Medium
     let med_avg = measure_avg(warmup, iterations, || {
         let _ = parse(MEDIUM_FN, Language::Python).unwrap();
     });
-    eprintln!("  Parse (medium, ~20 lines):  {:>8.3}ms", med_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  Parse (medium, ~20 lines):  {:>8.3}ms",
+        med_avg.as_secs_f64() * 1000.0
+    );
 
     // Complex
     let complex_avg = measure_avg(warmup, iterations, || {
         let _ = parse(COMPLEX_FN, Language::Python).unwrap();
     });
-    eprintln!("  Parse (complex, ~35 lines): {:>8.3}ms", complex_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  Parse (complex, ~35 lines): {:>8.3}ms",
+        complex_avg.as_secs_f64() * 1000.0
+    );
 
     // Stress
     let stress_avg = measure_avg(warmup, iterations, || {
         let _ = parse(STRESS_FN, Language::Python).unwrap();
     });
-    eprintln!("  Parse (stress, ~50 lines):  {:>8.3}ms", stress_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  Parse (stress, ~50 lines):  {:>8.3}ms",
+        stress_avg.as_secs_f64() * 1000.0
+    );
 
     // Batch file (10 functions)
     let batch_avg = measure_avg(warmup, iterations, || {
         let _ = parse(BATCH_FILE, Language::Python).unwrap();
     });
-    eprintln!("  Parse (batch, ~100 lines):  {:>8.3}ms", batch_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  Parse (batch, ~100 lines):  {:>8.3}ms",
+        batch_avg.as_secs_f64() * 1000.0
+    );
 
     // Budget check: parse should be < 5ms even for large files
     assert!(
@@ -322,7 +337,10 @@ fn l2_ir_cost_bench_02_cfg() {
     let small_avg = measure_avg(warmup, iterations, || {
         let _ = get_cfg_context(SMALL_FN, "add_values", Language::Python).unwrap();
     });
-    eprintln!("  CFG (small):   {:>8.3}ms", small_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  CFG (small):   {:>8.3}ms",
+        small_avg.as_secs_f64() * 1000.0
+    );
 
     let med_avg = measure_avg(warmup, iterations, || {
         let _ = get_cfg_context(MEDIUM_FN, "classify_score", Language::Python).unwrap();
@@ -332,12 +350,18 @@ fn l2_ir_cost_bench_02_cfg() {
     let complex_avg = measure_avg(warmup, iterations, || {
         let _ = get_cfg_context(COMPLEX_FN, "matrix_stats", Language::Python).unwrap();
     });
-    eprintln!("  CFG (complex): {:>8.3}ms", complex_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  CFG (complex): {:>8.3}ms",
+        complex_avg.as_secs_f64() * 1000.0
+    );
 
     let stress_avg = measure_avg(warmup, iterations, || {
         let _ = get_cfg_context(STRESS_FN, "process_records", Language::Python).unwrap();
     });
-    eprintln!("  CFG (stress):  {:>8.3}ms", stress_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  CFG (stress):  {:>8.3}ms",
+        stress_avg.as_secs_f64() * 1000.0
+    );
 
     assert!(
         stress_avg.as_millis() < 100,
@@ -362,7 +386,10 @@ fn l2_ir_cost_bench_03_dfg_reaching_defs() {
     let small_avg = measure_avg(warmup, iterations, || {
         let _ = get_dfg_context(SMALL_FN, "add_values", Language::Python).unwrap();
     });
-    eprintln!("  DFG (small):   {:>8.3}ms  (includes CFG + reaching defs)", small_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  DFG (small):   {:>8.3}ms  (includes CFG + reaching defs)",
+        small_avg.as_secs_f64() * 1000.0
+    );
 
     let med_avg = measure_avg(warmup, iterations, || {
         let _ = get_dfg_context(MEDIUM_FN, "classify_score", Language::Python).unwrap();
@@ -372,12 +399,18 @@ fn l2_ir_cost_bench_03_dfg_reaching_defs() {
     let complex_avg = measure_avg(warmup, iterations, || {
         let _ = get_dfg_context(COMPLEX_FN, "matrix_stats", Language::Python).unwrap();
     });
-    eprintln!("  DFG (complex): {:>8.3}ms", complex_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  DFG (complex): {:>8.3}ms",
+        complex_avg.as_secs_f64() * 1000.0
+    );
 
     let stress_avg = measure_avg(warmup, iterations, || {
         let _ = get_dfg_context(STRESS_FN, "process_records", Language::Python).unwrap();
     });
-    eprintln!("  DFG (stress):  {:>8.3}ms", stress_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  DFG (stress):  {:>8.3}ms",
+        stress_avg.as_secs_f64() * 1000.0
+    );
 
     // Also measure compute_reaching_definitions ALONE (given pre-built CFG + refs)
     eprintln!("\n  --- Reaching Defs Only (pre-built CFG) ---");
@@ -386,21 +419,30 @@ fn l2_ir_cost_bench_03_dfg_reaching_defs() {
     let rd_small = measure_avg(warmup, iterations, || {
         let _ = compute_reaching_definitions(&cfg_s, &dfg_s.refs);
     });
-    eprintln!("  ReachDefs only (small):   {:>8.3}ms", rd_small.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  ReachDefs only (small):   {:>8.3}ms",
+        rd_small.as_secs_f64() * 1000.0
+    );
 
     let cfg_c = get_cfg_context(COMPLEX_FN, "matrix_stats", Language::Python).unwrap();
     let dfg_c = get_dfg_context(COMPLEX_FN, "matrix_stats", Language::Python).unwrap();
     let rd_complex = measure_avg(warmup, iterations, || {
         let _ = compute_reaching_definitions(&cfg_c, &dfg_c.refs);
     });
-    eprintln!("  ReachDefs only (complex): {:>8.3}ms", rd_complex.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  ReachDefs only (complex): {:>8.3}ms",
+        rd_complex.as_secs_f64() * 1000.0
+    );
 
     let cfg_st = get_cfg_context(STRESS_FN, "process_records", Language::Python).unwrap();
     let dfg_st = get_dfg_context(STRESS_FN, "process_records", Language::Python).unwrap();
     let rd_stress = measure_avg(warmup, iterations, || {
         let _ = compute_reaching_definitions(&cfg_st, &dfg_st.refs);
     });
-    eprintln!("  ReachDefs only (stress):  {:>8.3}ms", rd_stress.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  ReachDefs only (stress):  {:>8.3}ms",
+        rd_stress.as_secs_f64() * 1000.0
+    );
 
     assert!(
         stress_avg.as_millis() < 100,
@@ -424,34 +466,82 @@ fn l2_ir_cost_bench_04_ssa() {
     let small_avg = measure_avg(warmup, iterations, || {
         let _ = construct_ssa(SMALL_FN, "add_values", Language::Python, SsaType::Minimal).unwrap();
     });
-    eprintln!("  SSA-Minimal (small):   {:>8.3}ms  (includes CFG + DFG + dom tree + phi)", small_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  SSA-Minimal (small):   {:>8.3}ms  (includes CFG + DFG + dom tree + phi)",
+        small_avg.as_secs_f64() * 1000.0
+    );
 
     let med_avg = measure_avg(warmup, iterations, || {
-        let _ = construct_ssa(MEDIUM_FN, "classify_score", Language::Python, SsaType::Minimal).unwrap();
+        let _ = construct_ssa(
+            MEDIUM_FN,
+            "classify_score",
+            Language::Python,
+            SsaType::Minimal,
+        )
+        .unwrap();
     });
-    eprintln!("  SSA-Minimal (medium):  {:>8.3}ms", med_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  SSA-Minimal (medium):  {:>8.3}ms",
+        med_avg.as_secs_f64() * 1000.0
+    );
 
     let complex_avg = measure_avg(warmup, iterations, || {
-        let _ = construct_ssa(COMPLEX_FN, "matrix_stats", Language::Python, SsaType::Minimal).unwrap();
+        let _ = construct_ssa(
+            COMPLEX_FN,
+            "matrix_stats",
+            Language::Python,
+            SsaType::Minimal,
+        )
+        .unwrap();
     });
-    eprintln!("  SSA-Minimal (complex): {:>8.3}ms", complex_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  SSA-Minimal (complex): {:>8.3}ms",
+        complex_avg.as_secs_f64() * 1000.0
+    );
 
     let stress_avg = measure_avg(warmup, iterations, || {
-        let _ = construct_ssa(STRESS_FN, "process_records", Language::Python, SsaType::Minimal).unwrap();
+        let _ = construct_ssa(
+            STRESS_FN,
+            "process_records",
+            Language::Python,
+            SsaType::Minimal,
+        )
+        .unwrap();
     });
-    eprintln!("  SSA-Minimal (stress):  {:>8.3}ms", stress_avg.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  SSA-Minimal (stress):  {:>8.3}ms",
+        stress_avg.as_secs_f64() * 1000.0
+    );
 
     // Also test Pruned SSA (includes liveness analysis)
     eprintln!("\n  --- Pruned SSA (includes liveness) ---");
     let pruned_complex = measure_avg(warmup, iterations, || {
-        let _ = construct_ssa(COMPLEX_FN, "matrix_stats", Language::Python, SsaType::Pruned).unwrap();
+        let _ = construct_ssa(
+            COMPLEX_FN,
+            "matrix_stats",
+            Language::Python,
+            SsaType::Pruned,
+        )
+        .unwrap();
     });
-    eprintln!("  SSA-Pruned (complex):  {:>8.3}ms", pruned_complex.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  SSA-Pruned (complex):  {:>8.3}ms",
+        pruned_complex.as_secs_f64() * 1000.0
+    );
 
     let pruned_stress = measure_avg(warmup, iterations, || {
-        let _ = construct_ssa(STRESS_FN, "process_records", Language::Python, SsaType::Pruned).unwrap();
+        let _ = construct_ssa(
+            STRESS_FN,
+            "process_records",
+            Language::Python,
+            SsaType::Pruned,
+        )
+        .unwrap();
     });
-    eprintln!("  SSA-Pruned (stress):   {:>8.3}ms", pruned_stress.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  SSA-Pruned (stress):   {:>8.3}ms",
+        pruned_stress.as_secs_f64() * 1000.0
+    );
 
     assert!(
         stress_avg.as_millis() < 100,
@@ -479,7 +569,10 @@ fn l2_ir_cost_bench_05_taint() {
     let taint_small = measure_avg(warmup, iterations, || {
         let _ = compute_taint(&cfg_s, &dfg_s.refs, &stmts_s, Language::Python);
     });
-    eprintln!("  Taint (small, pre-built):   {:>8.3}ms", taint_small.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  Taint (small, pre-built):   {:>8.3}ms",
+        taint_small.as_secs_f64() * 1000.0
+    );
 
     // Complex
     let cfg_c = get_cfg_context(COMPLEX_FN, "matrix_stats", Language::Python).unwrap();
@@ -488,7 +581,10 @@ fn l2_ir_cost_bench_05_taint() {
     let taint_complex = measure_avg(warmup, iterations, || {
         let _ = compute_taint(&cfg_c, &dfg_c.refs, &stmts_c, Language::Python);
     });
-    eprintln!("  Taint (complex, pre-built): {:>8.3}ms", taint_complex.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  Taint (complex, pre-built): {:>8.3}ms",
+        taint_complex.as_secs_f64() * 1000.0
+    );
 
     // Stress
     let cfg_st = get_cfg_context(STRESS_FN, "process_records", Language::Python).unwrap();
@@ -497,7 +593,10 @@ fn l2_ir_cost_bench_05_taint() {
     let taint_stress = measure_avg(warmup, iterations, || {
         let _ = compute_taint(&cfg_st, &dfg_st.refs, &stmts_st, Language::Python);
     });
-    eprintln!("  Taint (stress, pre-built):  {:>8.3}ms", taint_stress.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  Taint (stress, pre-built):  {:>8.3}ms",
+        taint_stress.as_secs_f64() * 1000.0
+    );
 
     // Full taint cost (including CFG + DFG construction)
     eprintln!("\n  --- Taint End-to-End (includes CFG + DFG) ---");
@@ -507,7 +606,10 @@ fn l2_ir_cost_bench_05_taint() {
         let stmts = build_statements(STRESS_FN);
         let _ = compute_taint(&cfg, &dfg.refs, &stmts, Language::Python);
     });
-    eprintln!("  Taint E2E (stress):         {:>8.3}ms", taint_e2e_stress.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  Taint E2E (stress):         {:>8.3}ms",
+        taint_e2e_stress.as_secs_f64() * 1000.0
+    );
 
     assert!(
         taint_stress.as_millis() < 100,
@@ -535,7 +637,10 @@ fn l2_ir_cost_bench_06_abstract_interp() {
     let ai_small = measure_avg(warmup, iterations, || {
         let _ = compute_abstract_interp(&cfg_s, &dfg_s, Some(&lines_s), "python");
     });
-    eprintln!("  AbsInterp (small, pre-built):   {:>8.3}ms", ai_small.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  AbsInterp (small, pre-built):   {:>8.3}ms",
+        ai_small.as_secs_f64() * 1000.0
+    );
 
     // Complex
     let cfg_c = get_cfg_context(COMPLEX_FN, "matrix_stats", Language::Python).unwrap();
@@ -544,7 +649,10 @@ fn l2_ir_cost_bench_06_abstract_interp() {
     let ai_complex = measure_avg(warmup, iterations, || {
         let _ = compute_abstract_interp(&cfg_c, &dfg_c, Some(&lines_c), "python");
     });
-    eprintln!("  AbsInterp (complex, pre-built): {:>8.3}ms", ai_complex.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  AbsInterp (complex, pre-built): {:>8.3}ms",
+        ai_complex.as_secs_f64() * 1000.0
+    );
 
     // Stress
     let cfg_st = get_cfg_context(STRESS_FN, "process_records", Language::Python).unwrap();
@@ -553,7 +661,10 @@ fn l2_ir_cost_bench_06_abstract_interp() {
     let ai_stress = measure_avg(warmup, iterations, || {
         let _ = compute_abstract_interp(&cfg_st, &dfg_st, Some(&lines_st), "python");
     });
-    eprintln!("  AbsInterp (stress, pre-built):  {:>8.3}ms", ai_stress.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  AbsInterp (stress, pre-built):  {:>8.3}ms",
+        ai_stress.as_secs_f64() * 1000.0
+    );
 
     // Full E2E
     eprintln!("\n  --- AbsInterp End-to-End (includes CFG + DFG) ---");
@@ -563,7 +674,10 @@ fn l2_ir_cost_bench_06_abstract_interp() {
         let lines = source_lines_vec(STRESS_FN);
         let _ = compute_abstract_interp(&cfg, &dfg, Some(&lines), "python");
     });
-    eprintln!("  AbsInterp E2E (stress):         {:>8.3}ms", ai_e2e_stress.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  AbsInterp E2E (stress):         {:>8.3}ms",
+        ai_e2e_stress.as_secs_f64() * 1000.0
+    );
 
     assert!(
         ai_stress.as_millis() < 100,
@@ -589,21 +703,30 @@ fn l2_ir_cost_bench_07_available_exprs() {
     let ae_small = measure_avg(warmup, iterations, || {
         let _ = compute_available_exprs(&cfg_s, &dfg_s);
     });
-    eprintln!("  AvailExprs (small, pre-built):   {:>8.3}ms", ae_small.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  AvailExprs (small, pre-built):   {:>8.3}ms",
+        ae_small.as_secs_f64() * 1000.0
+    );
 
     let cfg_c = get_cfg_context(COMPLEX_FN, "matrix_stats", Language::Python).unwrap();
     let dfg_c = get_dfg_context(COMPLEX_FN, "matrix_stats", Language::Python).unwrap();
     let ae_complex = measure_avg(warmup, iterations, || {
         let _ = compute_available_exprs(&cfg_c, &dfg_c);
     });
-    eprintln!("  AvailExprs (complex, pre-built): {:>8.3}ms", ae_complex.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  AvailExprs (complex, pre-built): {:>8.3}ms",
+        ae_complex.as_secs_f64() * 1000.0
+    );
 
     let cfg_st = get_cfg_context(STRESS_FN, "process_records", Language::Python).unwrap();
     let dfg_st = get_dfg_context(STRESS_FN, "process_records", Language::Python).unwrap();
     let ae_stress = measure_avg(warmup, iterations, || {
         let _ = compute_available_exprs(&cfg_st, &dfg_st);
     });
-    eprintln!("  AvailExprs (stress, pre-built):  {:>8.3}ms", ae_stress.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  AvailExprs (stress, pre-built):  {:>8.3}ms",
+        ae_stress.as_secs_f64() * 1000.0
+    );
 
     assert!(
         ae_stress.as_millis() < 100,
@@ -621,7 +744,9 @@ fn l2_ir_cost_bench_08_full_pipeline() {
     let iterations = 30;
     let warmup = 3;
 
-    eprintln!("\n=== 8. Full IR Pipeline (Parse + CFG + DFG + SSA + Taint + AbsInterp + AvailExprs) ===");
+    eprintln!(
+        "\n=== 8. Full IR Pipeline (Parse + CFG + DFG + SSA + Taint + AbsInterp + AvailExprs) ==="
+    );
 
     // Small
     let full_small = measure_avg(warmup, iterations, || {
@@ -635,54 +760,85 @@ fn l2_ir_cost_bench_08_full_pipeline() {
         let _ = compute_abstract_interp(&cfg, &dfg, Some(&lines), "python");
         let _ = compute_available_exprs(&cfg, &dfg);
     });
-    eprintln!("  Full pipeline (small):   {:>8.3}ms", full_small.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  Full pipeline (small):   {:>8.3}ms",
+        full_small.as_secs_f64() * 1000.0
+    );
 
     // Medium
     let full_med = measure_avg(warmup, iterations, || {
         let _ = parse(MEDIUM_FN, Language::Python).unwrap();
         let cfg = get_cfg_context(MEDIUM_FN, "classify_score", Language::Python).unwrap();
         let dfg = get_dfg_context(MEDIUM_FN, "classify_score", Language::Python).unwrap();
-        let _ = construct_ssa(MEDIUM_FN, "classify_score", Language::Python, SsaType::Minimal).unwrap();
+        let _ = construct_ssa(
+            MEDIUM_FN,
+            "classify_score",
+            Language::Python,
+            SsaType::Minimal,
+        )
+        .unwrap();
         let stmts = build_statements(MEDIUM_FN);
         let _ = compute_taint(&cfg, &dfg.refs, &stmts, Language::Python);
         let lines = source_lines_vec(MEDIUM_FN);
         let _ = compute_abstract_interp(&cfg, &dfg, Some(&lines), "python");
         let _ = compute_available_exprs(&cfg, &dfg);
     });
-    eprintln!("  Full pipeline (medium):  {:>8.3}ms", full_med.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  Full pipeline (medium):  {:>8.3}ms",
+        full_med.as_secs_f64() * 1000.0
+    );
 
     // Complex
     let full_complex = measure_avg(warmup, iterations, || {
         let _ = parse(COMPLEX_FN, Language::Python).unwrap();
         let cfg = get_cfg_context(COMPLEX_FN, "matrix_stats", Language::Python).unwrap();
         let dfg = get_dfg_context(COMPLEX_FN, "matrix_stats", Language::Python).unwrap();
-        let _ = construct_ssa(COMPLEX_FN, "matrix_stats", Language::Python, SsaType::Minimal).unwrap();
+        let _ = construct_ssa(
+            COMPLEX_FN,
+            "matrix_stats",
+            Language::Python,
+            SsaType::Minimal,
+        )
+        .unwrap();
         let stmts = build_statements(COMPLEX_FN);
         let _ = compute_taint(&cfg, &dfg.refs, &stmts, Language::Python);
         let lines = source_lines_vec(COMPLEX_FN);
         let _ = compute_abstract_interp(&cfg, &dfg, Some(&lines), "python");
         let _ = compute_available_exprs(&cfg, &dfg);
     });
-    eprintln!("  Full pipeline (complex): {:>8.3}ms", full_complex.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  Full pipeline (complex): {:>8.3}ms",
+        full_complex.as_secs_f64() * 1000.0
+    );
 
     // Stress
     let full_stress = measure_avg(warmup, iterations, || {
         let _ = parse(STRESS_FN, Language::Python).unwrap();
         let cfg = get_cfg_context(STRESS_FN, "process_records", Language::Python).unwrap();
         let dfg = get_dfg_context(STRESS_FN, "process_records", Language::Python).unwrap();
-        let _ = construct_ssa(STRESS_FN, "process_records", Language::Python, SsaType::Minimal).unwrap();
+        let _ = construct_ssa(
+            STRESS_FN,
+            "process_records",
+            Language::Python,
+            SsaType::Minimal,
+        )
+        .unwrap();
         let stmts = build_statements(STRESS_FN);
         let _ = compute_taint(&cfg, &dfg.refs, &stmts, Language::Python);
         let lines = source_lines_vec(STRESS_FN);
         let _ = compute_abstract_interp(&cfg, &dfg, Some(&lines), "python");
         let _ = compute_available_exprs(&cfg, &dfg);
     });
-    eprintln!("  Full pipeline (stress):  {:>8.3}ms", full_stress.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  Full pipeline (stress):  {:>8.3}ms",
+        full_stress.as_secs_f64() * 1000.0
+    );
 
     // Budget: full pipeline for one function should be < 50ms per the spec
     // Allow 200ms as a generous upper bound for stress functions
     eprintln!("\n  Budget check: spec says 3-10ms/fn, PM2-P2 warned 16-52ms/fn");
-    eprintln!("  At {:>6.1}ms/fn (stress), 2-second budget allows {} functions",
+    eprintln!(
+        "  At {:>6.1}ms/fn (stress), 2-second budget allows {} functions",
         full_stress.as_secs_f64() * 1000.0,
         (2000.0 / (full_stress.as_secs_f64() * 1000.0)) as u32
     );
@@ -704,8 +860,8 @@ fn l2_ir_cost_bench_09_batch() {
     let warmup = 3;
 
     let func_names = [
-        "func_01", "func_02", "func_03", "func_04", "func_05",
-        "func_06", "func_07", "func_08", "func_09", "func_10",
+        "func_01", "func_02", "func_03", "func_04", "func_05", "func_06", "func_07", "func_08",
+        "func_09", "func_10",
     ];
 
     eprintln!("\n=== 9. Batch Cost: 10 functions from one file ===");
@@ -724,7 +880,8 @@ fn l2_ir_cost_bench_09_batch() {
         }
     });
     let per_fn_independent = batch_independent / 10;
-    eprintln!("  Batch (10 fns, independent): {:>8.3}ms total, {:>8.3}ms/fn",
+    eprintln!(
+        "  Batch (10 fns, independent): {:>8.3}ms total, {:>8.3}ms/fn",
         batch_independent.as_secs_f64() * 1000.0,
         per_fn_independent.as_secs_f64() * 1000.0,
     );
@@ -736,16 +893,24 @@ fn l2_ir_cost_bench_09_batch() {
             let _ = parse(BATCH_FILE, Language::Python).unwrap();
         }
     });
-    eprintln!("  Parse x10 (redundant):       {:>8.3}ms (waste from re-parsing)",
-        parse_10x.as_secs_f64() * 1000.0);
-    eprintln!("  Parse x1:                    {:>8.3}ms (shared-tree approach)",
-        (parse_10x.as_secs_f64() * 1000.0) / 10.0);
+    eprintln!(
+        "  Parse x10 (redundant):       {:>8.3}ms (waste from re-parsing)",
+        parse_10x.as_secs_f64() * 1000.0
+    );
+    eprintln!(
+        "  Parse x1:                    {:>8.3}ms (shared-tree approach)",
+        (parse_10x.as_secs_f64() * 1000.0) / 10.0
+    );
 
     let parse_waste_pct = (parse_10x.as_secs_f64() / batch_independent.as_secs_f64()) * 100.0;
-    eprintln!("  Redundant parse overhead:    {:>6.1}% of batch cost", parse_waste_pct);
+    eprintln!(
+        "  Redundant parse overhead:    {:>6.1}% of batch cost",
+        parse_waste_pct
+    );
 
     // Final budget check
-    eprintln!("\n  Budget: 2000ms / {:.1}ms per fn = {} functions in budget",
+    eprintln!(
+        "\n  Budget: 2000ms / {:.1}ms per fn = {} functions in budget",
         per_fn_independent.as_secs_f64() * 1000.0,
         (2000.0 / (per_fn_independent.as_secs_f64() * 1000.0)) as u32
     );
@@ -783,17 +948,35 @@ fn l2_ir_cost_bench_10_parse_redundancy() {
     });
 
     let ssa_only = measure_avg(warmup, iterations, || {
-        let _ = construct_ssa(STRESS_FN, "process_records", Language::Python, SsaType::Minimal).unwrap();
+        let _ = construct_ssa(
+            STRESS_FN,
+            "process_records",
+            Language::Python,
+            SsaType::Minimal,
+        )
+        .unwrap();
     });
 
     let parse_only = measure_avg(warmup, iterations, || {
         let _ = parse(STRESS_FN, Language::Python).unwrap();
     });
 
-    eprintln!("  parse() alone:        {:>8.3}ms", parse_only.as_secs_f64() * 1000.0);
-    eprintln!("  get_cfg_context():    {:>8.3}ms  (1 parse)", cfg_only.as_secs_f64() * 1000.0);
-    eprintln!("  get_dfg_context():    {:>8.3}ms  (2 parses: own + internal CFG)", dfg_only.as_secs_f64() * 1000.0);
-    eprintln!("  construct_ssa():      {:>8.3}ms  (3+ parses: CFG + DFG + DFG-internal-CFG)", ssa_only.as_secs_f64() * 1000.0);
+    eprintln!(
+        "  parse() alone:        {:>8.3}ms",
+        parse_only.as_secs_f64() * 1000.0
+    );
+    eprintln!(
+        "  get_cfg_context():    {:>8.3}ms  (1 parse)",
+        cfg_only.as_secs_f64() * 1000.0
+    );
+    eprintln!(
+        "  get_dfg_context():    {:>8.3}ms  (2 parses: own + internal CFG)",
+        dfg_only.as_secs_f64() * 1000.0
+    );
+    eprintln!(
+        "  construct_ssa():      {:>8.3}ms  (3+ parses: CFG + DFG + DFG-internal-CFG)",
+        ssa_only.as_secs_f64() * 1000.0
+    );
     eprintln!();
 
     // Theoretical minimum: if all shared one parse
@@ -801,9 +984,14 @@ fn l2_ir_cost_bench_10_parse_redundancy() {
     let parse_overhead = parse_only.as_secs_f64() * 4.0; // ~4 redundant parses
     if analysis_only > 0.0 {
         let overhead_pct = (parse_overhead / analysis_only) * 100.0;
-        eprintln!("  Estimated parse overhead in combined calls: {:.1}%", overhead_pct);
-        eprintln!("  Shared-tree savings potential: ~{:.3}ms per function",
-            parse_overhead * 1000.0);
+        eprintln!(
+            "  Estimated parse overhead in combined calls: {:.1}%",
+            overhead_pct
+        );
+        eprintln!(
+            "  Shared-tree savings potential: ~{:.3}ms per function",
+            parse_overhead * 1000.0
+        );
     }
 }
 
@@ -833,32 +1021,135 @@ fn l2_ir_cost_bench_11_summary_table() {
     let mut rows: Vec<Row> = Vec::new();
 
     // Parse
-    let ps = measure_avg(warmup, iterations, || { let _ = parse(SMALL_FN, Language::Python); }).as_secs_f64() * 1000.0;
-    let pm = measure_avg(warmup, iterations, || { let _ = parse(MEDIUM_FN, Language::Python); }).as_secs_f64() * 1000.0;
-    let pc = measure_avg(warmup, iterations, || { let _ = parse(COMPLEX_FN, Language::Python); }).as_secs_f64() * 1000.0;
-    let pst = measure_avg(warmup, iterations, || { let _ = parse(STRESS_FN, Language::Python); }).as_secs_f64() * 1000.0;
-    rows.push(Row { name: "Parse", small: ps, medium: pm, complex: pc, stress: pst });
+    let ps = measure_avg(warmup, iterations, || {
+        let _ = parse(SMALL_FN, Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let pm = measure_avg(warmup, iterations, || {
+        let _ = parse(MEDIUM_FN, Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let pc = measure_avg(warmup, iterations, || {
+        let _ = parse(COMPLEX_FN, Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let pst = measure_avg(warmup, iterations, || {
+        let _ = parse(STRESS_FN, Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    rows.push(Row {
+        name: "Parse",
+        small: ps,
+        medium: pm,
+        complex: pc,
+        stress: pst,
+    });
 
     // CFG
-    let cs = measure_avg(warmup, iterations, || { let _ = get_cfg_context(SMALL_FN, "add_values", Language::Python); }).as_secs_f64() * 1000.0;
-    let cm = measure_avg(warmup, iterations, || { let _ = get_cfg_context(MEDIUM_FN, "classify_score", Language::Python); }).as_secs_f64() * 1000.0;
-    let cc = measure_avg(warmup, iterations, || { let _ = get_cfg_context(COMPLEX_FN, "matrix_stats", Language::Python); }).as_secs_f64() * 1000.0;
-    let cst = measure_avg(warmup, iterations, || { let _ = get_cfg_context(STRESS_FN, "process_records", Language::Python); }).as_secs_f64() * 1000.0;
-    rows.push(Row { name: "CFG", small: cs, medium: cm, complex: cc, stress: cst });
+    let cs = measure_avg(warmup, iterations, || {
+        let _ = get_cfg_context(SMALL_FN, "add_values", Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let cm = measure_avg(warmup, iterations, || {
+        let _ = get_cfg_context(MEDIUM_FN, "classify_score", Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let cc = measure_avg(warmup, iterations, || {
+        let _ = get_cfg_context(COMPLEX_FN, "matrix_stats", Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let cst = measure_avg(warmup, iterations, || {
+        let _ = get_cfg_context(STRESS_FN, "process_records", Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    rows.push(Row {
+        name: "CFG",
+        small: cs,
+        medium: cm,
+        complex: cc,
+        stress: cst,
+    });
 
     // DFG (includes CFG + reaching defs)
-    let ds = measure_avg(warmup, iterations, || { let _ = get_dfg_context(SMALL_FN, "add_values", Language::Python); }).as_secs_f64() * 1000.0;
-    let dm = measure_avg(warmup, iterations, || { let _ = get_dfg_context(MEDIUM_FN, "classify_score", Language::Python); }).as_secs_f64() * 1000.0;
-    let dc = measure_avg(warmup, iterations, || { let _ = get_dfg_context(COMPLEX_FN, "matrix_stats", Language::Python); }).as_secs_f64() * 1000.0;
-    let dst = measure_avg(warmup, iterations, || { let _ = get_dfg_context(STRESS_FN, "process_records", Language::Python); }).as_secs_f64() * 1000.0;
-    rows.push(Row { name: "DFG+Reach", small: ds, medium: dm, complex: dc, stress: dst });
+    let ds = measure_avg(warmup, iterations, || {
+        let _ = get_dfg_context(SMALL_FN, "add_values", Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let dm = measure_avg(warmup, iterations, || {
+        let _ = get_dfg_context(MEDIUM_FN, "classify_score", Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let dc = measure_avg(warmup, iterations, || {
+        let _ = get_dfg_context(COMPLEX_FN, "matrix_stats", Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let dst = measure_avg(warmup, iterations, || {
+        let _ = get_dfg_context(STRESS_FN, "process_records", Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    rows.push(Row {
+        name: "DFG+Reach",
+        small: ds,
+        medium: dm,
+        complex: dc,
+        stress: dst,
+    });
 
     // SSA (includes CFG + DFG + dom tree + phi)
-    let ss = measure_avg(warmup, iterations, || { let _ = construct_ssa(SMALL_FN, "add_values", Language::Python, SsaType::Minimal); }).as_secs_f64() * 1000.0;
-    let sm = measure_avg(warmup, iterations, || { let _ = construct_ssa(MEDIUM_FN, "classify_score", Language::Python, SsaType::Minimal); }).as_secs_f64() * 1000.0;
-    let sc = measure_avg(warmup, iterations, || { let _ = construct_ssa(COMPLEX_FN, "matrix_stats", Language::Python, SsaType::Minimal); }).as_secs_f64() * 1000.0;
-    let sst = measure_avg(warmup, iterations, || { let _ = construct_ssa(STRESS_FN, "process_records", Language::Python, SsaType::Minimal); }).as_secs_f64() * 1000.0;
-    rows.push(Row { name: "SSA", small: ss, medium: sm, complex: sc, stress: sst });
+    let ss = measure_avg(warmup, iterations, || {
+        let _ = construct_ssa(SMALL_FN, "add_values", Language::Python, SsaType::Minimal);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let sm = measure_avg(warmup, iterations, || {
+        let _ = construct_ssa(
+            MEDIUM_FN,
+            "classify_score",
+            Language::Python,
+            SsaType::Minimal,
+        );
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let sc = measure_avg(warmup, iterations, || {
+        let _ = construct_ssa(
+            COMPLEX_FN,
+            "matrix_stats",
+            Language::Python,
+            SsaType::Minimal,
+        );
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let sst = measure_avg(warmup, iterations, || {
+        let _ = construct_ssa(
+            STRESS_FN,
+            "process_records",
+            Language::Python,
+            SsaType::Minimal,
+        );
+    })
+    .as_secs_f64()
+        * 1000.0;
+    rows.push(Row {
+        name: "SSA",
+        small: ss,
+        medium: sm,
+        complex: sc,
+        stress: sst,
+    });
 
     // Taint (pre-built)
     let cfg_s = get_cfg_context(SMALL_FN, "add_values", Language::Python).unwrap();
@@ -874,11 +1165,33 @@ fn l2_ir_cost_bench_11_summary_table() {
     let dfg_st = get_dfg_context(STRESS_FN, "process_records", Language::Python).unwrap();
     let stmts_st = build_statements(STRESS_FN);
 
-    let ts = measure_avg(warmup, iterations, || { let _ = compute_taint(&cfg_s, &dfg_s.refs, &stmts_s, Language::Python); }).as_secs_f64() * 1000.0;
-    let tm = measure_avg(warmup, iterations, || { let _ = compute_taint(&cfg_m, &dfg_m.refs, &stmts_m, Language::Python); }).as_secs_f64() * 1000.0;
-    let tc = measure_avg(warmup, iterations, || { let _ = compute_taint(&cfg_c, &dfg_c.refs, &stmts_c, Language::Python); }).as_secs_f64() * 1000.0;
-    let tst = measure_avg(warmup, iterations, || { let _ = compute_taint(&cfg_st, &dfg_st.refs, &stmts_st, Language::Python); }).as_secs_f64() * 1000.0;
-    rows.push(Row { name: "Taint", small: ts, medium: tm, complex: tc, stress: tst });
+    let ts = measure_avg(warmup, iterations, || {
+        let _ = compute_taint(&cfg_s, &dfg_s.refs, &stmts_s, Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let tm = measure_avg(warmup, iterations, || {
+        let _ = compute_taint(&cfg_m, &dfg_m.refs, &stmts_m, Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let tc = measure_avg(warmup, iterations, || {
+        let _ = compute_taint(&cfg_c, &dfg_c.refs, &stmts_c, Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let tst = measure_avg(warmup, iterations, || {
+        let _ = compute_taint(&cfg_st, &dfg_st.refs, &stmts_st, Language::Python);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    rows.push(Row {
+        name: "Taint",
+        small: ts,
+        medium: tm,
+        complex: tc,
+        stress: tst,
+    });
 
     // AbsInterp (pre-built)
     let lines_s = source_lines_vec(SMALL_FN);
@@ -886,26 +1199,78 @@ fn l2_ir_cost_bench_11_summary_table() {
     let lines_c = source_lines_vec(COMPLEX_FN);
     let lines_st = source_lines_vec(STRESS_FN);
 
-    let ais = measure_avg(warmup, iterations, || { let _ = compute_abstract_interp(&cfg_s, &dfg_s, Some(&lines_s), "python"); }).as_secs_f64() * 1000.0;
-    let aim = measure_avg(warmup, iterations, || { let _ = compute_abstract_interp(&cfg_m, &dfg_m, Some(&lines_m), "python"); }).as_secs_f64() * 1000.0;
-    let aic = measure_avg(warmup, iterations, || { let _ = compute_abstract_interp(&cfg_c, &dfg_c, Some(&lines_c), "python"); }).as_secs_f64() * 1000.0;
-    let aist = measure_avg(warmup, iterations, || { let _ = compute_abstract_interp(&cfg_st, &dfg_st, Some(&lines_st), "python"); }).as_secs_f64() * 1000.0;
-    rows.push(Row { name: "AbsInterp", small: ais, medium: aim, complex: aic, stress: aist });
+    let ais = measure_avg(warmup, iterations, || {
+        let _ = compute_abstract_interp(&cfg_s, &dfg_s, Some(&lines_s), "python");
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let aim = measure_avg(warmup, iterations, || {
+        let _ = compute_abstract_interp(&cfg_m, &dfg_m, Some(&lines_m), "python");
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let aic = measure_avg(warmup, iterations, || {
+        let _ = compute_abstract_interp(&cfg_c, &dfg_c, Some(&lines_c), "python");
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let aist = measure_avg(warmup, iterations, || {
+        let _ = compute_abstract_interp(&cfg_st, &dfg_st, Some(&lines_st), "python");
+    })
+    .as_secs_f64()
+        * 1000.0;
+    rows.push(Row {
+        name: "AbsInterp",
+        small: ais,
+        medium: aim,
+        complex: aic,
+        stress: aist,
+    });
 
     // AvailExprs (pre-built)
-    let aes = measure_avg(warmup, iterations, || { let _ = compute_available_exprs(&cfg_s, &dfg_s); }).as_secs_f64() * 1000.0;
-    let aem = measure_avg(warmup, iterations, || { let _ = compute_available_exprs(&cfg_m, &dfg_m); }).as_secs_f64() * 1000.0;
-    let aec = measure_avg(warmup, iterations, || { let _ = compute_available_exprs(&cfg_c, &dfg_c); }).as_secs_f64() * 1000.0;
-    let aest = measure_avg(warmup, iterations, || { let _ = compute_available_exprs(&cfg_st, &dfg_st); }).as_secs_f64() * 1000.0;
-    rows.push(Row { name: "AvailExpr", small: aes, medium: aem, complex: aec, stress: aest });
+    let aes = measure_avg(warmup, iterations, || {
+        let _ = compute_available_exprs(&cfg_s, &dfg_s);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let aem = measure_avg(warmup, iterations, || {
+        let _ = compute_available_exprs(&cfg_m, &dfg_m);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let aec = measure_avg(warmup, iterations, || {
+        let _ = compute_available_exprs(&cfg_c, &dfg_c);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    let aest = measure_avg(warmup, iterations, || {
+        let _ = compute_available_exprs(&cfg_st, &dfg_st);
+    })
+    .as_secs_f64()
+        * 1000.0;
+    rows.push(Row {
+        name: "AvailExpr",
+        small: aes,
+        medium: aem,
+        complex: aec,
+        stress: aest,
+    });
 
     // Print table
     eprintln!("║                                                                          ║");
-    eprintln!("║  {:12} │ {:>10} │ {:>10} │ {:>10} │ {:>10}  ║", "Operation", "Small", "Medium", "Complex", "Stress");
-    eprintln!("║  {:─<12} │ {:─>10} │ {:─>10} │ {:─>10} │ {:─>10}  ║", "", "", "", "", "");
+    eprintln!(
+        "║  {:12} │ {:>10} │ {:>10} │ {:>10} │ {:>10}  ║",
+        "Operation", "Small", "Medium", "Complex", "Stress"
+    );
+    eprintln!(
+        "║  {:─<12} │ {:─>10} │ {:─>10} │ {:─>10} │ {:─>10}  ║",
+        "", "", "", "", ""
+    );
     for row in &rows {
-        eprintln!("║  {:12} │ {:>8.3}ms │ {:>8.3}ms │ {:>8.3}ms │ {:>8.3}ms  ║",
-            row.name, row.small, row.medium, row.complex, row.stress);
+        eprintln!(
+            "║  {:12} │ {:>8.3}ms │ {:>8.3}ms │ {:>8.3}ms │ {:>8.3}ms  ║",
+            row.name, row.small, row.medium, row.complex, row.stress
+        );
     }
 
     // Full pipeline row (sum of individual ops - but note SSA/DFG overlap with CFG)
@@ -920,47 +1285,78 @@ fn l2_ir_cost_bench_11_summary_table() {
         let lines = source_lines_vec(SMALL_FN);
         let _ = compute_abstract_interp(&cfg, &dfg, Some(&lines), "python");
         let _ = compute_available_exprs(&cfg, &dfg);
-    }).as_secs_f64() * 1000.0;
+    })
+    .as_secs_f64()
+        * 1000.0;
 
     let full_m = measure_avg(warmup, iterations, || {
         let _ = parse(MEDIUM_FN, Language::Python).unwrap();
         let cfg = get_cfg_context(MEDIUM_FN, "classify_score", Language::Python).unwrap();
         let dfg = get_dfg_context(MEDIUM_FN, "classify_score", Language::Python).unwrap();
-        let _ = construct_ssa(MEDIUM_FN, "classify_score", Language::Python, SsaType::Minimal).unwrap();
+        let _ = construct_ssa(
+            MEDIUM_FN,
+            "classify_score",
+            Language::Python,
+            SsaType::Minimal,
+        )
+        .unwrap();
         let stmts = build_statements(MEDIUM_FN);
         let _ = compute_taint(&cfg, &dfg.refs, &stmts, Language::Python);
         let lines = source_lines_vec(MEDIUM_FN);
         let _ = compute_abstract_interp(&cfg, &dfg, Some(&lines), "python");
         let _ = compute_available_exprs(&cfg, &dfg);
-    }).as_secs_f64() * 1000.0;
+    })
+    .as_secs_f64()
+        * 1000.0;
 
     let full_c = measure_avg(warmup, iterations, || {
         let _ = parse(COMPLEX_FN, Language::Python).unwrap();
         let cfg = get_cfg_context(COMPLEX_FN, "matrix_stats", Language::Python).unwrap();
         let dfg = get_dfg_context(COMPLEX_FN, "matrix_stats", Language::Python).unwrap();
-        let _ = construct_ssa(COMPLEX_FN, "matrix_stats", Language::Python, SsaType::Minimal).unwrap();
+        let _ = construct_ssa(
+            COMPLEX_FN,
+            "matrix_stats",
+            Language::Python,
+            SsaType::Minimal,
+        )
+        .unwrap();
         let stmts = build_statements(COMPLEX_FN);
         let _ = compute_taint(&cfg, &dfg.refs, &stmts, Language::Python);
         let lines = source_lines_vec(COMPLEX_FN);
         let _ = compute_abstract_interp(&cfg, &dfg, Some(&lines), "python");
         let _ = compute_available_exprs(&cfg, &dfg);
-    }).as_secs_f64() * 1000.0;
+    })
+    .as_secs_f64()
+        * 1000.0;
 
     let full_st = measure_avg(warmup, iterations, || {
         let _ = parse(STRESS_FN, Language::Python).unwrap();
         let cfg = get_cfg_context(STRESS_FN, "process_records", Language::Python).unwrap();
         let dfg = get_dfg_context(STRESS_FN, "process_records", Language::Python).unwrap();
-        let _ = construct_ssa(STRESS_FN, "process_records", Language::Python, SsaType::Minimal).unwrap();
+        let _ = construct_ssa(
+            STRESS_FN,
+            "process_records",
+            Language::Python,
+            SsaType::Minimal,
+        )
+        .unwrap();
         let stmts = build_statements(STRESS_FN);
         let _ = compute_taint(&cfg, &dfg.refs, &stmts, Language::Python);
         let lines = source_lines_vec(STRESS_FN);
         let _ = compute_abstract_interp(&cfg, &dfg, Some(&lines), "python");
         let _ = compute_available_exprs(&cfg, &dfg);
-    }).as_secs_f64() * 1000.0;
+    })
+    .as_secs_f64()
+        * 1000.0;
 
-    eprintln!("║  {:─<12} │ {:─>10} │ {:─>10} │ {:─>10} │ {:─>10}  ║", "", "", "", "", "");
-    eprintln!("║  {:12} │ {:>8.3}ms │ {:>8.3}ms │ {:>8.3}ms │ {:>8.3}ms  ║",
-        "FULL E2E", full_s, full_m, full_c, full_st);
+    eprintln!(
+        "║  {:─<12} │ {:─>10} │ {:─>10} │ {:─>10} │ {:─>10}  ║",
+        "", "", "", "", ""
+    );
+    eprintln!(
+        "║  {:12} │ {:>8.3}ms │ {:>8.3}ms │ {:>8.3}ms │ {:>8.3}ms  ║",
+        "FULL E2E", full_s, full_m, full_c, full_st
+    );
 
     eprintln!("║                                                                          ║");
     eprintln!("╠══════════════════════════════════════════════════════════════════════════╣");
@@ -971,21 +1367,35 @@ fn l2_ir_cost_bench_11_summary_table() {
 
     eprintln!("║  VERDICT                                                                 ║");
     eprintln!("║                                                                          ║");
-    eprintln!("║  Spec target: 3-10ms/fn   Actual (stress): {:.1}ms/fn              ║", full_st);
-    eprintln!("║  2-second budget: {} functions (target: {})                    ║", functions_in_budget, spec_target);
+    eprintln!(
+        "║  Spec target: 3-10ms/fn   Actual (stress): {:.1}ms/fn              ║",
+        full_st
+    );
+    eprintln!(
+        "║  2-second budget: {} functions (target: {})                    ║",
+        functions_in_budget, spec_target
+    );
     eprintln!("║                                                                          ║");
 
     if full_st <= 10.0 {
         eprintln!("║  H3 CONFIRMED: Per-function cost is within spec (3-10ms)                 ║");
     } else if full_st <= 40.0 {
-        eprintln!("║  H3 PARTIALLY CONFIRMED: Cost is {:.0}x spec but >= {} fns in budget  ║",
-            full_st / 10.0, functions_in_budget);
+        eprintln!(
+            "║  H3 PARTIALLY CONFIRMED: Cost is {:.0}x spec but >= {} fns in budget  ║",
+            full_st / 10.0,
+            functions_in_budget
+        );
     } else if functions_in_budget >= spec_target {
-        eprintln!("║  H3 BUDGET OK: Cost is {:.0}x spec but {} fns still fits in 2s      ║",
-            full_st / 10.0, functions_in_budget);
+        eprintln!(
+            "║  H3 BUDGET OK: Cost is {:.0}x spec but {} fns still fits in 2s      ║",
+            full_st / 10.0,
+            functions_in_budget
+        );
     } else {
-        eprintln!("║  H3 REJECTED: {:.1}ms/fn = only {} fns in 2s (need {})           ║",
-            full_st, functions_in_budget, spec_target);
+        eprintln!(
+            "║  H3 REJECTED: {:.1}ms/fn = only {} fns in 2s (need {})           ║",
+            full_st, functions_in_budget, spec_target
+        );
         eprintln!("║  PM2-P2 warning was correct: need shared-tree optimization             ║");
     }
 

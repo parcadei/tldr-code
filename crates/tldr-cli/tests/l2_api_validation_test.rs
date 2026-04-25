@@ -321,10 +321,7 @@ fn cfg_works_for_rust_while_let() {
     let cfg = result.unwrap();
     assert_eq!(cfg.function, "drain_iter");
     // while-let is a loop construct; should have back edges
-    assert!(
-        !cfg.blocks.is_empty(),
-        "While-let should produce blocks"
-    );
+    assert!(!cfg.blocks.is_empty(), "While-let should produce blocks");
     println!(
         "[CFG while_let] blocks={}, edges={}",
         cfg.blocks.len(),
@@ -473,8 +470,7 @@ fn reaching_defs_works_for_rust() {
 #[test]
 fn reaching_defs_works_for_rust_pattern_matching() {
     let cfg = get_cfg_context(RUST_MATCH, "classify", Language::Rust).expect("CFG should work");
-    let dfg =
-        get_dfg_context(RUST_MATCH, "classify", Language::Rust).expect("DFG should work");
+    let dfg = get_dfg_context(RUST_MATCH, "classify", Language::Rust).expect("DFG should work");
 
     let rd = compute_reaching_definitions(&cfg, &dfg.refs);
 
@@ -506,10 +502,7 @@ fn ssa_construction_works_for_rust_simple() {
     );
     let ssa = result.unwrap();
     assert_eq!(ssa.function, "add");
-    assert!(
-        !ssa.blocks.is_empty(),
-        "SSA should have blocks, got 0"
-    );
+    assert!(!ssa.blocks.is_empty(), "SSA should have blocks, got 0");
     assert!(
         !ssa.ssa_names.is_empty(),
         "SSA should have named values, got 0"
@@ -532,11 +525,7 @@ fn ssa_construction_works_for_rust_shadowing() {
     );
     let ssa = result.unwrap();
     // Shadowing should produce multiple versions of 'y'
-    let y_names: Vec<_> = ssa
-        .ssa_names
-        .iter()
-        .filter(|n| n.variable == "y")
-        .collect();
+    let y_names: Vec<_> = ssa.ssa_names.iter().filter(|n| n.variable == "y").collect();
     println!(
         "[SSA shadowing] blocks={}, total_names={}, y_versions={}",
         ssa.blocks.len(),
@@ -601,8 +590,13 @@ fn ssa_pruned_works_for_rust() {
 fn sccp_works_for_rust_constants() {
     use tldr_core::ssa::analysis::run_sccp;
 
-    let ssa = construct_ssa(RUST_CONST_PROP, "constants", Language::Rust, SsaType::Minimal)
-        .expect("SSA construction should work");
+    let ssa = construct_ssa(
+        RUST_CONST_PROP,
+        "constants",
+        Language::Rust,
+        SsaType::Minimal,
+    )
+    .expect("SSA construction should work");
 
     let result = run_sccp(&ssa);
     assert!(
@@ -650,10 +644,10 @@ fn sccp_works_for_rust_match() {
 #[test]
 fn taint_works_for_rust_env_to_command() {
     // Build CFG and DFG for the taint function
-    let cfg = get_cfg_context(RUST_TAINT, "run_user_command", Language::Rust)
-        .expect("CFG should work");
-    let dfg = get_dfg_context(RUST_TAINT, "run_user_command", Language::Rust)
-        .expect("DFG should work");
+    let cfg =
+        get_cfg_context(RUST_TAINT, "run_user_command", Language::Rust).expect("CFG should work");
+    let dfg =
+        get_dfg_context(RUST_TAINT, "run_user_command", Language::Rust).expect("DFG should work");
 
     // Build statements map from source lines
     let statements: HashMap<u32, String> = RUST_TAINT
@@ -680,16 +674,26 @@ fn taint_works_for_rust_env_to_command() {
     if taint.sources.is_empty() {
         println!("[Taint Rust] WARNING: No sources detected -- Rust taint patterns may not match this snippet");
     } else {
-        println!("[Taint Rust] Sources detected: {:?}",
-            taint.sources.iter().map(|s| format!("{:?} at line {}", s.source_type, s.line)).collect::<Vec<_>>()
+        println!(
+            "[Taint Rust] Sources detected: {:?}",
+            taint
+                .sources
+                .iter()
+                .map(|s| format!("{:?} at line {}", s.source_type, s.line))
+                .collect::<Vec<_>>()
         );
     }
     // Command::new should be detected as a sink
     if taint.sinks.is_empty() {
         println!("[Taint Rust] WARNING: No sinks detected -- Rust taint patterns may not match Command::new");
     } else {
-        println!("[Taint Rust] Sinks detected: {:?}",
-            taint.sinks.iter().map(|s| format!("{:?} at line {}", s.sink_type, s.line)).collect::<Vec<_>>()
+        println!(
+            "[Taint Rust] Sinks detected: {:?}",
+            taint
+                .sinks
+                .iter()
+                .map(|s| format!("{:?} at line {}", s.sink_type, s.line))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -699,10 +703,10 @@ fn taint_with_tree_works_for_rust() {
     use tldr_core::ast::parser::parse;
     use tldr_core::security::compute_taint_with_tree;
 
-    let cfg = get_cfg_context(RUST_TAINT, "run_user_command", Language::Rust)
-        .expect("CFG should work");
-    let dfg = get_dfg_context(RUST_TAINT, "run_user_command", Language::Rust)
-        .expect("DFG should work");
+    let cfg =
+        get_cfg_context(RUST_TAINT, "run_user_command", Language::Rust).expect("CFG should work");
+    let dfg =
+        get_dfg_context(RUST_TAINT, "run_user_command", Language::Rust).expect("DFG should work");
 
     let tree = parse(RUST_TAINT, Language::Rust).expect("Parse should work");
 
@@ -740,10 +744,10 @@ fn taint_with_tree_works_for_rust() {
 
 #[test]
 fn abstract_interp_works_for_rust_loop() {
-    let cfg = get_cfg_context(RUST_LOOP_COUNTER, "count_up", Language::Rust)
-        .expect("CFG should work");
-    let dfg = get_dfg_context(RUST_LOOP_COUNTER, "count_up", Language::Rust)
-        .expect("DFG should work");
+    let cfg =
+        get_cfg_context(RUST_LOOP_COUNTER, "count_up", Language::Rust).expect("CFG should work");
+    let dfg =
+        get_dfg_context(RUST_LOOP_COUNTER, "count_up", Language::Rust).expect("DFG should work");
 
     let source_lines: Vec<&str> = RUST_LOOP_COUNTER.lines().collect();
     let result = compute_abstract_interp(&cfg, &dfg, Some(&source_lines), "rust");
@@ -768,10 +772,8 @@ fn abstract_interp_works_for_rust_loop() {
 
 #[test]
 fn abstract_interp_works_for_rust_simple() {
-    let cfg = get_cfg_context(RUST_SIMPLE_IF, "add", Language::Rust)
-        .expect("CFG should work");
-    let dfg = get_dfg_context(RUST_SIMPLE_IF, "add", Language::Rust)
-        .expect("DFG should work");
+    let cfg = get_cfg_context(RUST_SIMPLE_IF, "add", Language::Rust).expect("CFG should work");
+    let dfg = get_dfg_context(RUST_SIMPLE_IF, "add", Language::Rust).expect("DFG should work");
 
     let source_lines: Vec<&str> = RUST_SIMPLE_IF.lines().collect();
     let result = compute_abstract_interp(&cfg, &dfg, Some(&source_lines), "rust");
@@ -963,10 +965,7 @@ fn very_long_function(a: i32, b: i32, c: i32, d: i32, e: i32, f: i32, g: i32) ->
         .iter()
         .filter(|s| s.smell_type == tldr_core::quality::smells::SmellType::LongParameterList)
         .collect();
-    println!(
-        "[Smells] LongParameterList findings: {}",
-        long_params.len()
-    );
+    println!("[Smells] LongParameterList findings: {}", long_params.len());
     // Even if the specific smell isn't detected, the scan should complete
     assert!(
         report.files_scanned >= 1,
@@ -981,10 +980,8 @@ fn very_long_function(a: i32, b: i32, c: i32, d: i32, e: i32, f: i32, g: i32) ->
 
 #[test]
 fn available_expressions_works_for_rust() {
-    let cfg = get_cfg_context(RUST_SIMPLE_IF, "add", Language::Rust)
-        .expect("CFG should work");
-    let dfg = get_dfg_context(RUST_SIMPLE_IF, "add", Language::Rust)
-        .expect("DFG should work");
+    let cfg = get_cfg_context(RUST_SIMPLE_IF, "add", Language::Rust).expect("CFG should work");
+    let dfg = get_dfg_context(RUST_SIMPLE_IF, "add", Language::Rust).expect("DFG should work");
 
     let result = compute_available_exprs(&cfg, &dfg);
     assert!(
@@ -1003,10 +1000,8 @@ fn available_expressions_works_for_rust() {
 
 #[test]
 fn available_expressions_works_for_rust_shadowing() {
-    let cfg = get_cfg_context(RUST_SHADOWING, "shadow", Language::Rust)
-        .expect("CFG should work");
-    let dfg = get_dfg_context(RUST_SHADOWING, "shadow", Language::Rust)
-        .expect("DFG should work");
+    let cfg = get_cfg_context(RUST_SHADOWING, "shadow", Language::Rust).expect("CFG should work");
+    let dfg = get_dfg_context(RUST_SHADOWING, "shadow", Language::Rust).expect("DFG should work");
 
     let result = compute_available_exprs(&cfg, &dfg);
     assert!(
@@ -1031,8 +1026,8 @@ fn full_pipeline_works_for_rust() {
     use tldr_core::ssa::analysis::run_sccp;
 
     // Step 1: CFG
-    let cfg = get_cfg_context(RUST_REACHING_DEFS, "multi_assign", Language::Rust)
-        .expect("CFG failed");
+    let cfg =
+        get_cfg_context(RUST_REACHING_DEFS, "multi_assign", Language::Rust).expect("CFG failed");
     println!(
         "[Pipeline] CFG: blocks={}, edges={}",
         cfg.blocks.len(),
@@ -1040,8 +1035,8 @@ fn full_pipeline_works_for_rust() {
     );
 
     // Step 2: DFG
-    let dfg = get_dfg_context(RUST_REACHING_DEFS, "multi_assign", Language::Rust)
-        .expect("DFG failed");
+    let dfg =
+        get_dfg_context(RUST_REACHING_DEFS, "multi_assign", Language::Rust).expect("DFG failed");
     println!(
         "[Pipeline] DFG: refs={}, variables={:?}",
         dfg.refs.len(),
@@ -1106,8 +1101,7 @@ fn full_pipeline_works_for_rust() {
         .enumerate()
         .map(|(i, line)| ((i + 1) as u32, line.to_string()))
         .collect();
-    let taint = compute_taint(&cfg, &dfg.refs, &statements, Language::Rust)
-        .expect("Taint failed");
+    let taint = compute_taint(&cfg, &dfg.refs, &statements, Language::Rust).expect("Taint failed");
     println!(
         "[Pipeline] Taint: sources={}, sinks={}, flows={}",
         taint.sources.len(),
@@ -1147,7 +1141,10 @@ fn dfg_works_for_rust_pattern_destructuring() {
 #[test]
 fn cfg_returns_empty_for_missing_rust_function() {
     let result = get_cfg_context(RUST_SIMPLE_IF, "nonexistent", Language::Rust);
-    assert!(result.is_ok(), "Should return Ok with empty CFG for missing function");
+    assert!(
+        result.is_ok(),
+        "Should return Ok with empty CFG for missing function"
+    );
     let cfg = result.unwrap();
     assert!(
         cfg.blocks.is_empty(),
@@ -1174,7 +1171,10 @@ fn noop() {
             );
         }
         Err(e) => {
-            println!("[SSA empty] Error (may be expected for empty function): {:?}", e);
+            println!(
+                "[SSA empty] Error (may be expected for empty function): {:?}",
+                e
+            );
         }
     }
 }

@@ -25,10 +25,7 @@ pub fn parse_ruff_output(stdout: &str) -> Result<Vec<L1Finding>, ParseError> {
     let mut findings = Vec::new();
 
     for item in &items {
-        let file = item
-            .get("filename")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let file = item.get("filename").and_then(|v| v.as_str()).unwrap_or("");
         let row = item
             .pointer("/location/row")
             .and_then(|v| v.as_u64())
@@ -38,10 +35,7 @@ pub fn parse_ruff_output(stdout: &str) -> Result<Vec<L1Finding>, ParseError> {
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
         let code = item.get("code").and_then(|v| v.as_str()).unwrap_or("");
-        let message = item
-            .get("message")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let message = item.get("message").and_then(|v| v.as_str()).unwrap_or("");
 
         let severity = ruff_code_to_severity(code);
 

@@ -1238,8 +1238,7 @@ fn test_output_writer_interface() {
         tldr_cli::output::OutputWriter::new(tldr_cli::output::OutputFormat::Json, true);
     let text_writer =
         tldr_cli::output::OutputWriter::new(tldr_cli::output::OutputFormat::Text, true);
-    let dot_writer =
-        tldr_cli::output::OutputWriter::new(tldr_cli::output::OutputFormat::Dot, true);
+    let dot_writer = tldr_cli::output::OutputWriter::new(tldr_cli::output::OutputFormat::Dot, true);
 
     assert!(json_writer.is_json());
     assert!(text_writer.is_text());
@@ -1456,9 +1455,8 @@ fn test_stats_output_format() {
 /// Test: SARIF module interface
 #[test]
 fn test_sarif_module_interface() {
-    let _format_sarif: fn(
-        &tldr_core::analysis::ClonesReport,
-    ) -> tldr_cli::output::sarif::SarifLog = tldr_cli::output::sarif::format_clones_sarif;
+    let _format_sarif: fn(&tldr_core::analysis::ClonesReport) -> tldr_cli::output::sarif::SarifLog =
+        tldr_cli::output::sarif::format_clones_sarif;
 
     assert!(std::mem::size_of::<tldr_cli::output::sarif::SarifLog>() > 0);
     assert!(std::mem::size_of::<tldr_cli::output::sarif::SarifRun>() > 0);

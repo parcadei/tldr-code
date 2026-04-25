@@ -892,8 +892,7 @@ fn test_patterns_java() {
     );
     // Java is a supported pattern language
     assert!(
-        report.metadata.patterns_before_filter > 0
-            || report.metadata.files_analyzed > 0,
+        report.metadata.patterns_before_filter > 0 || report.metadata.files_analyzed > 0,
         "Should process the Java file"
     );
 }
@@ -977,10 +976,7 @@ fn test_inheritance_python() {
     );
 
     // Check edges: Mammal -> Animal, Dog -> Mammal, Cat -> Mammal
-    assert!(
-        !report.edges.is_empty(),
-        "Should have inheritance edges"
-    );
+    assert!(!report.edges.is_empty(), "Should have inheritance edges");
 
     // Verify Mammal inherits from Animal
     let mammal_to_animal = report
@@ -1171,10 +1167,7 @@ fn test_inheritance_kotlin() {
         .edges
         .iter()
         .any(|e| e.child == "Container" && e.parent == "Component");
-    assert!(
-        container_extends,
-        "Container should extend Component"
-    );
+    assert!(container_extends, "Container should extend Component");
 
     let panel_extends = report
         .edges
@@ -1284,10 +1277,7 @@ fn test_inheritance_php() {
         .edges
         .iter()
         .any(|e| e.child == "BufferedLogger" && e.parent == "FileLogger");
-    assert!(
-        buffered_extends,
-        "BufferedLogger should extend FileLogger"
-    );
+    assert!(buffered_extends, "BufferedLogger should extend FileLogger");
 }
 
 #[test]
@@ -1318,7 +1308,10 @@ fn test_inheritance_depth_requires_class() {
         ..Default::default()
     };
     let result = opts.validate();
-    assert!(result.is_err(), "depth without class should fail validation");
+    assert!(
+        result.is_err(),
+        "depth without class should fail validation"
+    );
 }
 
 #[test]
@@ -1731,14 +1724,14 @@ fn test_vuln_python_sql_injection() {
     let dir = TempDir::new().unwrap();
     create_file(&dir, "app.py", fixtures::PYTHON_SQL_INJECTION);
 
-    let report =
-        scan_vulnerabilities(dir.path(), Some(Language::Python), Some(VulnType::SqlInjection))
-            .unwrap();
+    let report = scan_vulnerabilities(
+        dir.path(),
+        Some(Language::Python),
+        Some(VulnType::SqlInjection),
+    )
+    .unwrap();
 
-    assert!(
-        report.files_scanned >= 1,
-        "Should scan at least 1 file"
-    );
+    assert!(report.files_scanned >= 1, "Should scan at least 1 file");
     assert!(
         !report.findings.is_empty(),
         "Should detect SQL injection in Python string concatenation"
@@ -1793,17 +1786,10 @@ fn test_vuln_javascript_xss() {
     let dir = TempDir::new().unwrap();
     create_file(&dir, "app.js", fixtures::TS_XSS_VULN);
 
-    let report = scan_vulnerabilities(
-        dir.path(),
-        Some(Language::JavaScript),
-        Some(VulnType::Xss),
-    )
-    .unwrap();
+    let report =
+        scan_vulnerabilities(dir.path(), Some(Language::JavaScript), Some(VulnType::Xss)).unwrap();
 
-    assert!(
-        report.files_scanned >= 1,
-        "Should scan at least 1 JS file"
-    );
+    assert!(report.files_scanned >= 1, "Should scan at least 1 JS file");
 
     // innerHTML and document.write are XSS sinks
     if !report.findings.is_empty() {
@@ -1824,10 +1810,7 @@ fn test_vuln_javascript_command_injection() {
     )
     .unwrap();
 
-    assert!(
-        report.files_scanned >= 1,
-        "Should scan at least 1 JS file"
-    );
+    assert!(report.files_scanned >= 1, "Should scan at least 1 JS file");
 
     if !report.findings.is_empty() {
         let has_cmdi = report
@@ -1844,13 +1827,9 @@ fn test_vuln_go_sql_injection() {
     create_file(&dir, "handler.go", fixtures::GO_SQL_INJECTION);
 
     let report =
-        scan_vulnerabilities(dir.path(), Some(Language::Go), Some(VulnType::SqlInjection))
-            .unwrap();
+        scan_vulnerabilities(dir.path(), Some(Language::Go), Some(VulnType::SqlInjection)).unwrap();
 
-    assert!(
-        report.files_scanned >= 1,
-        "Should scan at least 1 Go file"
-    );
+    assert!(report.files_scanned >= 1, "Should scan at least 1 Go file");
 
     if !report.findings.is_empty() {
         let has_sqli = report
@@ -1866,9 +1845,12 @@ fn test_vuln_java_sql_injection() {
     let dir = TempDir::new().unwrap();
     create_file(&dir, "Search.java", fixtures::JAVA_SQL_INJECTION);
 
-    let report =
-        scan_vulnerabilities(dir.path(), Some(Language::Java), Some(VulnType::SqlInjection))
-            .unwrap();
+    let report = scan_vulnerabilities(
+        dir.path(),
+        Some(Language::Java),
+        Some(VulnType::SqlInjection),
+    )
+    .unwrap();
 
     assert!(
         report.files_scanned >= 1,
@@ -1933,9 +1915,12 @@ fn test_vuln_finding_has_remediation() {
     let dir = TempDir::new().unwrap();
     create_file(&dir, "app.py", fixtures::PYTHON_SQL_INJECTION);
 
-    let report =
-        scan_vulnerabilities(dir.path(), Some(Language::Python), Some(VulnType::SqlInjection))
-            .unwrap();
+    let report = scan_vulnerabilities(
+        dir.path(),
+        Some(Language::Python),
+        Some(VulnType::SqlInjection),
+    )
+    .unwrap();
 
     for finding in &report.findings {
         assert!(
@@ -1963,18 +1948,10 @@ fn test_secure_python_with_vulns() {
     create_file(&dir, "app.py", fixtures::PYTHON_SQL_INJECTION);
     create_file(&dir, "cmd.py", fixtures::PYTHON_COMMAND_INJECTION);
 
-    let report = run_secure(
-        dir.path().to_str().unwrap(),
-        Some("py"),
-        false,
-    )
-    .unwrap();
+    let report = run_secure(dir.path().to_str().unwrap(), Some("py"), false).unwrap();
 
     assert_eq!(report.wrapper, "secure");
-    assert!(
-        report.total_elapsed_ms > 0.0,
-        "Should report elapsed time"
-    );
+    assert!(report.total_elapsed_ms > 0.0, "Should report elapsed time");
 
     // Sub-results should include secrets and vulnerabilities
     assert!(
@@ -1999,12 +1976,7 @@ def greet(name):
 "#,
     );
 
-    let report = run_secure(
-        dir.path().to_str().unwrap(),
-        Some("py"),
-        false,
-    )
-    .unwrap();
+    let report = run_secure(dir.path().to_str().unwrap(), Some("py"), false).unwrap();
 
     // Clean project should have no findings
     assert!(
@@ -2019,12 +1991,7 @@ fn test_secure_findings_sorted_by_severity() {
     create_file(&dir, "app.py", fixtures::PYTHON_SQL_INJECTION);
     create_file(&dir, "cmd.py", fixtures::PYTHON_COMMAND_INJECTION);
 
-    let report = run_secure(
-        dir.path().to_str().unwrap(),
-        Some("py"),
-        false,
-    )
-    .unwrap();
+    let report = run_secure(dir.path().to_str().unwrap(), Some("py"), false).unwrap();
 
     // Findings should be sorted by severity (critical first)
     if report.findings.len() >= 2 {
@@ -2055,12 +2022,7 @@ fn test_secure_summary_populated() {
     let dir = TempDir::new().unwrap();
     create_file(&dir, "app.py", fixtures::PYTHON_SQL_INJECTION);
 
-    let report = run_secure(
-        dir.path().to_str().unwrap(),
-        Some("py"),
-        false,
-    )
-    .unwrap();
+    let report = run_secure(dir.path().to_str().unwrap(), Some("py"), false).unwrap();
 
     // Summary should contain statistical information
     assert!(
@@ -2072,12 +2034,7 @@ fn test_secure_summary_populated() {
 #[test]
 fn test_secure_empty_directory() {
     let dir = TempDir::new().unwrap();
-    let report = run_secure(
-        dir.path().to_str().unwrap(),
-        None,
-        false,
-    )
-    .unwrap();
+    let report = run_secure(dir.path().to_str().unwrap(), None, false).unwrap();
     assert!(report.findings.is_empty());
 }
 
@@ -2100,8 +2057,7 @@ fn test_patterns_and_inheritance_combined() {
         .unwrap();
 
     let inh_opts = InheritanceOptions::default();
-    let inh_report =
-        extract_inheritance(dir.path(), Some(Language::Python), &inh_opts).unwrap();
+    let inh_report = extract_inheritance(dir.path(), Some(Language::Python), &inh_opts).unwrap();
 
     // Patterns should analyze the file
     assert!(pattern_report.metadata.files_analyzed >= 1);

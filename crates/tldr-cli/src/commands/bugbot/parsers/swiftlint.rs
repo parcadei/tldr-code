@@ -17,19 +17,13 @@ pub fn parse_swiftlint_output(stdout: &str) -> Result<Vec<L1Finding>, ParseError
     for item in &items {
         let file = item.get("file").and_then(|v| v.as_str()).unwrap_or("");
         let line = item.get("line").and_then(|v| v.as_u64()).unwrap_or(0);
-        let column = item
-            .get("character")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let column = item.get("character").and_then(|v| v.as_u64()).unwrap_or(0);
         let native_sev = item
             .get("severity")
             .and_then(|v| v.as_str())
             .unwrap_or("Warning");
         let reason = item.get("reason").and_then(|v| v.as_str()).unwrap_or("");
-        let rule_id = item
-            .get("rule_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let rule_id = item.get("rule_id").and_then(|v| v.as_str()).unwrap_or("");
 
         let severity = match native_sev {
             "Error" => "high",
@@ -80,10 +74,7 @@ mod tests {
         let findings = parse_swiftlint_output(json).unwrap();
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, "medium");
-        assert_eq!(
-            findings[0].code,
-            Some("trailing_whitespace".to_string())
-        );
+        assert_eq!(findings[0].code, Some("trailing_whitespace".to_string()));
     }
 
     #[test]

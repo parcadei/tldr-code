@@ -12,10 +12,10 @@
 
 use std::path::{Path, PathBuf};
 
+use tldr_core::dataflow::abstract_interp::ENABLE_OCTAGON_DOMAIN;
 use tldr_core::{
     compute_abstract_interp, extract_file, get_cfg_context, get_dfg_context, Language, ModuleInfo,
 };
-use tldr_core::dataflow::abstract_interp::ENABLE_OCTAGON_DOMAIN;
 
 /// Configuration for a single corpus repository to scan.
 struct CorpusRepo {
@@ -216,7 +216,10 @@ fn gate3_octagon_corpus_findings() {
     let corpus_root = match corpus_root.canonicalize() {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("ERROR: Cannot resolve corpus root at {:?}: {}", corpus_root, e);
+            eprintln!(
+                "ERROR: Cannot resolve corpus root at {:?}: {}",
+                corpus_root, e
+            );
             eprintln!("Test skipped (corpus not found).");
             return;
         }
@@ -296,7 +299,13 @@ fn gate3_octagon_corpus_findings() {
 
         eprintln!(
             "  {:25} {:3} files  {:4} funcs  {:4} analyzed  {:3} skip  {:2} div0  {:2} null",
-            f.name, f.n_files, f.n_functions, f.n_analyzed, f.n_skipped, f.n_div_zero, f.n_null_deref
+            f.name,
+            f.n_files,
+            f.n_functions,
+            f.n_analyzed,
+            f.n_skipped,
+            f.n_div_zero,
+            f.n_null_deref
         );
 
         total_files += f.n_files;
@@ -316,7 +325,10 @@ fn gate3_octagon_corpus_findings() {
     eprintln!("  Functions skipped:   {:>5}", total_skipped);
     eprintln!("  Div-zero findings:   {:>5}", total_div_zero);
     eprintln!("  Null-deref findings: {:>5}", total_null_deref);
-    eprintln!("  Total findings:      {:>5}", total_div_zero + total_null_deref);
+    eprintln!(
+        "  Total findings:      {:>5}",
+        total_div_zero + total_null_deref
+    );
     eprintln!();
 
     if !all_details.is_empty() {

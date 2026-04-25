@@ -37,9 +37,9 @@ use tldr_core::Language;
 use crate::output::{OutputFormat, OutputWriter};
 
 use super::error::{ContractsError, ContractsResult};
-use super::types::{Condition, ContractsReport, OutputFormat as ContractsOutputFormat};
 #[cfg(test)]
 use super::types::Confidence;
+use super::types::{Condition, ContractsReport, OutputFormat as ContractsOutputFormat};
 use super::validation::{
     check_ast_depth, read_file_safe, validate_file_path, validate_function_name, MAX_AST_DEPTH,
     MAX_CONDITIONS_PER_FUNCTION,
@@ -1546,8 +1546,7 @@ fn body_contains_throw(if_stmt: Node, source: &[u8], config: &LanguageConfig) ->
         if child.kind() == "block"
             || child.kind() == "compound_statement"
             || child.kind() == "function_body"
-            || child.kind() == "statements"
-            && node_tree_contains_throw(child, source, config)
+            || child.kind() == "statements" && node_tree_contains_throw(child, source, config)
         {
             return true;
         }
@@ -1613,8 +1612,7 @@ fn node_tree_contains_throw(node: Node, source: &[u8], config: &LanguageConfig) 
         if child.kind() == "block"
             || child.kind() == "compound_statement"
             || child.kind() == "function_body"
-            || child.kind() == "statements"
-            && node_tree_contains_throw(child, source, config)
+            || child.kind() == "statements" && node_tree_contains_throw(child, source, config)
         {
             return true;
         }

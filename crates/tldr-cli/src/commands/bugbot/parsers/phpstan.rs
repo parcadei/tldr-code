@@ -25,10 +25,7 @@ pub fn parse_phpstan_output(stdout: &str) -> Result<Vec<L1Finding>, ParseError> 
         };
 
         for msg in messages {
-            let message = msg
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let message = msg.get("message").and_then(|v| v.as_str()).unwrap_or("");
             let line = msg.get("line").and_then(|v| v.as_u64()).unwrap_or(0);
             let tip = msg.get("tip").and_then(|v| v.as_str());
 

@@ -1215,11 +1215,7 @@ impl ResourceDetector {
     }
 
     /// Detect resources using language-specific patterns.
-    pub fn detect_with_patterns(
-        &mut self,
-        func_node: Node,
-        source: &[u8],
-    ) -> Vec<ResourceInfo> {
+    pub fn detect_with_patterns(&mut self, func_node: Node, source: &[u8]) -> Vec<ResourceInfo> {
         let patterns = get_resource_patterns(self.lang);
         self.resources.clear();
         self.context_manager_vars.clear();
@@ -2177,11 +2173,7 @@ impl DoubleCloseDetector {
     }
 
     /// Detect double-close issues with multi-language support.
-    pub fn detect_multilang(
-        &self,
-        func_node: Node,
-        source: &[u8],
-    ) -> Vec<DoubleCloseInfo> {
+    pub fn detect_multilang(&self, func_node: Node, source: &[u8]) -> Vec<DoubleCloseInfo> {
         let mut issues = Vec::new();
         let mut close_sites: HashMap<String, Vec<u32>> = HashMap::new();
         let patterns = get_resource_patterns(self.lang);
@@ -2300,11 +2292,7 @@ impl UseAfterCloseDetector {
     }
 
     /// Detect use-after-close issues with multi-language support.
-    pub fn detect_multilang(
-        &self,
-        func_node: Node,
-        source: &[u8],
-    ) -> Vec<UseAfterCloseInfo> {
+    pub fn detect_multilang(&self, func_node: Node, source: &[u8]) -> Vec<UseAfterCloseInfo> {
         let mut issues = Vec::new();
         let mut close_lines: HashMap<String, u32> = HashMap::new();
         let mut uses_after_close: Vec<(String, u32, u32)> = Vec::new();
@@ -2897,11 +2885,7 @@ fn extract_close_call(node: Node, source: &[u8], lang: Language) -> Option<(Stri
 // =============================================================================
 
 /// Build a simplified CFG from a function AST, using language-specific patterns.
-pub fn build_cfg_multilang(
-    func_node: Node,
-    source: &[u8],
-    lang: Language,
-) -> SimpleCfg {
+pub fn build_cfg_multilang(func_node: Node, source: &[u8], lang: Language) -> SimpleCfg {
     let patterns = get_resource_patterns(lang);
     let mut cfg = SimpleCfg::new();
     let entry_id = cfg.new_block();
@@ -2917,7 +2901,8 @@ pub fn build_cfg_multilang(
         .find(|n| patterns.body_kinds.contains(&n.kind()));
 
     if let Some(body_node) = body {
-        let exit_id = process_statements_multilang(&mut cfg, body_node, source, entry_id, &patterns);
+        let exit_id =
+            process_statements_multilang(&mut cfg, body_node, source, entry_id, &patterns);
         if let Some(exit) = exit_id {
             if !cfg.blocks.get(&exit).is_none_or(|b| b.is_exit) {
                 cfg.mark_exit(exit);
@@ -3637,7 +3622,10 @@ pub fn analyze_source_for_resource_issues(
         .parse(source, None)
         .ok_or_else(|| PatternsError::ParseError {
             file: PathBuf::from("<in-memory>"),
-            message: format!("Failed to parse {} source for resource analysis", lang.as_str()),
+            message: format!(
+                "Failed to parse {} source for resource analysis",
+                lang.as_str()
+            ),
         })?;
 
     // Build args with all checks enabled

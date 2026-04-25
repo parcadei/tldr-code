@@ -53,7 +53,11 @@ impl fmt::Display for BugbotExitError {
                 write!(f, "bugbot: {} CRITICAL finding(s) detected", count)
             }
             Self::AnalysisErrors { count } => {
-                write!(f, "bugbot: analysis had {} error(s) with no findings", count)
+                write!(
+                    f,
+                    "bugbot: analysis had {} error(s) with no findings",
+                    count
+                )
             }
         }
     }
@@ -574,8 +578,7 @@ mod tests {
             file: PathBuf::from("src/api.rs"),
             function: "handle_request".to_string(),
             line: 42,
-            message: "Taint flow: user_input reaches sql_query without sanitization"
-                .to_string(),
+            message: "Taint flow: user_input reaches sql_query without sanitization".to_string(),
             evidence: serde_json::json!({
                 "source": "user_input",
                 "sink": "sql_query"
@@ -644,8 +647,7 @@ mod tests {
             file: PathBuf::from("src/api.rs"),
             function: "handle_request".to_string(),
             line: 42,
-            message: "Taint flow: user_input reaches sql_query without sanitization"
-                .to_string(),
+            message: "Taint flow: user_input reaches sql_query without sanitization".to_string(),
             evidence: serde_json::json!({
                 "source": "user_input",
                 "sink": "sql_query",

@@ -47,6 +47,8 @@
 
 pub mod cache_clear;
 pub mod cache_stats;
+#[path = "daemon.rs"]
+pub mod daemon_impl;
 pub mod error;
 pub mod ipc;
 pub mod notify;
@@ -59,8 +61,6 @@ pub mod status;
 pub mod stop;
 pub mod types;
 pub mod warm;
-#[path = "daemon.rs"]
-pub mod daemon_impl;
 pub use daemon_impl as daemon;
 
 // Re-export core types for convenience

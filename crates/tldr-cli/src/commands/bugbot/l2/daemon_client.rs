@@ -306,10 +306,7 @@ mod tests {
     fn test_no_daemon_notify_changed_files_is_noop() {
         let client = NoDaemon;
         // Should not panic even with non-empty list
-        client.notify_changed_files(&[
-            PathBuf::from("src/lib.rs"),
-            PathBuf::from("src/main.rs"),
-        ]);
+        client.notify_changed_files(&[PathBuf::from("src/lib.rs"), PathBuf::from("src/main.rs")]);
     }
 
     /// NoDaemon must return None for ALL query types (comprehensive check).
@@ -544,10 +541,7 @@ mod tests {
         }
 
         fn notify_changed_files(&self, changed_files: &[PathBuf]) {
-            self.notified
-                .lock()
-                .unwrap()
-                .push(changed_files.to_vec());
+            self.notified.lock().unwrap().push(changed_files.to_vec());
         }
     }
 
@@ -558,17 +552,17 @@ mod tests {
         let daemon = TrackingDaemon::new();
         assert!(daemon.is_available());
 
-        let files = vec![
-            PathBuf::from("src/lib.rs"),
-            PathBuf::from("src/main.rs"),
-        ];
+        let files = vec![PathBuf::from("src/lib.rs"), PathBuf::from("src/main.rs")];
         daemon.notify_changed_files(&files);
 
         let notifications = daemon.notifications();
-        assert_eq!(notifications.len(), 1, "Should have recorded one notification");
         assert_eq!(
-            notifications[0],
-            files,
+            notifications.len(),
+            1,
+            "Should have recorded one notification"
+        );
+        assert_eq!(
+            notifications[0], files,
             "Notification should contain the changed files"
         );
     }
@@ -582,7 +576,11 @@ mod tests {
         daemon.notify_changed_files(&[PathBuf::from("b.rs"), PathBuf::from("c.rs")]);
 
         let notifications = daemon.notifications();
-        assert_eq!(notifications.len(), 2, "Should have recorded two notifications");
+        assert_eq!(
+            notifications.len(),
+            2,
+            "Should have recorded two notifications"
+        );
         assert_eq!(notifications[0].len(), 1);
         assert_eq!(notifications[1].len(), 2);
     }

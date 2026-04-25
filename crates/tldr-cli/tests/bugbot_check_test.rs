@@ -137,7 +137,9 @@ fn test_e2e_signature_regression() {
     );
 
     let json = parse_json(&output);
-    let findings = json["findings"].as_array().expect("findings should be array");
+    let findings = json["findings"]
+        .as_array()
+        .expect("findings should be array");
 
     let sig_findings: Vec<&serde_json::Value> = findings
         .iter()
@@ -156,10 +158,7 @@ fn test_e2e_signature_regression() {
         "signature-regression should be severity high"
     );
     assert!(
-        first["function"]
-            .as_str()
-            .unwrap_or("")
-            .contains("compute"),
+        first["function"].as_str().unwrap_or("").contains("compute"),
         "finding function should contain 'compute', got: {}",
         first["function"]
     );
@@ -194,7 +193,9 @@ fn test_e2e_born_dead() {
     );
 
     let json = parse_json(&output);
-    let findings = json["findings"].as_array().expect("findings should be array");
+    let findings = json["findings"]
+        .as_array()
+        .expect("findings should be array");
 
     let dead_findings: Vec<&serde_json::Value> = findings
         .iter()
@@ -238,7 +239,9 @@ fn test_e2e_no_changes() {
     );
 
     let json = parse_json(&output);
-    let findings = json["findings"].as_array().expect("findings should be array");
+    let findings = json["findings"]
+        .as_array()
+        .expect("findings should be array");
     assert!(
         findings.is_empty(),
         "expected 0 findings when no changes, got {}",
@@ -352,7 +355,9 @@ fn test_e2e_no_fail_flag() {
     );
 
     let json = parse_json(&output);
-    let findings = json["findings"].as_array().expect("findings should be array");
+    let findings = json["findings"]
+        .as_array()
+        .expect("findings should be array");
     assert!(
         !findings.is_empty(),
         "findings should still be present with --no-fail"
@@ -467,7 +472,9 @@ fn test_e2e_max_findings() {
     );
 
     let json = parse_json(&output);
-    let findings = json["findings"].as_array().expect("findings should be array");
+    let findings = json["findings"]
+        .as_array()
+        .expect("findings should be array");
 
     assert!(
         findings.len() <= 2,
@@ -482,19 +489,11 @@ fn test_e2e_max_findings() {
 fn test_e2e_body_only_change_no_regression() {
     let (_dir, path) = create_test_repo();
 
-    write_file(
-        &path,
-        "lib.rs",
-        "fn foo(x: i32) -> bool {\n    x > 0\n}\n",
-    );
+    write_file(&path, "lib.rs", "fn foo(x: i32) -> bool {\n    x > 0\n}\n");
     git_add_commit(&path, "add foo");
 
     // Only change the body, keep signature identical
-    write_file(
-        &path,
-        "lib.rs",
-        "fn foo(x: i32) -> bool {\n    x > 1\n}\n",
-    );
+    write_file(&path, "lib.rs", "fn foo(x: i32) -> bool {\n    x > 1\n}\n");
 
     let output = run_bugbot_check(&path, &["--no-fail"]);
     assert!(
@@ -504,7 +503,9 @@ fn test_e2e_body_only_change_no_regression() {
     );
 
     let json = parse_json(&output);
-    let findings = json["findings"].as_array().expect("findings should be array");
+    let findings = json["findings"]
+        .as_array()
+        .expect("findings should be array");
 
     let sig_regression_findings: Vec<&serde_json::Value> = findings
         .iter()
@@ -653,7 +654,9 @@ fn test_e2e_max_findings_zero_unlimited() {
     );
 
     let json = parse_json(&output);
-    let findings = json["findings"].as_array().expect("findings should be array");
+    let findings = json["findings"]
+        .as_array()
+        .expect("findings should be array");
 
     // All 5 signature regressions should be reported (no truncation)
     assert!(
@@ -664,11 +667,9 @@ fn test_e2e_max_findings_zero_unlimited() {
 
     // Should not have a truncation note
     let notes = json["notes"].as_array().expect("notes should be array");
-    let has_truncation = notes.iter().any(|n| {
-        n.as_str()
-            .unwrap_or("")
-            .starts_with("truncated_to_")
-    });
+    let has_truncation = notes
+        .iter()
+        .any(|n| n.as_str().unwrap_or("").starts_with("truncated_to_"));
     assert!(
         !has_truncation,
         "should not have truncation note with --max-findings 0, got: {:?}",

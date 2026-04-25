@@ -79,10 +79,7 @@ mod tests {
         assert_eq!(findings[0].line, 10);
         assert_eq!(findings[0].column, 5);
         assert_eq!(findings[0].severity, "medium");
-        assert_eq!(
-            findings[0].code,
-            Some("unreadVariable".to_string())
-        );
+        assert_eq!(findings[0].code, Some("unreadVariable".to_string()));
     }
 
     #[test]
@@ -93,7 +90,8 @@ mod tests {
 
     #[test]
     fn test_parse_skips_malformed() {
-        let output = "Checking main.c ...\nmain.c\t5\t1\terror\tnullPointer\tNull pointer dereference";
+        let output =
+            "Checking main.c ...\nmain.c\t5\t1\terror\tnullPointer\tNull pointer dereference";
         let findings = parse_cppcheck_output(output).unwrap();
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, "high");

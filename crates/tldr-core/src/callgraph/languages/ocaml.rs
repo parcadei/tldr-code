@@ -336,10 +336,7 @@ impl OcamlHandler {
                                 || child.kind() == "value_pattern"
                             {
                                 let func_name = get_node_text(&child, source).to_string();
-                                if func_name == "_"
-                                    || func_name == "()"
-                                    || func_name.is_empty()
-                                {
+                                if func_name == "_" || func_name == "()" || func_name.is_empty() {
                                     continue;
                                 }
                                 definitions.insert(func_name.clone());
@@ -1035,10 +1032,7 @@ impl CallGraphLanguageSupport for OcamlHandler {
                             {
                                 let func_name = get_node_text(&child, source).to_string();
                                 // VAL-018: same filter as above branch (see comment).
-                                if func_name == "_"
-                                    || func_name == "()"
-                                    || func_name.is_empty()
-                                {
+                                if func_name == "_" || func_name == "()" || func_name.is_empty() {
                                     continue;
                                 }
                                 let line = node.start_position().row as u32 + 1;

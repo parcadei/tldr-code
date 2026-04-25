@@ -393,11 +393,8 @@ mod metrics_complexity_tests {
     #[test]
     fn test_calculate_complexity_python_simple() {
         let path = fixture_path("test_python.py");
-        let result = calculate_complexity(
-            path.to_str().unwrap(),
-            "top_level_func",
-            Language::Python,
-        );
+        let result =
+            calculate_complexity(path.to_str().unwrap(), "top_level_func", Language::Python);
         assert!(result.is_ok(), "calculate_complexity should succeed");
         let metrics = result.unwrap();
         assert_eq!(metrics.function, "top_level_func");
@@ -412,7 +409,10 @@ mod metrics_complexity_tests {
     fn test_calculate_all_complexities_python() {
         let path = fixture_path("test_python.py");
         let result = calculate_all_complexities_file(&path);
-        assert!(result.is_ok(), "calculate_all_complexities_file should succeed");
+        assert!(
+            result.is_ok(),
+            "calculate_all_complexities_file should succeed"
+        );
         let map = result.unwrap();
         assert!(
             !map.is_empty(),
@@ -772,10 +772,7 @@ def deeply_nested(a, b, c):
         let options = CognitiveOptions::new();
         let report = analyze_cognitive(&path, &options).unwrap();
 
-        let func = report
-            .functions
-            .iter()
-            .find(|f| f.name == "deeply_nested");
+        let func = report.functions.iter().find(|f| f.name == "deeply_nested");
         assert!(func.is_some(), "Should find deeply_nested");
         let func = func.unwrap();
         assert!(
@@ -1019,10 +1016,7 @@ def math_func(a, b):
             "Should show operators when enabled"
         );
         // Should have operands
-        assert!(
-            func.operands.is_some(),
-            "Should show operands when enabled"
-        );
+        assert!(func.operands.is_some(), "Should show operands when enabled");
 
         // Should have at least 3 distinct operators (=, +, *, return, etc.)
         assert!(
@@ -1061,8 +1055,7 @@ mod loc_tests {
         let path = fixture_path(filename);
         assert!(path.exists(), "Fixture {} must exist", filename);
         let options = LocOptions::new();
-        analyze_loc(&path, &options)
-            .unwrap_or_else(|e| panic!("loc({}) failed: {}", filename, e))
+        analyze_loc(&path, &options).unwrap_or_else(|e| panic!("loc({}) failed: {}", filename, e))
     }
 
     /// Verify LOC invariants
@@ -1398,10 +1391,7 @@ mod smells_tests {
         let dir = TempDir::new().unwrap();
         let mut content = String::from("class GodTS {\n");
         for i in 0..25 {
-            content.push_str(&format!(
-                "    method{}(): number {{ return {}; }}\n",
-                i, i
-            ));
+            content.push_str(&format!("    method{}(): number {{ return {}; }}\n", i, i));
         }
         content.push_str("}\n");
         let report = run_smells_file(&dir, "god.ts", &content);
@@ -1433,10 +1423,7 @@ mod smells_tests {
             .iter()
             .filter(|s| s.smell_type == SmellType::LongMethod)
             .collect();
-        assert!(
-            !long_smells.is_empty(),
-            "Should detect Long Method in Go"
-        );
+        assert!(!long_smells.is_empty(), "Should detect Long Method in Go");
     }
 
     /// Rust smell detection (long function)
@@ -1455,10 +1442,7 @@ mod smells_tests {
             .iter()
             .filter(|s| s.smell_type == SmellType::LongMethod)
             .collect();
-        assert!(
-            !long_smells.is_empty(),
-            "Should detect Long Method in Rust"
-        );
+        assert!(!long_smells.is_empty(), "Should detect Long Method in Rust");
     }
 
     /// Java smell detection (God Class)
@@ -1480,10 +1464,7 @@ mod smells_tests {
             .iter()
             .filter(|s| s.smell_type == SmellType::GodClass)
             .collect();
-        assert!(
-            !god_smells.is_empty(),
-            "Should detect God Class in Java"
-        );
+        assert!(!god_smells.is_empty(), "Should detect God Class in Java");
     }
 
     /// C smell detection (long function)
@@ -1502,10 +1483,7 @@ mod smells_tests {
             .iter()
             .filter(|s| s.smell_type == SmellType::LongMethod)
             .collect();
-        assert!(
-            !long_smells.is_empty(),
-            "Should detect Long Method in C"
-        );
+        assert!(!long_smells.is_empty(), "Should detect Long Method in C");
     }
 
     /// Ruby smell detection (long function)
@@ -1524,10 +1502,7 @@ mod smells_tests {
             .iter()
             .filter(|s| s.smell_type == SmellType::LongMethod)
             .collect();
-        assert!(
-            !long_smells.is_empty(),
-            "Should detect Long Method in Ruby"
-        );
+        assert!(!long_smells.is_empty(), "Should detect Long Method in Ruby");
     }
 
     /// Clean code should have no smells
@@ -1607,13 +1582,8 @@ def deep(a, b, c, d, e):
         let content = "def many_params(a, b, c, d, e, f, g):\n    return a+b\n";
         let path = temp_file(&dir, "params.py", content);
 
-        let strict = detect_smells(
-            path.parent().unwrap(),
-            ThresholdPreset::Strict,
-            None,
-            false,
-        )
-        .unwrap();
+        let strict =
+            detect_smells(path.parent().unwrap(), ThresholdPreset::Strict, None, false).unwrap();
 
         let relaxed = detect_smells(
             path.parent().unwrap(),
@@ -1649,10 +1619,7 @@ def deep(a, b, c, d, e):
                 "Smell should have a line number > 0, got {}",
                 smell.line
             );
-            assert!(
-                !smell.name.is_empty(),
-                "Smell should have a non-empty name"
-            );
+            assert!(!smell.name.is_empty(), "Smell should have a non-empty name");
             assert!(
                 !smell.reason.is_empty(),
                 "Smell should have a non-empty reason"
@@ -1677,8 +1644,7 @@ mod clones_tests {
     ) -> tldr_core::quality::SimilarityReport {
         temp_file(dir, &format!("file_a.{}", ext), code_a);
         temp_file(dir, &format!("file_b.{}", ext), code_b);
-        find_similar(dir.path(), None, 0.5, None)
-            .expect("find_similar should succeed")
+        find_similar(dir.path(), None, 0.5, None).expect("find_similar should succeed")
     }
 
     /// Python: identical functions across files should be detected as clones
@@ -2110,10 +2076,8 @@ function calculate(x: number, y: number): number {
         temp_file(&dir, "calc.js", js);
         temp_file(&dir, "calc.ts", ts);
 
-        let js_report =
-            find_similar(dir.path(), Some(Language::JavaScript), 0.0, None).unwrap();
-        let ts_report =
-            find_similar(dir.path(), Some(Language::TypeScript), 0.0, None).unwrap();
+        let js_report = find_similar(dir.path(), Some(Language::JavaScript), 0.0, None).unwrap();
+        let ts_report = find_similar(dir.path(), Some(Language::TypeScript), 0.0, None).unwrap();
 
         assert!(
             js_report.functions_analyzed >= 1,
@@ -2152,14 +2116,8 @@ int abs_val(int x) {
         let go_report = find_similar(dir.path(), Some(Language::Go), 0.0, None).unwrap();
         let c_report = find_similar(dir.path(), Some(Language::C), 0.0, None).unwrap();
 
-        assert!(
-            go_report.functions_analyzed >= 1,
-            "Should find Go function"
-        );
-        assert!(
-            c_report.functions_analyzed >= 1,
-            "Should find C function"
-        );
+        assert!(go_report.functions_analyzed >= 1, "Should find Go function");
+        assert!(c_report.functions_analyzed >= 1, "Should find C function");
     }
 }
 
@@ -2211,10 +2169,7 @@ mod explain_tests {
         match output {
             Ok(out) => {
                 if !out.status.success() {
-                    eprintln!(
-                        "explain failed: {}",
-                        String::from_utf8_lossy(&out.stderr)
-                    );
+                    eprintln!("explain failed: {}", String::from_utf8_lossy(&out.stderr));
                     return None;
                 }
                 let stdout = String::from_utf8_lossy(&out.stdout);
@@ -2239,20 +2194,14 @@ mod explain_tests {
                 "Should report function_name"
             );
             // Should have file path
-            assert!(
-                json["file"].is_string(),
-                "Should have file field"
-            );
+            assert!(json["file"].is_string(), "Should have file field");
             // Should have signature
             assert!(
                 json["signature"].is_object(),
                 "Should have signature section"
             );
             // Should have purity
-            assert!(
-                json["purity"].is_object(),
-                "Should have purity section"
-            );
+            assert!(json["purity"].is_object(), "Should have purity section");
             // Complexity should be present
             assert!(
                 json.get("complexity").is_some(),
@@ -2271,10 +2220,7 @@ mod explain_tests {
     fn test_explain_javascript() {
         let path = fixture_path("test_javascript.js");
         if let Some(json) = run_explain(&path, "topLevel") {
-            assert_eq!(
-                json["function_name"].as_str().unwrap_or(""),
-                "topLevel"
-            );
+            assert_eq!(json["function_name"].as_str().unwrap_or(""), "topLevel");
             assert!(json["signature"].is_object());
             assert!(json["purity"].is_object());
         }
@@ -2285,10 +2231,7 @@ mod explain_tests {
     fn test_explain_go() {
         let path = fixture_path("test_go.go");
         if let Some(json) = run_explain(&path, "topLevel") {
-            assert_eq!(
-                json["function_name"].as_str().unwrap_or(""),
-                "topLevel"
-            );
+            assert_eq!(json["function_name"].as_str().unwrap_or(""), "topLevel");
             assert!(json["signature"].is_object());
             assert!(json["purity"].is_object());
         }
@@ -2299,10 +2242,7 @@ mod explain_tests {
     fn test_explain_rust() {
         let path = fixture_path("test_rust.rs");
         if let Some(json) = run_explain(&path, "public_func") {
-            assert_eq!(
-                json["function_name"].as_str().unwrap_or(""),
-                "public_func"
-            );
+            assert_eq!(json["function_name"].as_str().unwrap_or(""), "public_func");
             assert!(json["signature"].is_object());
         }
     }
@@ -2312,10 +2252,7 @@ mod explain_tests {
     fn test_explain_typescript() {
         let path = fixture_path("test_typescript.ts");
         if let Some(json) = run_explain(&path, "topLevel") {
-            assert_eq!(
-                json["function_name"].as_str().unwrap_or(""),
-                "topLevel"
-            );
+            assert_eq!(json["function_name"].as_str().unwrap_or(""), "topLevel");
         }
     }
 
@@ -2324,10 +2261,7 @@ mod explain_tests {
     fn test_explain_java() {
         let path = fixture_path("test_java.java");
         if let Some(json) = run_explain(&path, "speak") {
-            assert_eq!(
-                json["function_name"].as_str().unwrap_or(""),
-                "speak"
-            );
+            assert_eq!(json["function_name"].as_str().unwrap_or(""), "speak");
         }
     }
 
@@ -2348,10 +2282,7 @@ mod explain_tests {
     fn test_explain_c() {
         let path = fixture_path("test_c.c");
         if let Some(json) = run_explain(&path, "add") {
-            assert_eq!(
-                json["function_name"].as_str().unwrap_or(""),
-                "add"
-            );
+            assert_eq!(json["function_name"].as_str().unwrap_or(""), "add");
         }
     }
 
@@ -2409,10 +2340,7 @@ def impure_io():
             }
             // Should report effects
             if let Some(effects) = purity["effects"].as_array() {
-                assert!(
-                    !effects.is_empty(),
-                    "Impure function should list effects"
-                );
+                assert!(!effects.is_empty(), "Impure function should list effects");
             }
         }
     }
@@ -2436,11 +2364,7 @@ def branchy(x, y, z):
             if let Some(complexity) = json.get("complexity") {
                 // Should have cyclomatic
                 if let Some(cc) = complexity["cyclomatic"].as_u64() {
-                    assert!(
-                        cc >= 3,
-                        "Branchy function should have CC >= 3, got {}",
-                        cc
-                    );
+                    assert!(cc >= 3, "Branchy function should have CC >= 3, got {}", cc);
                 }
             }
         }

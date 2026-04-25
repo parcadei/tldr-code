@@ -12,14 +12,14 @@
 
 // Import existing types from tldr_core
 use tldr_core::quality::hotspots::{
-    HotspotEntry, HotspotsMetadata, HotspotsOptions, HotspotsReport, HotspotsSummary,
-    TrendDirection, calculate_trend, normalize_value,
+    calculate_trend, normalize_value, HotspotEntry, HotspotsMetadata, HotspotsOptions,
+    HotspotsReport, HotspotsSummary, TrendDirection,
 };
 
 // Import NEW types and functions from the real implementation
 use tldr_core::quality::hotspots::{
-    ScoringWeights, percentile_ranks, recency_weight, relative_churn, is_bot_author,
-    knowledge_fragmentation, composite_score_weighted, has_variance,
+    composite_score_weighted, has_variance, is_bot_author, knowledge_fragmentation,
+    percentile_ranks, recency_weight, relative_churn, ScoringWeights,
 };
 
 // ============================================================================
@@ -34,9 +34,14 @@ fn composite_score(
     pct_temporal_coupling: f64,
 ) -> f64 {
     let weights = ScoringWeights::default();
-    composite_score_weighted(pct_churn, pct_complexity, pct_fragmentation, pct_temporal_coupling, &weights)
+    composite_score_weighted(
+        pct_churn,
+        pct_complexity,
+        pct_fragmentation,
+        pct_temporal_coupling,
+        &weights,
+    )
 }
-
 
 // ============================================================================
 // GROUP 1: Percentile Rank Normalization
@@ -55,12 +60,7 @@ fn test_percentile_rank_basic() {
     assert_eq!(result.len(), 5);
     let expected = vec![0.0, 0.25, 0.5, 0.75, 1.0];
     for (got, exp) in result.iter().zip(expected.iter()) {
-        assert!(
-            (got - exp).abs() < 0.001,
-            "expected {}, got {}",
-            exp,
-            got
-        );
+        assert!((got - exp).abs() < 0.001, "expected {}, got {}", exp, got);
     }
 }
 
@@ -77,12 +77,7 @@ fn test_percentile_rank_ties() {
     assert_eq!(result.len(), 4);
     let expected = vec![0.5 / 3.0, 0.5 / 3.0, 2.0 / 3.0, 1.0];
     for (got, exp) in result.iter().zip(expected.iter()) {
-        assert!(
-            (got - exp).abs() < 0.001,
-            "expected {}, got {}",
-            exp,
-            got
-        );
+        assert!((got - exp).abs() < 0.001, "expected {}, got {}", exp, got);
     }
 }
 
@@ -196,7 +191,6 @@ fn test_percentile_rank_preserves_order() {
     }
 }
 
-
 // ============================================================================
 // GROUP 2: Relative Churn
 // Uses MIN_LOC_FLOOR=10 as denominator floor (RISK-C6 mitigation)
@@ -219,7 +213,11 @@ fn test_relative_churn_zero_loc() {
     // File with 0 LOC (empty file) should not cause division by zero.
     // With MIN_LOC_FLOOR=10: lines_changed / max(0, 10) = 50 / 10 = 5.0
     let result = relative_churn(50, 0);
-    assert!((result - 5.0).abs() < 0.001, "0 LOC: expected 5.0, got {}", result);
+    assert!(
+        (result - 5.0).abs() < 0.001,
+        "0 LOC: expected 5.0, got {}",
+        result
+    );
 
     // 0 changes, 0 LOC -> 0.0
     let result2 = relative_churn(0, 0);
@@ -232,10 +230,16 @@ fn test_relative_churn_more_changed_than_total() {
     // Spec says relative_churn can be > 1.0 (unbounded above).
     // 5000 / max(100, 10) = 5000 / 100 = 50.0
     let result = relative_churn(5000, 100);
-    assert!((result - 50.0).abs() < 0.001, "Expected 50.0, got {}", result);
-    assert!(result > 1.0, "Relative churn should be > 1.0 when lines_changed > loc");
+    assert!(
+        (result - 50.0).abs() < 0.001,
+        "Expected 50.0, got {}",
+        result
+    );
+    assert!(
+        result > 1.0,
+        "Relative churn should be > 1.0 when lines_changed > loc"
+    );
 }
-
 
 // ============================================================================
 // GROUP 3: Recency Weighting
@@ -245,7 +249,11 @@ fn test_relative_churn_more_changed_than_total() {
 fn test_recency_weight_today() {
     // age = 0 days -> weight = e^0 = 1.0
     let w = recency_weight(0.0, 90.0);
-    assert!((w - 1.0).abs() < 0.001, "age=0 should give weight=1.0, got {}", w);
+    assert!(
+        (w - 1.0).abs() < 0.001,
+        "age=0 should give weight=1.0, got {}",
+        w
+    );
 }
 
 #[test]
@@ -274,7 +282,11 @@ fn test_recency_weight_double_halflife() {
 fn test_recency_weight_old() {
     // age = 365 days with halflife=90 -> weight = e^(-ln(2)*365/90) ~ 0.062
     let w = recency_weight(365.0, 90.0);
-    assert!(w < 0.10, "1-year-old commit should have very low weight, got {}", w);
+    assert!(
+        w < 0.10,
+        "1-year-old commit should have very low weight, got {}",
+        w
+    );
     assert!(w > 0.0, "Weight should never be exactly 0");
     // More precisely: e^(-0.6931*4.056) = e^(-2.812) ~ 0.060
     assert!(
@@ -288,7 +300,11 @@ fn test_recency_weight_old() {
 fn test_recency_weight_zero_halflife() {
     // halflife = 0 means no decay -> all weights = 1.0 (legacy behavior)
     let w = recency_weight(365.0, 0.0);
-    assert!((w - 1.0).abs() < 0.001, "halflife=0 should give weight=1.0, got {}", w);
+    assert!(
+        (w - 1.0).abs() < 0.001,
+        "halflife=0 should give weight=1.0, got {}",
+        w
+    );
 
     let w2 = recency_weight(0.0, 0.0);
     assert!((w2 - 1.0).abs() < 0.001);
@@ -298,7 +314,11 @@ fn test_recency_weight_zero_halflife() {
 fn test_recency_weight_custom_halflife() {
     // halflife = 30 days (aggressive decay)
     let w30 = recency_weight(30.0, 30.0);
-    assert!((w30 - 0.5).abs() < 0.01, "halflife=30, age=30 -> ~0.5, got {}", w30);
+    assert!(
+        (w30 - 0.5).abs() < 0.01,
+        "halflife=30, age=30 -> ~0.5, got {}",
+        w30
+    );
 
     // halflife = 180 days (gentle decay)
     let w180 = recency_weight(90.0, 180.0);
@@ -310,24 +330,32 @@ fn test_recency_weight_custom_halflife() {
     );
 }
 
-
 // ============================================================================
 // GROUP 4: Bot Filtering
 // ============================================================================
 
 #[test]
 fn test_bot_filter_dependabot() {
-    assert!(is_bot_author("dependabot[bot]", "dependabot[bot]@users.noreply.github.com"));
+    assert!(is_bot_author(
+        "dependabot[bot]",
+        "dependabot[bot]@users.noreply.github.com"
+    ));
 }
 
 #[test]
 fn test_bot_filter_renovate() {
-    assert!(is_bot_author("renovate[bot]", "renovate[bot]@users.noreply.github.com"));
+    assert!(is_bot_author(
+        "renovate[bot]",
+        "renovate[bot]@users.noreply.github.com"
+    ));
 }
 
 #[test]
 fn test_bot_filter_github_actions() {
-    assert!(is_bot_author("github-actions[bot]", "github-actions[bot]@users.noreply.github.com"));
+    assert!(is_bot_author(
+        "github-actions[bot]",
+        "github-actions[bot]@users.noreply.github.com"
+    ));
 }
 
 #[test]
@@ -359,7 +387,10 @@ fn test_bot_filter_case_insensitive() {
 #[test]
 fn test_bot_filter_email_match() {
     // Should match on email even if name looks human
-    assert!(is_bot_author("Dependency Updater", "dependabot@users.noreply.github.com"));
+    assert!(is_bot_author(
+        "Dependency Updater",
+        "dependabot@users.noreply.github.com"
+    ));
 }
 
 #[test]
@@ -370,7 +401,6 @@ fn test_bot_filter_partial_no_false_positive() {
     assert!(!is_bot_author("robotics-engineer", "robotics@company.com"));
     assert!(!is_bot_author("abbott", "abbott@company.com"));
 }
-
 
 // ============================================================================
 // GROUP 5: Knowledge Fragmentation
@@ -424,11 +454,7 @@ fn test_knowledge_frag_dominant_author() {
         "Dominant author (90%) -> low fragmentation, got {}",
         frag
     );
-    assert!(
-        (frag - 0.1).abs() < 0.05,
-        "Expected ~0.1, got {}",
-        frag
-    );
+    assert!((frag - 0.1).abs() < 0.05, "Expected ~0.1, got {}", frag);
 }
 
 #[test]
@@ -517,7 +543,6 @@ fn test_knowledge_frag_capped_at_one() {
     );
 }
 
-
 // ============================================================================
 // GROUP 6: Composite Score
 // ============================================================================
@@ -525,7 +550,10 @@ fn test_knowledge_frag_capped_at_one() {
 #[test]
 fn test_composite_score_weights_sum_to_one() {
     let weights = ScoringWeights::default();
-    let sum = weights.churn + weights.complexity + weights.knowledge_fragmentation + weights.temporal_coupling;
+    let sum = weights.churn
+        + weights.complexity
+        + weights.knowledge_fragmentation
+        + weights.temporal_coupling;
     assert!(
         (sum - 1.0).abs() < 0.001,
         "Weights should sum to 1.0, got {}",
@@ -618,7 +646,6 @@ fn test_composite_no_temporal() {
     assert!(score <= 0.85 + 0.001);
 }
 
-
 // ============================================================================
 // GROUP 7: Text Formatter (output quality)
 //
@@ -629,13 +656,11 @@ fn test_composite_no_temporal() {
 
 /// Box-drawing Unicode characters that should NOT appear in plain-text output.
 const BOX_DRAWING_CHARS: &[char] = &[
-    '\u{2550}', '\u{2551}', '\u{2552}', '\u{2553}', '\u{2554}', '\u{2555}',
-    '\u{2556}', '\u{2557}', '\u{2558}', '\u{2559}', '\u{255A}', '\u{255B}',
-    '\u{255C}', '\u{255D}', '\u{255E}', '\u{255F}', '\u{2560}', '\u{2561}',
-    '\u{2562}', '\u{2563}', '\u{2564}', '\u{2565}', '\u{2566}', '\u{2567}',
-    '\u{2568}', '\u{2569}', '\u{256A}', '\u{256B}', '\u{256C}', '\u{2500}',
-    '\u{2502}', '\u{250C}', '\u{2510}', '\u{2514}', '\u{2518}', '\u{251C}',
-    '\u{2524}', '\u{252C}', '\u{2534}', '\u{253C}',
+    '\u{2550}', '\u{2551}', '\u{2552}', '\u{2553}', '\u{2554}', '\u{2555}', '\u{2556}', '\u{2557}',
+    '\u{2558}', '\u{2559}', '\u{255A}', '\u{255B}', '\u{255C}', '\u{255D}', '\u{255E}', '\u{255F}',
+    '\u{2560}', '\u{2561}', '\u{2562}', '\u{2563}', '\u{2564}', '\u{2565}', '\u{2566}', '\u{2567}',
+    '\u{2568}', '\u{2569}', '\u{256A}', '\u{256B}', '\u{256C}', '\u{2500}', '\u{2502}', '\u{250C}',
+    '\u{2510}', '\u{2514}', '\u{2518}', '\u{251C}', '\u{2524}', '\u{252C}', '\u{2534}', '\u{253C}',
 ];
 
 /// Helper: Format a minimal HotspotsReport as plain text.
@@ -678,7 +703,8 @@ fn make_test_report() -> HotspotsReport {
                 lines_changed: 500,
                 complexity: 25,
                 trend: None,
-                recommendation: "Critical: High churn + high complexity. Prioritize refactoring.".to_string(),
+                recommendation: "Critical: High churn + high complexity. Prioritize refactoring."
+                    .to_string(),
                 relative_churn: Some(0.5),
                 knowledge_fragmentation: Some(0.3),
                 current_loc: Some(1000),
@@ -750,9 +776,18 @@ fn test_text_format_has_table() {
     let output = format_hotspots_text_stub(&report);
 
     // Should contain column headers
-    assert!(output.contains("Score"), "Output should contain 'Score' header");
-    assert!(output.contains("Churn"), "Output should contain 'Churn' header");
-    assert!(output.contains("File"), "Output should contain 'File' header");
+    assert!(
+        output.contains("Score"),
+        "Output should contain 'Score' header"
+    );
+    assert!(
+        output.contains("Churn"),
+        "Output should contain 'Churn' header"
+    );
+    assert!(
+        output.contains("File"),
+        "Output should contain 'File' header"
+    );
 
     // Should contain file paths from the report
     assert!(output.contains("src/main.rs"));
@@ -760,9 +795,11 @@ fn test_text_format_has_table() {
 
     // Should have multiple lines
     let lines: Vec<&str> = output.lines().collect();
-    assert!(lines.len() >= 3, "Should have header + at least 2 data rows");
+    assert!(
+        lines.len() >= 3,
+        "Should have header + at least 2 data rows"
+    );
 }
-
 
 // ============================================================================
 // GROUP 8: Backwards Compatibility (struct fields)
@@ -801,11 +838,26 @@ fn test_hotspot_entry_has_new_fields() {
     assert_eq!(entry.algorithm_version, 2);
 
     let json = serde_json::to_value(&entry).unwrap();
-    assert!(json.get("relative_churn").is_some(), "HotspotEntry should have relative_churn field");
-    assert!(json.get("knowledge_fragmentation").is_some(), "HotspotEntry should have knowledge_fragmentation field");
-    assert!(json.get("current_loc").is_some(), "HotspotEntry should have current_loc field");
-    assert!(json.get("author_count").is_some(), "HotspotEntry should have author_count field");
-    assert!(json.get("algorithm_version").is_some(), "HotspotEntry should have algorithm_version field");
+    assert!(
+        json.get("relative_churn").is_some(),
+        "HotspotEntry should have relative_churn field"
+    );
+    assert!(
+        json.get("knowledge_fragmentation").is_some(),
+        "HotspotEntry should have knowledge_fragmentation field"
+    );
+    assert!(
+        json.get("current_loc").is_some(),
+        "HotspotEntry should have current_loc field"
+    );
+    assert!(
+        json.get("author_count").is_some(),
+        "HotspotEntry should have author_count field"
+    );
+    assert!(
+        json.get("algorithm_version").is_some(),
+        "HotspotEntry should have algorithm_version field"
+    );
 }
 
 #[test]
@@ -893,7 +945,6 @@ fn test_summary_has_new_fields() {
     assert!(json.get("avg_knowledge_fragmentation").is_some());
 }
 
-
 // ============================================================================
 // GROUP 9: Scoring Semantics (behavior contracts for the upgraded algorithm)
 // ============================================================================
@@ -924,7 +975,7 @@ fn test_percentile_beats_minmax_for_outliers() {
 
 #[test]
 fn test_relative_churn_discriminates_file_size() {
-    let churn_a = relative_churn(100, 100);   // small file
+    let churn_a = relative_churn(100, 100); // small file
     let churn_b = relative_churn(100, 10000); // large file
 
     assert!(
@@ -949,7 +1000,6 @@ fn test_recency_favors_recent_changes() {
     assert!(weight_a > 0.9);
     assert!(weight_b < 0.15);
 }
-
 
 // ============================================================================
 // GROUP 10: Edge Cases from Spec
@@ -980,7 +1030,10 @@ fn test_all_files_same_churn_percentile() {
 #[test]
 fn test_empty_file_relative_churn() {
     let churn = relative_churn(10, 0);
-    assert!(churn.is_finite(), "Relative churn for empty file should be finite");
+    assert!(
+        churn.is_finite(),
+        "Relative churn for empty file should be finite"
+    );
     assert!(churn >= 0.0, "Relative churn should be non-negative");
 }
 
@@ -1036,7 +1089,6 @@ fn test_existing_options_builder_still_works() {
     assert_eq!(opts.since, Some("2025-01-01".to_string()));
 }
 
-
 // ============================================================================
 // GROUP 11: ScoringWeights advanced behavior
 // ============================================================================
@@ -1050,7 +1102,10 @@ fn test_scoring_weights_renormalize() {
         temporal_coupling: 0.0,
     };
     let renormed = weights.renormalize();
-    let sum = renormed.churn + renormed.complexity + renormed.knowledge_fragmentation + renormed.temporal_coupling;
+    let sum = renormed.churn
+        + renormed.complexity
+        + renormed.knowledge_fragmentation
+        + renormed.temporal_coupling;
     assert!(
         (sum - 1.0).abs() < 0.001,
         "Renormalized weights should sum to 1.0, got {}",
@@ -1068,7 +1123,10 @@ fn test_scoring_weights_default_phase1() {
         "Phase 1 weights should sum to 1.0, got {}",
         sum
     );
-    assert!((w.temporal_coupling - 0.0).abs() < 0.001, "Phase 1 should have 0 temporal");
+    assert!(
+        (w.temporal_coupling - 0.0).abs() < 0.001,
+        "Phase 1 should have 0 temporal"
+    );
     assert!((w.churn - 0.4118).abs() < 0.001);
     assert!((w.complexity - 0.4118).abs() < 0.001);
     assert!((w.knowledge_fragmentation - 0.1765).abs() < 0.001);

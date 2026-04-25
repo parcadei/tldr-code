@@ -64,9 +64,24 @@ const CELL_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// All 18 supported languages.
 const LANGUAGES: &[&str] = &[
-    "python", "typescript", "javascript", "go", "rust", "java", "c", "cpp",
-    "ruby", "kotlin", "swift", "csharp", "scala", "php", "lua", "luau",
-    "elixir", "ocaml",
+    "python",
+    "typescript",
+    "javascript",
+    "go",
+    "rust",
+    "java",
+    "c",
+    "cpp",
+    "ruby",
+    "kotlin",
+    "swift",
+    "csharp",
+    "scala",
+    "php",
+    "lua",
+    "luau",
+    "elixir",
+    "ocaml",
 ];
 
 // ============================================================================
@@ -118,7 +133,12 @@ fn run_tldr_timed(args: &[&str], timeout: Duration) -> CellResult {
             if is_panic(exit, &stderr) {
                 CellResult::Panic { exit, stderr }
             } else {
-                CellResult::Ok { exit, stdout, stderr, duration }
+                CellResult::Ok {
+                    exit,
+                    stdout,
+                    stderr,
+                    duration,
+                }
             }
         }
         Ok(Err(e)) => {
@@ -189,9 +209,7 @@ fn ok_exit(exit: i32) -> bool {
 /// Extract first JSON value from stdout (strips any leading non-JSON
 /// progress lines emitted by certain commands).
 fn parse_json(stdout: &str) -> Value {
-    let json_start = stdout
-        .find(['{', '['])
-        .unwrap_or(stdout.len());
+    let json_start = stdout.find(['{', '[']).unwrap_or(stdout.len());
     serde_json::from_str::<Value>(&stdout[json_start..]).unwrap_or(Value::Null)
 }
 
@@ -202,11 +220,7 @@ fn parse_json(stdout: &str) -> Value {
 /// Common cell verification. Asserts: not Hang, not Panic, exit code in
 /// {0,1,2,3}. Returns the parsed JSON for further per-command checks (or
 /// `Value::Null` if the output is non-JSON).
-fn check_baseline(
-    cmd: &str,
-    lang: &str,
-    args: &[&str],
-) -> (Value, String, String, i32) {
+fn check_baseline(cmd: &str, lang: &str, args: &[&str]) -> (Value, String, String, i32) {
     let result = run_tldr_timed(args, CELL_TIMEOUT);
     match result {
         CellResult::Hang => panic!(
@@ -377,10 +391,8 @@ fn entry_function(lang: &str) -> &'static str {
 fn check_hubs(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
-    let (json, stdout, stderr) = check_success(
-        "hubs", lang,
-        &["hubs", path, "--format", "json", "--quiet"],
-    );
+    let (json, stdout, stderr) =
+        check_success("hubs", lang, &["hubs", path, "--format", "json", "--quiet"]);
     // Sanity: response is an object with `hubs` array. The fixture is
     // tiny, so empty `hubs` is acceptable, but the `hubs` field itself
     // must be present (not Null).
@@ -396,7 +408,8 @@ fn check_whatbreaks(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "whatbreaks", lang,
+        "whatbreaks",
+        lang,
         &["whatbreaks", "helper", path, "--format", "json", "--quiet"],
     );
     // Object output with at least the `target` echoed back.
@@ -426,7 +439,8 @@ fn check_importers(lang: &str) {
         _ => "util",
     };
     let (json, stdout, stderr) = check_success(
-        "importers", lang,
+        "importers",
+        lang,
         &["importers", module, path, "--format", "json", "--quiet"],
     );
     if !json.is_object() || json.get("module").is_none() {
@@ -441,7 +455,8 @@ fn check_secure(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "secure", lang,
+        "secure",
+        lang,
         &["secure", path, "--format", "json", "--quiet"],
     );
     if !json.is_object() || json.get("findings").is_none() {
@@ -456,7 +471,8 @@ fn check_api_check(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "api-check", lang,
+        "api-check",
+        lang,
         &["api-check", path, "--format", "json", "--quiet"],
     );
     if !json.is_object() || json.get("findings").is_none() {
@@ -475,29 +491,23 @@ fn check_vuln(lang: &str) {
     // languages, exit 2 with a clear stderr error is the documented
     // path — that is NOT a silent fail. We still verify no panic / no
     // hang and that something was emitted.
-    let (json, _stdout, stderr, exit) = check_baseline(
-        "vuln", lang,
-        &["vuln", path, "--format", "json", "--quiet"],
-    );
+    let (json, _stdout, stderr, exit) =
+        check_baseline("vuln", lang, &["vuln", path, "--format", "json", "--quiet"]);
     if exit == 0 && (!json.is_object() || json.get("findings").is_none()) {
         panic!(
             "[vuln × {lang}] SILENT_FAIL — exit=0 but missing `findings` field\n--- stderr ---\n{stderr}"
         );
     }
     if exit != 0 && stderr.trim().is_empty() {
-        panic!(
-            "[vuln × {lang}] SILENT_FAIL — exit={exit} but stderr empty"
-        );
+        panic!("[vuln × {lang}] SILENT_FAIL — exit={exit} but stderr empty");
     }
 }
 
 fn check_deps(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
-    let (json, stdout, stderr) = check_success(
-        "deps", lang,
-        &["deps", path, "--format", "json", "--quiet"],
-    );
+    let (json, stdout, stderr) =
+        check_success("deps", lang, &["deps", path, "--format", "json", "--quiet"]);
     if !json.is_object() {
         panic!(
             "[deps × {lang}] SILENT_FAIL — non-object output\n--- stdout ---\n{}\n--- stderr ---\n{stderr}",
@@ -518,8 +528,17 @@ fn check_change_impact(lang: &str) {
         .to_string_lossy()
         .into_owned();
     let (json, stdout, stderr, _exit) = check_baseline(
-        "change-impact", lang,
-        &["change-impact", path, "--files", &entry_name, "--format", "json", "--quiet"],
+        "change-impact",
+        lang,
+        &[
+            "change-impact",
+            path,
+            "--files",
+            &entry_name,
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     // change-impact may return exit 3 on insufficient git context — we
     // only require non-panic / non-hang. JSON should still parse.
@@ -534,10 +553,8 @@ fn check_change_impact(lang: &str) {
 fn check_debt(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
-    let (json, stdout, stderr) = check_success(
-        "debt", lang,
-        &["debt", path, "--format", "json", "--quiet"],
-    );
+    let (json, stdout, stderr) =
+        check_success("debt", lang, &["debt", path, "--format", "json", "--quiet"]);
     if !json.is_object() {
         panic!(
             "[debt × {lang}] SILENT_FAIL — non-object output\n--- stdout ---\n{}\n--- stderr ---\n{stderr}",
@@ -550,7 +567,8 @@ fn check_health(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "health", lang,
+        "health",
+        lang,
         &["health", path, "--format", "json", "--quiet"],
     );
     if !json.is_object() || json.get("summary").is_none() {
@@ -565,7 +583,8 @@ fn check_clones(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "clones", lang,
+        "clones",
+        lang,
         &["clones", path, "--format", "json", "--quiet"],
     );
     if !json.is_object() || json.get("stats").is_none() {
@@ -579,10 +598,8 @@ fn check_clones(lang: &str) {
 fn check_todo(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
-    let (json, stdout, stderr) = check_success(
-        "todo", lang,
-        &["todo", path, "--format", "json", "--quiet"],
-    );
+    let (json, stdout, stderr) =
+        check_success("todo", lang, &["todo", path, "--format", "json", "--quiet"]);
     if !json.is_object() {
         panic!(
             "[todo × {lang}] SILENT_FAIL — non-object output\n--- stdout ---\n{}\n--- stderr ---\n{stderr}",
@@ -596,8 +613,17 @@ fn check_invariants(lang: &str) {
     let entry = entry_file(lang, tmp.path());
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "invariants", lang,
-        &["invariants", entry.to_str().unwrap(), "--from-tests", path, "--format", "json", "--quiet"],
+        "invariants",
+        lang,
+        &[
+            "invariants",
+            entry.to_str().unwrap(),
+            "--from-tests",
+            path,
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     if !json.is_object() {
         panic!(
@@ -611,7 +637,8 @@ fn check_verify(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "verify", lang,
+        "verify",
+        lang,
         &["verify", path, "--format", "json", "--quiet"],
     );
     if !json.is_object() || json.get("sub_results").is_none() {
@@ -626,7 +653,8 @@ fn check_interface(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "interface", lang,
+        "interface",
+        lang,
         &["interface", path, "--format", "json", "--quiet"],
     );
     // interface returns either an array of files or an object summary.
@@ -642,7 +670,8 @@ fn check_search(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "search", lang,
+        "search",
+        lang,
         &["search", "helper", path, "--format", "json", "--quiet"],
     );
     if !json.is_object() || json.get("results").is_none() {
@@ -673,8 +702,17 @@ fn check_context(lang: &str) {
     let path = tmp.path().to_str().unwrap();
     let func = entry_function(lang);
     let (json, stdout, stderr) = check_success(
-        "context", lang,
-        &["context", func, "--project", path, "--format", "json", "--quiet"],
+        "context",
+        lang,
+        &[
+            "context",
+            func,
+            "--project",
+            path,
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     if !json.is_object() || json.get("entry_point").is_none() {
         panic!(
@@ -718,7 +756,8 @@ fn check_temporal(lang: &str) {
     // canonical fixture has 2 calls but no recurring patterns so
     // `metadata.files_analyzed` should still be >= 1.
     let (json, stdout, stderr, _exit) = check_baseline(
-        "temporal", lang,
+        "temporal",
+        lang,
         &["temporal", path, "--format", "json", "--quiet"],
     );
     let files = json
@@ -746,7 +785,8 @@ fn check_diagnostics(lang: &str) {
     // The 60/61 paths emit a clear stderr error (no JSON). For other
     // paths we require an object output. Either path is legitimate.
     let (json, stdout, stderr, exit) = check_baseline(
-        "diagnostics", lang,
+        "diagnostics",
+        lang,
         &["diagnostics", path, "--format", "json", "--quiet"],
     );
     if exit == 60 || exit == 61 {
@@ -767,7 +807,8 @@ fn check_inheritance(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "inheritance", lang,
+        "inheritance",
+        lang,
         &["inheritance", path, "--format", "json", "--quiet"],
     );
     if !json.is_object() || json.get("nodes").is_none() {
@@ -803,7 +844,8 @@ fn check_churn(lang: &str) {
     let tmp = make_git_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "churn", lang,
+        "churn",
+        lang,
         &["churn", path, "--format", "json", "--quiet"],
     );
     // ChurnReport (crates/tldr-core/src/quality/churn.rs:200) serializes
@@ -828,7 +870,8 @@ fn check_hotspots(lang: &str) {
     let tmp = make_git_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "hotspots", lang,
+        "hotspots",
+        lang,
         &["hotspots", path, "--format", "json", "--quiet"],
     );
     // HotspotsReport (crates/tldr-core/src/quality/hotspots.rs:327)
@@ -859,10 +902,20 @@ fn check_definition(lang: &str) {
     let entry = entry_file(lang, tmp.path());
     // Use --symbol mode (more robust across languages than line/col).
     let (json, stdout, stderr) = check_success(
-        "definition", lang,
-        &["definition", "--symbol", "helper", "--file", entry.to_str().unwrap(),
-          "--project", tmp.path().to_str().unwrap(),
-          "--format", "json", "--quiet"],
+        "definition",
+        lang,
+        &[
+            "definition",
+            "--symbol",
+            "helper",
+            "--file",
+            entry.to_str().unwrap(),
+            "--project",
+            tmp.path().to_str().unwrap(),
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     if !json.is_object() || json.get("symbol").is_none() {
         panic!(
@@ -876,7 +929,8 @@ fn check_cohesion(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "cohesion", lang,
+        "cohesion",
+        lang,
         &["cohesion", path, "--format", "json", "--quiet"],
     );
     if !json.is_object() || (json.get("classes").is_none() && json.get("summary").is_none()) {
@@ -899,15 +953,24 @@ fn check_slice(lang: &str) {
     // inside main. We just verify exit/parse — empty `lines` is fine on
     // tiny fixtures.
     let line = match lang {
-        "ocaml" => "5",     // main () = ... let _ = helper () in ...
-        "elixir" => "5",    // def main do; helper(); ...; end
-        "php" => "8",       // function main { helper(); b_util(); }
-        _ => "7",            // most: helper() call line
+        "ocaml" => "5",  // main () = ... let _ = helper () in ...
+        "elixir" => "5", // def main do; helper(); ...; end
+        "php" => "8",    // function main { helper(); b_util(); }
+        _ => "7",        // most: helper() call line
     };
     let func = entry_function(lang);
     let (json, stdout, stderr, _exit) = check_baseline(
-        "slice", lang,
-        &["slice", entry.to_str().unwrap(), func, line, "--format", "json", "--quiet"],
+        "slice",
+        lang,
+        &[
+            "slice",
+            entry.to_str().unwrap(),
+            func,
+            line,
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     if !json.is_object() || json.get("function").is_none() {
         panic!(
@@ -928,8 +991,18 @@ fn check_chop(lang: &str) {
     };
     let func = entry_function(lang);
     let (json, stdout, stderr, _exit) = check_baseline(
-        "chop", lang,
-        &["chop", entry.to_str().unwrap(), func, src, tgt, "--format", "json", "--quiet"],
+        "chop",
+        lang,
+        &[
+            "chop",
+            entry.to_str().unwrap(),
+            func,
+            src,
+            tgt,
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     // chop may report "outside function" with empty result — accept
     // structured empty as long as `function` key is present.
@@ -946,8 +1019,16 @@ fn check_reaching_defs(lang: &str) {
     let entry = entry_file(lang, tmp.path());
     let func = entry_function(lang);
     let (json, stdout, stderr, _exit) = check_baseline(
-        "reaching-defs", lang,
-        &["reaching-defs", entry.to_str().unwrap(), func, "--format", "json", "--quiet"],
+        "reaching-defs",
+        lang,
+        &[
+            "reaching-defs",
+            entry.to_str().unwrap(),
+            func,
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     if !json.is_object() || json.get("function").is_none() {
         panic!(
@@ -962,8 +1043,16 @@ fn check_available(lang: &str) {
     let entry = entry_file(lang, tmp.path());
     let func = entry_function(lang);
     let (json, stdout, stderr, _exit) = check_baseline(
-        "available", lang,
-        &["available", entry.to_str().unwrap(), func, "--format", "json", "--quiet"],
+        "available",
+        lang,
+        &[
+            "available",
+            entry.to_str().unwrap(),
+            func,
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     // Output is an object. Just verify a non-Null parse + object shape.
     if !json.is_object() {
@@ -979,8 +1068,16 @@ fn check_dead_stores(lang: &str) {
     let entry = entry_file(lang, tmp.path());
     let func = entry_function(lang);
     let (json, stdout, stderr, _exit) = check_baseline(
-        "dead-stores", lang,
-        &["dead-stores", entry.to_str().unwrap(), func, "--format", "json", "--quiet"],
+        "dead-stores",
+        lang,
+        &[
+            "dead-stores",
+            entry.to_str().unwrap(),
+            func,
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     if !json.is_object() || json.get("function").is_none() {
         panic!(
@@ -994,8 +1091,15 @@ fn check_resources(lang: &str) {
     let tmp = make_fixture(lang);
     let entry = entry_file(lang, tmp.path());
     let (json, stdout, stderr) = check_success(
-        "resources", lang,
-        &["resources", entry.to_str().unwrap(), "--format", "json", "--quiet"],
+        "resources",
+        lang,
+        &[
+            "resources",
+            entry.to_str().unwrap(),
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     if !json.is_object() || json.get("file").is_none() {
         panic!(
@@ -1010,8 +1114,16 @@ fn check_explain(lang: &str) {
     let entry = entry_file(lang, tmp.path());
     let func = entry_function(lang);
     let (json, stdout, stderr, _exit) = check_baseline(
-        "explain", lang,
-        &["explain", entry.to_str().unwrap(), func, "--format", "json", "--quiet"],
+        "explain",
+        lang,
+        &[
+            "explain",
+            entry.to_str().unwrap(),
+            func,
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     if !json.is_object() || json.get("function_name").is_none() {
         panic!(
@@ -1026,8 +1138,16 @@ fn check_contracts(lang: &str) {
     let entry = entry_file(lang, tmp.path());
     let func = entry_function(lang);
     let (json, stdout, stderr, _exit) = check_baseline(
-        "contracts", lang,
-        &["contracts", entry.to_str().unwrap(), func, "--format", "json", "--quiet"],
+        "contracts",
+        lang,
+        &[
+            "contracts",
+            entry.to_str().unwrap(),
+            func,
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     if !json.is_object() || json.get("function").is_none() {
         panic!(
@@ -1042,8 +1162,16 @@ fn check_taint(lang: &str) {
     let entry = entry_file(lang, tmp.path());
     let func = entry_function(lang);
     let (json, stdout, stderr, _exit) = check_baseline(
-        "taint", lang,
-        &["taint", entry.to_str().unwrap(), func, "--format", "json", "--quiet"],
+        "taint",
+        lang,
+        &[
+            "taint",
+            entry.to_str().unwrap(),
+            func,
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     if !json.is_object() || json.get("function_name").is_none() {
         panic!(
@@ -1066,9 +1194,16 @@ fn check_diff(lang: &str) {
     // EMPTY `changes` array. VAL-018 tightening: previously this only
     // checked the field was present.
     let (json_id, stdout_id, stderr_id) = check_success(
-        "diff", lang,
-        &["diff", a.to_str().unwrap(), a.to_str().unwrap(),
-          "--format", "json", "--quiet"],
+        "diff",
+        lang,
+        &[
+            "diff",
+            a.to_str().unwrap(),
+            a.to_str().unwrap(),
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     let identical_flag = json_id
         .get("identical")
@@ -1090,9 +1225,16 @@ fn check_diff(lang: &str) {
     // identical=false with at least one change record (helper/main/b_util
     // are different functions across the two files).
     let (json_diff, stdout_diff, stderr_diff) = check_success(
-        "diff", lang,
-        &["diff", a.to_str().unwrap(), b.to_str().unwrap(),
-          "--format", "json", "--quiet"],
+        "diff",
+        lang,
+        &[
+            "diff",
+            a.to_str().unwrap(),
+            b.to_str().unwrap(),
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     let diff_identical = json_diff
         .get("identical")
@@ -1121,7 +1263,8 @@ fn check_dice(lang: &str) {
     // dice CLI emits a "Comparing similarity..." progress line before
     // the JSON; check_success / parse_json strip the leading non-JSON.
     let (json_id, stdout_id, stderr_id) = check_success(
-        "dice", lang,
+        "dice",
+        lang,
         &["dice", a.to_str().unwrap(), a.to_str().unwrap()],
     );
     let coef_id = json_id
@@ -1140,7 +1283,8 @@ fn check_dice(lang: &str) {
     // tokens (`return`, function-keyword), but the value MUST be a
     // bounded probability/similarity.
     let (json_diff, stdout_diff, stderr_diff) = check_success(
-        "dice", lang,
+        "dice",
+        lang,
         &["dice", a.to_str().unwrap(), b.to_str().unwrap()],
     );
     let coef_diff = json_diff
@@ -1160,9 +1304,16 @@ fn check_coupling(lang: &str) {
     let a = entry_file(lang, tmp.path());
     let b = util_file(lang, tmp.path());
     let (json, stdout, stderr) = check_success(
-        "coupling", lang,
-        &["coupling", a.to_str().unwrap(), b.to_str().unwrap(),
-          "--format", "json", "--quiet"],
+        "coupling",
+        lang,
+        &[
+            "coupling",
+            a.to_str().unwrap(),
+            b.to_str().unwrap(),
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     if !json.is_object() {
         panic!(
@@ -1185,7 +1336,8 @@ fn check_embed(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "embed", lang,
+        "embed",
+        lang,
         &["embed", path, "--format", "json", "--quiet"],
     );
     if !json.is_object() || json.get("chunks_embedded").is_none() {
@@ -1201,8 +1353,16 @@ fn check_semantic(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "semantic", lang,
-        &["semantic", "helper function", path, "--format", "json", "--quiet"],
+        "semantic",
+        lang,
+        &[
+            "semantic",
+            "helper function",
+            path,
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     if !json.is_object() || json.get("results").is_none() {
         panic!(
@@ -1217,8 +1377,15 @@ fn check_similar(lang: &str) {
     let tmp = make_fixture(lang);
     let entry = entry_file(lang, tmp.path());
     let (json, stdout, stderr) = check_success(
-        "similar", lang,
-        &["similar", entry.to_str().unwrap(), "--format", "json", "--quiet"],
+        "similar",
+        lang,
+        &[
+            "similar",
+            entry.to_str().unwrap(),
+            "--format",
+            "json",
+            "--quiet",
+        ],
     );
     if !json.is_object() || json.get("source").is_none() {
         panic!(
@@ -1236,7 +1403,8 @@ fn check_surface(lang: &str) {
     let tmp = make_fixture(lang);
     let path = tmp.path().to_str().unwrap();
     let (json, stdout, stderr) = check_success(
-        "surface", lang,
+        "surface",
+        lang,
         &["surface", path, "--format", "json", "--quiet"],
     );
     if !json.is_object() || json.get("apis").is_none() {
@@ -1262,13 +1430,20 @@ fn check_help_only(cmd: &str) {
     match result {
         CellResult::Hang => panic!("[{cmd} --help] HANG"),
         CellResult::Panic { exit, stderr } => panic!(
-            "[{cmd} --help] PANIC exit={exit} stderr={}", truncate(&stderr, 400)
+            "[{cmd} --help] PANIC exit={exit} stderr={}",
+            truncate(&stderr, 400)
         ),
-        CellResult::Ok { exit, stdout, stderr, .. } => {
+        CellResult::Ok {
+            exit,
+            stdout,
+            stderr,
+            ..
+        } => {
             if !ok_exit(exit) {
                 panic!(
                     "[{cmd} --help] BAD_EXIT exit={exit}\nstdout={}\nstderr={}",
-                    truncate(&stdout, 400), truncate(&stderr, 400)
+                    truncate(&stdout, 400),
+                    truncate(&stderr, 400)
                 );
             }
             if stdout.trim().is_empty() && stderr.trim().is_empty() {
@@ -1285,7 +1460,8 @@ fn check_tree_one() {
     let tmp = make_fixture("python");
     let path = tmp.path().to_str().unwrap();
     let (json, _stdout, _stderr) = check_success(
-        "tree", "any",
+        "tree",
+        "any",
         &["tree", path, "--format", "json", "--quiet"],
     );
     if !json.is_object() && !json.is_array() {
@@ -1311,649 +1487,1261 @@ fn _languages_constant_is_eighteen() {
 
 // ---------------------------------------------------------------- hubs
 #[test]
-fn test_hubs_on_python() { check_hubs("python"); }
+fn test_hubs_on_python() {
+    check_hubs("python");
+}
 #[test]
-fn test_hubs_on_typescript() { check_hubs("typescript"); }
+fn test_hubs_on_typescript() {
+    check_hubs("typescript");
+}
 #[test]
-fn test_hubs_on_javascript() { check_hubs("javascript"); }
+fn test_hubs_on_javascript() {
+    check_hubs("javascript");
+}
 #[test]
-fn test_hubs_on_go() { check_hubs("go"); }
+fn test_hubs_on_go() {
+    check_hubs("go");
+}
 #[test]
-fn test_hubs_on_rust() { check_hubs("rust"); }
+fn test_hubs_on_rust() {
+    check_hubs("rust");
+}
 #[test]
-fn test_hubs_on_java() { check_hubs("java"); }
+fn test_hubs_on_java() {
+    check_hubs("java");
+}
 #[test]
-fn test_hubs_on_c() { check_hubs("c"); }
+fn test_hubs_on_c() {
+    check_hubs("c");
+}
 #[test]
-fn test_hubs_on_cpp() { check_hubs("cpp"); }
+fn test_hubs_on_cpp() {
+    check_hubs("cpp");
+}
 #[test]
-fn test_hubs_on_ruby() { check_hubs("ruby"); }
+fn test_hubs_on_ruby() {
+    check_hubs("ruby");
+}
 #[test]
-fn test_hubs_on_kotlin() { check_hubs("kotlin"); }
+fn test_hubs_on_kotlin() {
+    check_hubs("kotlin");
+}
 #[test]
-fn test_hubs_on_swift() { check_hubs("swift"); }
+fn test_hubs_on_swift() {
+    check_hubs("swift");
+}
 #[test]
-fn test_hubs_on_csharp() { check_hubs("csharp"); }
+fn test_hubs_on_csharp() {
+    check_hubs("csharp");
+}
 #[test]
-fn test_hubs_on_scala() { check_hubs("scala"); }
+fn test_hubs_on_scala() {
+    check_hubs("scala");
+}
 #[test]
-fn test_hubs_on_php() { check_hubs("php"); }
+fn test_hubs_on_php() {
+    check_hubs("php");
+}
 #[test]
-fn test_hubs_on_lua() { check_hubs("lua"); }
+fn test_hubs_on_lua() {
+    check_hubs("lua");
+}
 #[test]
-fn test_hubs_on_luau() { check_hubs("luau"); }
+fn test_hubs_on_luau() {
+    check_hubs("luau");
+}
 #[test]
-fn test_hubs_on_elixir() { check_hubs("elixir"); }
+fn test_hubs_on_elixir() {
+    check_hubs("elixir");
+}
 #[test]
-fn test_hubs_on_ocaml() { check_hubs("ocaml"); }
+fn test_hubs_on_ocaml() {
+    check_hubs("ocaml");
+}
 
 // ---------------------------------------------------------------- whatbreaks
 #[test]
-fn test_whatbreaks_on_python() { check_whatbreaks("python"); }
+fn test_whatbreaks_on_python() {
+    check_whatbreaks("python");
+}
 #[test]
-fn test_whatbreaks_on_typescript() { check_whatbreaks("typescript"); }
+fn test_whatbreaks_on_typescript() {
+    check_whatbreaks("typescript");
+}
 #[test]
-fn test_whatbreaks_on_javascript() { check_whatbreaks("javascript"); }
+fn test_whatbreaks_on_javascript() {
+    check_whatbreaks("javascript");
+}
 #[test]
-fn test_whatbreaks_on_go() { check_whatbreaks("go"); }
+fn test_whatbreaks_on_go() {
+    check_whatbreaks("go");
+}
 #[test]
-fn test_whatbreaks_on_rust() { check_whatbreaks("rust"); }
+fn test_whatbreaks_on_rust() {
+    check_whatbreaks("rust");
+}
 #[test]
-fn test_whatbreaks_on_java() { check_whatbreaks("java"); }
+fn test_whatbreaks_on_java() {
+    check_whatbreaks("java");
+}
 #[test]
-fn test_whatbreaks_on_c() { check_whatbreaks("c"); }
+fn test_whatbreaks_on_c() {
+    check_whatbreaks("c");
+}
 #[test]
-fn test_whatbreaks_on_cpp() { check_whatbreaks("cpp"); }
+fn test_whatbreaks_on_cpp() {
+    check_whatbreaks("cpp");
+}
 #[test]
-fn test_whatbreaks_on_ruby() { check_whatbreaks("ruby"); }
+fn test_whatbreaks_on_ruby() {
+    check_whatbreaks("ruby");
+}
 #[test]
-fn test_whatbreaks_on_kotlin() { check_whatbreaks("kotlin"); }
+fn test_whatbreaks_on_kotlin() {
+    check_whatbreaks("kotlin");
+}
 #[test]
-fn test_whatbreaks_on_swift() { check_whatbreaks("swift"); }
+fn test_whatbreaks_on_swift() {
+    check_whatbreaks("swift");
+}
 #[test]
-fn test_whatbreaks_on_csharp() { check_whatbreaks("csharp"); }
+fn test_whatbreaks_on_csharp() {
+    check_whatbreaks("csharp");
+}
 #[test]
-fn test_whatbreaks_on_scala() { check_whatbreaks("scala"); }
+fn test_whatbreaks_on_scala() {
+    check_whatbreaks("scala");
+}
 #[test]
-fn test_whatbreaks_on_php() { check_whatbreaks("php"); }
+fn test_whatbreaks_on_php() {
+    check_whatbreaks("php");
+}
 #[test]
-fn test_whatbreaks_on_lua() { check_whatbreaks("lua"); }
+fn test_whatbreaks_on_lua() {
+    check_whatbreaks("lua");
+}
 #[test]
-fn test_whatbreaks_on_luau() { check_whatbreaks("luau"); }
+fn test_whatbreaks_on_luau() {
+    check_whatbreaks("luau");
+}
 #[test]
-fn test_whatbreaks_on_elixir() { check_whatbreaks("elixir"); }
+fn test_whatbreaks_on_elixir() {
+    check_whatbreaks("elixir");
+}
 #[test]
-fn test_whatbreaks_on_ocaml() { check_whatbreaks("ocaml"); }
+fn test_whatbreaks_on_ocaml() {
+    check_whatbreaks("ocaml");
+}
 
 // ---------------------------------------------------------------- importers
 #[test]
-fn test_importers_on_python() { check_importers("python"); }
+fn test_importers_on_python() {
+    check_importers("python");
+}
 #[test]
-fn test_importers_on_typescript() { check_importers("typescript"); }
+fn test_importers_on_typescript() {
+    check_importers("typescript");
+}
 #[test]
-fn test_importers_on_javascript() { check_importers("javascript"); }
+fn test_importers_on_javascript() {
+    check_importers("javascript");
+}
 #[test]
-fn test_importers_on_go() { check_importers("go"); }
+fn test_importers_on_go() {
+    check_importers("go");
+}
 #[test]
-fn test_importers_on_rust() { check_importers("rust"); }
+fn test_importers_on_rust() {
+    check_importers("rust");
+}
 #[test]
-fn test_importers_on_java() { check_importers("java"); }
+fn test_importers_on_java() {
+    check_importers("java");
+}
 #[test]
-fn test_importers_on_c() { check_importers("c"); }
+fn test_importers_on_c() {
+    check_importers("c");
+}
 #[test]
-fn test_importers_on_cpp() { check_importers("cpp"); }
+fn test_importers_on_cpp() {
+    check_importers("cpp");
+}
 #[test]
-fn test_importers_on_ruby() { check_importers("ruby"); }
+fn test_importers_on_ruby() {
+    check_importers("ruby");
+}
 #[test]
-fn test_importers_on_kotlin() { check_importers("kotlin"); }
+fn test_importers_on_kotlin() {
+    check_importers("kotlin");
+}
 #[test]
-fn test_importers_on_swift() { check_importers("swift"); }
+fn test_importers_on_swift() {
+    check_importers("swift");
+}
 #[test]
-fn test_importers_on_csharp() { check_importers("csharp"); }
+fn test_importers_on_csharp() {
+    check_importers("csharp");
+}
 #[test]
-fn test_importers_on_scala() { check_importers("scala"); }
+fn test_importers_on_scala() {
+    check_importers("scala");
+}
 #[test]
-fn test_importers_on_php() { check_importers("php"); }
+fn test_importers_on_php() {
+    check_importers("php");
+}
 #[test]
-fn test_importers_on_lua() { check_importers("lua"); }
+fn test_importers_on_lua() {
+    check_importers("lua");
+}
 #[test]
-fn test_importers_on_luau() { check_importers("luau"); }
+fn test_importers_on_luau() {
+    check_importers("luau");
+}
 #[test]
-fn test_importers_on_elixir() { check_importers("elixir"); }
+fn test_importers_on_elixir() {
+    check_importers("elixir");
+}
 #[test]
-fn test_importers_on_ocaml() { check_importers("ocaml"); }
+fn test_importers_on_ocaml() {
+    check_importers("ocaml");
+}
 
 // ---------------------------------------------------------------- secure
 #[test]
-fn test_secure_on_python() { check_secure("python"); }
+fn test_secure_on_python() {
+    check_secure("python");
+}
 #[test]
-fn test_secure_on_typescript() { check_secure("typescript"); }
+fn test_secure_on_typescript() {
+    check_secure("typescript");
+}
 #[test]
-fn test_secure_on_javascript() { check_secure("javascript"); }
+fn test_secure_on_javascript() {
+    check_secure("javascript");
+}
 #[test]
-fn test_secure_on_go() { check_secure("go"); }
+fn test_secure_on_go() {
+    check_secure("go");
+}
 #[test]
-fn test_secure_on_rust() { check_secure("rust"); }
+fn test_secure_on_rust() {
+    check_secure("rust");
+}
 #[test]
-fn test_secure_on_java() { check_secure("java"); }
+fn test_secure_on_java() {
+    check_secure("java");
+}
 #[test]
-fn test_secure_on_c() { check_secure("c"); }
+fn test_secure_on_c() {
+    check_secure("c");
+}
 #[test]
-fn test_secure_on_cpp() { check_secure("cpp"); }
+fn test_secure_on_cpp() {
+    check_secure("cpp");
+}
 #[test]
-fn test_secure_on_ruby() { check_secure("ruby"); }
+fn test_secure_on_ruby() {
+    check_secure("ruby");
+}
 #[test]
-fn test_secure_on_kotlin() { check_secure("kotlin"); }
+fn test_secure_on_kotlin() {
+    check_secure("kotlin");
+}
 #[test]
-fn test_secure_on_swift() { check_secure("swift"); }
+fn test_secure_on_swift() {
+    check_secure("swift");
+}
 #[test]
-fn test_secure_on_csharp() { check_secure("csharp"); }
+fn test_secure_on_csharp() {
+    check_secure("csharp");
+}
 #[test]
-fn test_secure_on_scala() { check_secure("scala"); }
+fn test_secure_on_scala() {
+    check_secure("scala");
+}
 #[test]
-fn test_secure_on_php() { check_secure("php"); }
+fn test_secure_on_php() {
+    check_secure("php");
+}
 #[test]
-fn test_secure_on_lua() { check_secure("lua"); }
+fn test_secure_on_lua() {
+    check_secure("lua");
+}
 #[test]
-fn test_secure_on_luau() { check_secure("luau"); }
+fn test_secure_on_luau() {
+    check_secure("luau");
+}
 #[test]
-fn test_secure_on_elixir() { check_secure("elixir"); }
+fn test_secure_on_elixir() {
+    check_secure("elixir");
+}
 #[test]
-fn test_secure_on_ocaml() { check_secure("ocaml"); }
+fn test_secure_on_ocaml() {
+    check_secure("ocaml");
+}
 
 // ---------------------------------------------------------------- api-check
 #[test]
-fn test_api_check_on_python() { check_api_check("python"); }
+fn test_api_check_on_python() {
+    check_api_check("python");
+}
 #[test]
-fn test_api_check_on_typescript() { check_api_check("typescript"); }
+fn test_api_check_on_typescript() {
+    check_api_check("typescript");
+}
 #[test]
-fn test_api_check_on_javascript() { check_api_check("javascript"); }
+fn test_api_check_on_javascript() {
+    check_api_check("javascript");
+}
 #[test]
-fn test_api_check_on_go() { check_api_check("go"); }
+fn test_api_check_on_go() {
+    check_api_check("go");
+}
 #[test]
-fn test_api_check_on_rust() { check_api_check("rust"); }
+fn test_api_check_on_rust() {
+    check_api_check("rust");
+}
 #[test]
-fn test_api_check_on_java() { check_api_check("java"); }
+fn test_api_check_on_java() {
+    check_api_check("java");
+}
 #[test]
-fn test_api_check_on_c() { check_api_check("c"); }
+fn test_api_check_on_c() {
+    check_api_check("c");
+}
 #[test]
-fn test_api_check_on_cpp() { check_api_check("cpp"); }
+fn test_api_check_on_cpp() {
+    check_api_check("cpp");
+}
 #[test]
-fn test_api_check_on_ruby() { check_api_check("ruby"); }
+fn test_api_check_on_ruby() {
+    check_api_check("ruby");
+}
 #[test]
-fn test_api_check_on_kotlin() { check_api_check("kotlin"); }
+fn test_api_check_on_kotlin() {
+    check_api_check("kotlin");
+}
 #[test]
-fn test_api_check_on_swift() { check_api_check("swift"); }
+fn test_api_check_on_swift() {
+    check_api_check("swift");
+}
 #[test]
-fn test_api_check_on_csharp() { check_api_check("csharp"); }
+fn test_api_check_on_csharp() {
+    check_api_check("csharp");
+}
 #[test]
-fn test_api_check_on_scala() { check_api_check("scala"); }
+fn test_api_check_on_scala() {
+    check_api_check("scala");
+}
 #[test]
-fn test_api_check_on_php() { check_api_check("php"); }
+fn test_api_check_on_php() {
+    check_api_check("php");
+}
 #[test]
-fn test_api_check_on_lua() { check_api_check("lua"); }
+fn test_api_check_on_lua() {
+    check_api_check("lua");
+}
 #[test]
-fn test_api_check_on_luau() { check_api_check("luau"); }
+fn test_api_check_on_luau() {
+    check_api_check("luau");
+}
 #[test]
-fn test_api_check_on_elixir() { check_api_check("elixir"); }
+fn test_api_check_on_elixir() {
+    check_api_check("elixir");
+}
 #[test]
-fn test_api_check_on_ocaml() { check_api_check("ocaml"); }
+fn test_api_check_on_ocaml() {
+    check_api_check("ocaml");
+}
 
 // ---------------------------------------------------------------- vuln
 #[test]
-fn test_vuln_on_python() { check_vuln("python"); }
+fn test_vuln_on_python() {
+    check_vuln("python");
+}
 #[test]
-fn test_vuln_on_typescript() { check_vuln("typescript"); }
+fn test_vuln_on_typescript() {
+    check_vuln("typescript");
+}
 #[test]
-fn test_vuln_on_javascript() { check_vuln("javascript"); }
+fn test_vuln_on_javascript() {
+    check_vuln("javascript");
+}
 #[test]
-fn test_vuln_on_go() { check_vuln("go"); }
+fn test_vuln_on_go() {
+    check_vuln("go");
+}
 #[test]
-fn test_vuln_on_rust() { check_vuln("rust"); }
+fn test_vuln_on_rust() {
+    check_vuln("rust");
+}
 #[test]
-fn test_vuln_on_java() { check_vuln("java"); }
+fn test_vuln_on_java() {
+    check_vuln("java");
+}
 #[test]
-fn test_vuln_on_c() { check_vuln("c"); }
+fn test_vuln_on_c() {
+    check_vuln("c");
+}
 #[test]
-fn test_vuln_on_cpp() { check_vuln("cpp"); }
+fn test_vuln_on_cpp() {
+    check_vuln("cpp");
+}
 #[test]
-fn test_vuln_on_ruby() { check_vuln("ruby"); }
+fn test_vuln_on_ruby() {
+    check_vuln("ruby");
+}
 #[test]
-fn test_vuln_on_kotlin() { check_vuln("kotlin"); }
+fn test_vuln_on_kotlin() {
+    check_vuln("kotlin");
+}
 #[test]
-fn test_vuln_on_swift() { check_vuln("swift"); }
+fn test_vuln_on_swift() {
+    check_vuln("swift");
+}
 #[test]
-fn test_vuln_on_csharp() { check_vuln("csharp"); }
+fn test_vuln_on_csharp() {
+    check_vuln("csharp");
+}
 #[test]
-fn test_vuln_on_scala() { check_vuln("scala"); }
+fn test_vuln_on_scala() {
+    check_vuln("scala");
+}
 #[test]
-fn test_vuln_on_php() { check_vuln("php"); }
+fn test_vuln_on_php() {
+    check_vuln("php");
+}
 #[test]
-fn test_vuln_on_lua() { check_vuln("lua"); }
+fn test_vuln_on_lua() {
+    check_vuln("lua");
+}
 #[test]
-fn test_vuln_on_luau() { check_vuln("luau"); }
+fn test_vuln_on_luau() {
+    check_vuln("luau");
+}
 #[test]
-fn test_vuln_on_elixir() { check_vuln("elixir"); }
+fn test_vuln_on_elixir() {
+    check_vuln("elixir");
+}
 #[test]
-fn test_vuln_on_ocaml() { check_vuln("ocaml"); }
+fn test_vuln_on_ocaml() {
+    check_vuln("ocaml");
+}
 
 // ---------------------------------------------------------------- deps
 #[test]
-fn test_deps_on_python() { check_deps("python"); }
+fn test_deps_on_python() {
+    check_deps("python");
+}
 #[test]
-fn test_deps_on_typescript() { check_deps("typescript"); }
+fn test_deps_on_typescript() {
+    check_deps("typescript");
+}
 #[test]
-fn test_deps_on_javascript() { check_deps("javascript"); }
+fn test_deps_on_javascript() {
+    check_deps("javascript");
+}
 #[test]
-fn test_deps_on_go() { check_deps("go"); }
+fn test_deps_on_go() {
+    check_deps("go");
+}
 #[test]
-fn test_deps_on_rust() { check_deps("rust"); }
+fn test_deps_on_rust() {
+    check_deps("rust");
+}
 #[test]
-fn test_deps_on_java() { check_deps("java"); }
+fn test_deps_on_java() {
+    check_deps("java");
+}
 #[test]
-fn test_deps_on_c() { check_deps("c"); }
+fn test_deps_on_c() {
+    check_deps("c");
+}
 #[test]
-fn test_deps_on_cpp() { check_deps("cpp"); }
+fn test_deps_on_cpp() {
+    check_deps("cpp");
+}
 #[test]
-fn test_deps_on_ruby() { check_deps("ruby"); }
+fn test_deps_on_ruby() {
+    check_deps("ruby");
+}
 #[test]
-fn test_deps_on_kotlin() { check_deps("kotlin"); }
+fn test_deps_on_kotlin() {
+    check_deps("kotlin");
+}
 #[test]
-fn test_deps_on_swift() { check_deps("swift"); }
+fn test_deps_on_swift() {
+    check_deps("swift");
+}
 #[test]
-fn test_deps_on_csharp() { check_deps("csharp"); }
+fn test_deps_on_csharp() {
+    check_deps("csharp");
+}
 #[test]
-fn test_deps_on_scala() { check_deps("scala"); }
+fn test_deps_on_scala() {
+    check_deps("scala");
+}
 #[test]
-fn test_deps_on_php() { check_deps("php"); }
+fn test_deps_on_php() {
+    check_deps("php");
+}
 #[test]
-fn test_deps_on_lua() { check_deps("lua"); }
+fn test_deps_on_lua() {
+    check_deps("lua");
+}
 #[test]
-fn test_deps_on_luau() { check_deps("luau"); }
+fn test_deps_on_luau() {
+    check_deps("luau");
+}
 #[test]
-fn test_deps_on_elixir() { check_deps("elixir"); }
+fn test_deps_on_elixir() {
+    check_deps("elixir");
+}
 #[test]
-fn test_deps_on_ocaml() { check_deps("ocaml"); }
+fn test_deps_on_ocaml() {
+    check_deps("ocaml");
+}
 
 // ---------------------------------------------------------------- change-impact
 #[test]
-fn test_change_impact_on_python() { check_change_impact("python"); }
+fn test_change_impact_on_python() {
+    check_change_impact("python");
+}
 #[test]
-fn test_change_impact_on_typescript() { check_change_impact("typescript"); }
+fn test_change_impact_on_typescript() {
+    check_change_impact("typescript");
+}
 #[test]
-fn test_change_impact_on_javascript() { check_change_impact("javascript"); }
+fn test_change_impact_on_javascript() {
+    check_change_impact("javascript");
+}
 #[test]
-fn test_change_impact_on_go() { check_change_impact("go"); }
+fn test_change_impact_on_go() {
+    check_change_impact("go");
+}
 #[test]
-fn test_change_impact_on_rust() { check_change_impact("rust"); }
+fn test_change_impact_on_rust() {
+    check_change_impact("rust");
+}
 #[test]
-fn test_change_impact_on_java() { check_change_impact("java"); }
+fn test_change_impact_on_java() {
+    check_change_impact("java");
+}
 #[test]
-fn test_change_impact_on_c() { check_change_impact("c"); }
+fn test_change_impact_on_c() {
+    check_change_impact("c");
+}
 #[test]
-fn test_change_impact_on_cpp() { check_change_impact("cpp"); }
+fn test_change_impact_on_cpp() {
+    check_change_impact("cpp");
+}
 #[test]
-fn test_change_impact_on_ruby() { check_change_impact("ruby"); }
+fn test_change_impact_on_ruby() {
+    check_change_impact("ruby");
+}
 #[test]
-fn test_change_impact_on_kotlin() { check_change_impact("kotlin"); }
+fn test_change_impact_on_kotlin() {
+    check_change_impact("kotlin");
+}
 #[test]
-fn test_change_impact_on_swift() { check_change_impact("swift"); }
+fn test_change_impact_on_swift() {
+    check_change_impact("swift");
+}
 #[test]
-fn test_change_impact_on_csharp() { check_change_impact("csharp"); }
+fn test_change_impact_on_csharp() {
+    check_change_impact("csharp");
+}
 #[test]
-fn test_change_impact_on_scala() { check_change_impact("scala"); }
+fn test_change_impact_on_scala() {
+    check_change_impact("scala");
+}
 #[test]
-fn test_change_impact_on_php() { check_change_impact("php"); }
+fn test_change_impact_on_php() {
+    check_change_impact("php");
+}
 #[test]
-fn test_change_impact_on_lua() { check_change_impact("lua"); }
+fn test_change_impact_on_lua() {
+    check_change_impact("lua");
+}
 #[test]
-fn test_change_impact_on_luau() { check_change_impact("luau"); }
+fn test_change_impact_on_luau() {
+    check_change_impact("luau");
+}
 #[test]
-fn test_change_impact_on_elixir() { check_change_impact("elixir"); }
+fn test_change_impact_on_elixir() {
+    check_change_impact("elixir");
+}
 #[test]
-fn test_change_impact_on_ocaml() { check_change_impact("ocaml"); }
+fn test_change_impact_on_ocaml() {
+    check_change_impact("ocaml");
+}
 
 // ---------------------------------------------------------------- debt
 #[test]
-fn test_debt_on_python() { check_debt("python"); }
+fn test_debt_on_python() {
+    check_debt("python");
+}
 #[test]
-fn test_debt_on_typescript() { check_debt("typescript"); }
+fn test_debt_on_typescript() {
+    check_debt("typescript");
+}
 #[test]
-fn test_debt_on_javascript() { check_debt("javascript"); }
+fn test_debt_on_javascript() {
+    check_debt("javascript");
+}
 #[test]
-fn test_debt_on_go() { check_debt("go"); }
+fn test_debt_on_go() {
+    check_debt("go");
+}
 #[test]
-fn test_debt_on_rust() { check_debt("rust"); }
+fn test_debt_on_rust() {
+    check_debt("rust");
+}
 #[test]
-fn test_debt_on_java() { check_debt("java"); }
+fn test_debt_on_java() {
+    check_debt("java");
+}
 #[test]
-fn test_debt_on_c() { check_debt("c"); }
+fn test_debt_on_c() {
+    check_debt("c");
+}
 #[test]
-fn test_debt_on_cpp() { check_debt("cpp"); }
+fn test_debt_on_cpp() {
+    check_debt("cpp");
+}
 #[test]
-fn test_debt_on_ruby() { check_debt("ruby"); }
+fn test_debt_on_ruby() {
+    check_debt("ruby");
+}
 #[test]
-fn test_debt_on_kotlin() { check_debt("kotlin"); }
+fn test_debt_on_kotlin() {
+    check_debt("kotlin");
+}
 #[test]
-fn test_debt_on_swift() { check_debt("swift"); }
+fn test_debt_on_swift() {
+    check_debt("swift");
+}
 #[test]
-fn test_debt_on_csharp() { check_debt("csharp"); }
+fn test_debt_on_csharp() {
+    check_debt("csharp");
+}
 #[test]
-fn test_debt_on_scala() { check_debt("scala"); }
+fn test_debt_on_scala() {
+    check_debt("scala");
+}
 #[test]
-fn test_debt_on_php() { check_debt("php"); }
+fn test_debt_on_php() {
+    check_debt("php");
+}
 #[test]
-fn test_debt_on_lua() { check_debt("lua"); }
+fn test_debt_on_lua() {
+    check_debt("lua");
+}
 #[test]
-fn test_debt_on_luau() { check_debt("luau"); }
+fn test_debt_on_luau() {
+    check_debt("luau");
+}
 #[test]
-fn test_debt_on_elixir() { check_debt("elixir"); }
+fn test_debt_on_elixir() {
+    check_debt("elixir");
+}
 #[test]
-fn test_debt_on_ocaml() { check_debt("ocaml"); }
+fn test_debt_on_ocaml() {
+    check_debt("ocaml");
+}
 
 // ---------------------------------------------------------------- health
 #[test]
-fn test_health_on_python() { check_health("python"); }
+fn test_health_on_python() {
+    check_health("python");
+}
 #[test]
-fn test_health_on_typescript() { check_health("typescript"); }
+fn test_health_on_typescript() {
+    check_health("typescript");
+}
 #[test]
-fn test_health_on_javascript() { check_health("javascript"); }
+fn test_health_on_javascript() {
+    check_health("javascript");
+}
 #[test]
-fn test_health_on_go() { check_health("go"); }
+fn test_health_on_go() {
+    check_health("go");
+}
 #[test]
-fn test_health_on_rust() { check_health("rust"); }
+fn test_health_on_rust() {
+    check_health("rust");
+}
 #[test]
-fn test_health_on_java() { check_health("java"); }
+fn test_health_on_java() {
+    check_health("java");
+}
 #[test]
-fn test_health_on_c() { check_health("c"); }
+fn test_health_on_c() {
+    check_health("c");
+}
 #[test]
-fn test_health_on_cpp() { check_health("cpp"); }
+fn test_health_on_cpp() {
+    check_health("cpp");
+}
 #[test]
-fn test_health_on_ruby() { check_health("ruby"); }
+fn test_health_on_ruby() {
+    check_health("ruby");
+}
 #[test]
-fn test_health_on_kotlin() { check_health("kotlin"); }
+fn test_health_on_kotlin() {
+    check_health("kotlin");
+}
 #[test]
-fn test_health_on_swift() { check_health("swift"); }
+fn test_health_on_swift() {
+    check_health("swift");
+}
 #[test]
-fn test_health_on_csharp() { check_health("csharp"); }
+fn test_health_on_csharp() {
+    check_health("csharp");
+}
 #[test]
-fn test_health_on_scala() { check_health("scala"); }
+fn test_health_on_scala() {
+    check_health("scala");
+}
 #[test]
-fn test_health_on_php() { check_health("php"); }
+fn test_health_on_php() {
+    check_health("php");
+}
 #[test]
-fn test_health_on_lua() { check_health("lua"); }
+fn test_health_on_lua() {
+    check_health("lua");
+}
 #[test]
-fn test_health_on_luau() { check_health("luau"); }
+fn test_health_on_luau() {
+    check_health("luau");
+}
 #[test]
-fn test_health_on_elixir() { check_health("elixir"); }
+fn test_health_on_elixir() {
+    check_health("elixir");
+}
 #[test]
-fn test_health_on_ocaml() { check_health("ocaml"); }
+fn test_health_on_ocaml() {
+    check_health("ocaml");
+}
 
 // ---------------------------------------------------------------- clones
 #[test]
-fn test_clones_on_python() { check_clones("python"); }
+fn test_clones_on_python() {
+    check_clones("python");
+}
 #[test]
-fn test_clones_on_typescript() { check_clones("typescript"); }
+fn test_clones_on_typescript() {
+    check_clones("typescript");
+}
 #[test]
-fn test_clones_on_javascript() { check_clones("javascript"); }
+fn test_clones_on_javascript() {
+    check_clones("javascript");
+}
 #[test]
-fn test_clones_on_go() { check_clones("go"); }
+fn test_clones_on_go() {
+    check_clones("go");
+}
 #[test]
-fn test_clones_on_rust() { check_clones("rust"); }
+fn test_clones_on_rust() {
+    check_clones("rust");
+}
 #[test]
-fn test_clones_on_java() { check_clones("java"); }
+fn test_clones_on_java() {
+    check_clones("java");
+}
 #[test]
-fn test_clones_on_c() { check_clones("c"); }
+fn test_clones_on_c() {
+    check_clones("c");
+}
 #[test]
-fn test_clones_on_cpp() { check_clones("cpp"); }
+fn test_clones_on_cpp() {
+    check_clones("cpp");
+}
 #[test]
-fn test_clones_on_ruby() { check_clones("ruby"); }
+fn test_clones_on_ruby() {
+    check_clones("ruby");
+}
 #[test]
-fn test_clones_on_kotlin() { check_clones("kotlin"); }
+fn test_clones_on_kotlin() {
+    check_clones("kotlin");
+}
 #[test]
-fn test_clones_on_swift() { check_clones("swift"); }
+fn test_clones_on_swift() {
+    check_clones("swift");
+}
 #[test]
-fn test_clones_on_csharp() { check_clones("csharp"); }
+fn test_clones_on_csharp() {
+    check_clones("csharp");
+}
 #[test]
-fn test_clones_on_scala() { check_clones("scala"); }
+fn test_clones_on_scala() {
+    check_clones("scala");
+}
 #[test]
-fn test_clones_on_php() { check_clones("php"); }
+fn test_clones_on_php() {
+    check_clones("php");
+}
 #[test]
-fn test_clones_on_lua() { check_clones("lua"); }
+fn test_clones_on_lua() {
+    check_clones("lua");
+}
 #[test]
-fn test_clones_on_luau() { check_clones("luau"); }
+fn test_clones_on_luau() {
+    check_clones("luau");
+}
 #[test]
-fn test_clones_on_elixir() { check_clones("elixir"); }
+fn test_clones_on_elixir() {
+    check_clones("elixir");
+}
 #[test]
-fn test_clones_on_ocaml() { check_clones("ocaml"); }
+fn test_clones_on_ocaml() {
+    check_clones("ocaml");
+}
 
 // ---------------------------------------------------------------- todo
 #[test]
-fn test_todo_on_python() { check_todo("python"); }
+fn test_todo_on_python() {
+    check_todo("python");
+}
 #[test]
-fn test_todo_on_typescript() { check_todo("typescript"); }
+fn test_todo_on_typescript() {
+    check_todo("typescript");
+}
 #[test]
-fn test_todo_on_javascript() { check_todo("javascript"); }
+fn test_todo_on_javascript() {
+    check_todo("javascript");
+}
 #[test]
-fn test_todo_on_go() { check_todo("go"); }
+fn test_todo_on_go() {
+    check_todo("go");
+}
 #[test]
-fn test_todo_on_rust() { check_todo("rust"); }
+fn test_todo_on_rust() {
+    check_todo("rust");
+}
 #[test]
-fn test_todo_on_java() { check_todo("java"); }
+fn test_todo_on_java() {
+    check_todo("java");
+}
 #[test]
-fn test_todo_on_c() { check_todo("c"); }
+fn test_todo_on_c() {
+    check_todo("c");
+}
 #[test]
-fn test_todo_on_cpp() { check_todo("cpp"); }
+fn test_todo_on_cpp() {
+    check_todo("cpp");
+}
 #[test]
-fn test_todo_on_ruby() { check_todo("ruby"); }
+fn test_todo_on_ruby() {
+    check_todo("ruby");
+}
 #[test]
-fn test_todo_on_kotlin() { check_todo("kotlin"); }
+fn test_todo_on_kotlin() {
+    check_todo("kotlin");
+}
 #[test]
-fn test_todo_on_swift() { check_todo("swift"); }
+fn test_todo_on_swift() {
+    check_todo("swift");
+}
 #[test]
-fn test_todo_on_csharp() { check_todo("csharp"); }
+fn test_todo_on_csharp() {
+    check_todo("csharp");
+}
 #[test]
-fn test_todo_on_scala() { check_todo("scala"); }
+fn test_todo_on_scala() {
+    check_todo("scala");
+}
 #[test]
-fn test_todo_on_php() { check_todo("php"); }
+fn test_todo_on_php() {
+    check_todo("php");
+}
 #[test]
-fn test_todo_on_lua() { check_todo("lua"); }
+fn test_todo_on_lua() {
+    check_todo("lua");
+}
 #[test]
-fn test_todo_on_luau() { check_todo("luau"); }
+fn test_todo_on_luau() {
+    check_todo("luau");
+}
 #[test]
-fn test_todo_on_elixir() { check_todo("elixir"); }
+fn test_todo_on_elixir() {
+    check_todo("elixir");
+}
 #[test]
-fn test_todo_on_ocaml() { check_todo("ocaml"); }
+fn test_todo_on_ocaml() {
+    check_todo("ocaml");
+}
 
 // ---------------------------------------------------------------- invariants
 #[test]
-fn test_invariants_on_python() { check_invariants("python"); }
+fn test_invariants_on_python() {
+    check_invariants("python");
+}
 #[test]
-fn test_invariants_on_typescript() { check_invariants("typescript"); }
+fn test_invariants_on_typescript() {
+    check_invariants("typescript");
+}
 #[test]
-fn test_invariants_on_javascript() { check_invariants("javascript"); }
+fn test_invariants_on_javascript() {
+    check_invariants("javascript");
+}
 #[test]
-fn test_invariants_on_go() { check_invariants("go"); }
+fn test_invariants_on_go() {
+    check_invariants("go");
+}
 #[test]
-fn test_invariants_on_rust() { check_invariants("rust"); }
+fn test_invariants_on_rust() {
+    check_invariants("rust");
+}
 #[test]
-fn test_invariants_on_java() { check_invariants("java"); }
+fn test_invariants_on_java() {
+    check_invariants("java");
+}
 #[test]
-fn test_invariants_on_c() { check_invariants("c"); }
+fn test_invariants_on_c() {
+    check_invariants("c");
+}
 #[test]
-fn test_invariants_on_cpp() { check_invariants("cpp"); }
+fn test_invariants_on_cpp() {
+    check_invariants("cpp");
+}
 #[test]
-fn test_invariants_on_ruby() { check_invariants("ruby"); }
+fn test_invariants_on_ruby() {
+    check_invariants("ruby");
+}
 #[test]
-fn test_invariants_on_kotlin() { check_invariants("kotlin"); }
+fn test_invariants_on_kotlin() {
+    check_invariants("kotlin");
+}
 #[test]
-fn test_invariants_on_swift() { check_invariants("swift"); }
+fn test_invariants_on_swift() {
+    check_invariants("swift");
+}
 #[test]
-fn test_invariants_on_csharp() { check_invariants("csharp"); }
+fn test_invariants_on_csharp() {
+    check_invariants("csharp");
+}
 #[test]
-fn test_invariants_on_scala() { check_invariants("scala"); }
+fn test_invariants_on_scala() {
+    check_invariants("scala");
+}
 #[test]
-fn test_invariants_on_php() { check_invariants("php"); }
+fn test_invariants_on_php() {
+    check_invariants("php");
+}
 #[test]
-fn test_invariants_on_lua() { check_invariants("lua"); }
+fn test_invariants_on_lua() {
+    check_invariants("lua");
+}
 #[test]
-fn test_invariants_on_luau() { check_invariants("luau"); }
+fn test_invariants_on_luau() {
+    check_invariants("luau");
+}
 #[test]
-fn test_invariants_on_elixir() { check_invariants("elixir"); }
+fn test_invariants_on_elixir() {
+    check_invariants("elixir");
+}
 #[test]
-fn test_invariants_on_ocaml() { check_invariants("ocaml"); }
+fn test_invariants_on_ocaml() {
+    check_invariants("ocaml");
+}
 
 // ---------------------------------------------------------------- verify
 #[test]
-fn test_verify_on_python() { check_verify("python"); }
+fn test_verify_on_python() {
+    check_verify("python");
+}
 #[test]
-fn test_verify_on_typescript() { check_verify("typescript"); }
+fn test_verify_on_typescript() {
+    check_verify("typescript");
+}
 #[test]
-fn test_verify_on_javascript() { check_verify("javascript"); }
+fn test_verify_on_javascript() {
+    check_verify("javascript");
+}
 #[test]
-fn test_verify_on_go() { check_verify("go"); }
+fn test_verify_on_go() {
+    check_verify("go");
+}
 #[test]
-fn test_verify_on_rust() { check_verify("rust"); }
+fn test_verify_on_rust() {
+    check_verify("rust");
+}
 #[test]
-fn test_verify_on_java() { check_verify("java"); }
+fn test_verify_on_java() {
+    check_verify("java");
+}
 #[test]
-fn test_verify_on_c() { check_verify("c"); }
+fn test_verify_on_c() {
+    check_verify("c");
+}
 #[test]
-fn test_verify_on_cpp() { check_verify("cpp"); }
+fn test_verify_on_cpp() {
+    check_verify("cpp");
+}
 #[test]
-fn test_verify_on_ruby() { check_verify("ruby"); }
+fn test_verify_on_ruby() {
+    check_verify("ruby");
+}
 #[test]
-fn test_verify_on_kotlin() { check_verify("kotlin"); }
+fn test_verify_on_kotlin() {
+    check_verify("kotlin");
+}
 #[test]
-fn test_verify_on_swift() { check_verify("swift"); }
+fn test_verify_on_swift() {
+    check_verify("swift");
+}
 #[test]
-fn test_verify_on_csharp() { check_verify("csharp"); }
+fn test_verify_on_csharp() {
+    check_verify("csharp");
+}
 #[test]
-fn test_verify_on_scala() { check_verify("scala"); }
+fn test_verify_on_scala() {
+    check_verify("scala");
+}
 #[test]
-fn test_verify_on_php() { check_verify("php"); }
+fn test_verify_on_php() {
+    check_verify("php");
+}
 #[test]
-fn test_verify_on_lua() { check_verify("lua"); }
+fn test_verify_on_lua() {
+    check_verify("lua");
+}
 #[test]
-fn test_verify_on_luau() { check_verify("luau"); }
+fn test_verify_on_luau() {
+    check_verify("luau");
+}
 #[test]
-fn test_verify_on_elixir() { check_verify("elixir"); }
+fn test_verify_on_elixir() {
+    check_verify("elixir");
+}
 #[test]
-fn test_verify_on_ocaml() { check_verify("ocaml"); }
+fn test_verify_on_ocaml() {
+    check_verify("ocaml");
+}
 
 // ---------------------------------------------------------------- interface
 #[test]
-fn test_interface_on_python() { check_interface("python"); }
+fn test_interface_on_python() {
+    check_interface("python");
+}
 #[test]
-fn test_interface_on_typescript() { check_interface("typescript"); }
+fn test_interface_on_typescript() {
+    check_interface("typescript");
+}
 #[test]
-fn test_interface_on_javascript() { check_interface("javascript"); }
+fn test_interface_on_javascript() {
+    check_interface("javascript");
+}
 #[test]
-fn test_interface_on_go() { check_interface("go"); }
+fn test_interface_on_go() {
+    check_interface("go");
+}
 #[test]
-fn test_interface_on_rust() { check_interface("rust"); }
+fn test_interface_on_rust() {
+    check_interface("rust");
+}
 #[test]
-fn test_interface_on_java() { check_interface("java"); }
+fn test_interface_on_java() {
+    check_interface("java");
+}
 #[test]
-fn test_interface_on_c() { check_interface("c"); }
+fn test_interface_on_c() {
+    check_interface("c");
+}
 #[test]
-fn test_interface_on_cpp() { check_interface("cpp"); }
+fn test_interface_on_cpp() {
+    check_interface("cpp");
+}
 #[test]
-fn test_interface_on_ruby() { check_interface("ruby"); }
+fn test_interface_on_ruby() {
+    check_interface("ruby");
+}
 #[test]
-fn test_interface_on_kotlin() { check_interface("kotlin"); }
+fn test_interface_on_kotlin() {
+    check_interface("kotlin");
+}
 #[test]
-fn test_interface_on_swift() { check_interface("swift"); }
+fn test_interface_on_swift() {
+    check_interface("swift");
+}
 #[test]
-fn test_interface_on_csharp() { check_interface("csharp"); }
+fn test_interface_on_csharp() {
+    check_interface("csharp");
+}
 #[test]
-fn test_interface_on_scala() { check_interface("scala"); }
+fn test_interface_on_scala() {
+    check_interface("scala");
+}
 #[test]
-fn test_interface_on_php() { check_interface("php"); }
+fn test_interface_on_php() {
+    check_interface("php");
+}
 #[test]
-fn test_interface_on_lua() { check_interface("lua"); }
+fn test_interface_on_lua() {
+    check_interface("lua");
+}
 #[test]
-fn test_interface_on_luau() { check_interface("luau"); }
+fn test_interface_on_luau() {
+    check_interface("luau");
+}
 #[test]
-fn test_interface_on_elixir() { check_interface("elixir"); }
+fn test_interface_on_elixir() {
+    check_interface("elixir");
+}
 #[test]
-fn test_interface_on_ocaml() { check_interface("ocaml"); }
+fn test_interface_on_ocaml() {
+    check_interface("ocaml");
+}
 
 // ---------------------------------------------------------------- search
 #[test]
-fn test_search_on_python() { check_search("python"); }
+fn test_search_on_python() {
+    check_search("python");
+}
 #[test]
-fn test_search_on_typescript() { check_search("typescript"); }
+fn test_search_on_typescript() {
+    check_search("typescript");
+}
 #[test]
-fn test_search_on_javascript() { check_search("javascript"); }
+fn test_search_on_javascript() {
+    check_search("javascript");
+}
 #[test]
-fn test_search_on_go() { check_search("go"); }
+fn test_search_on_go() {
+    check_search("go");
+}
 #[test]
-fn test_search_on_rust() { check_search("rust"); }
+fn test_search_on_rust() {
+    check_search("rust");
+}
 #[test]
-fn test_search_on_java() { check_search("java"); }
+fn test_search_on_java() {
+    check_search("java");
+}
 #[test]
-fn test_search_on_c() { check_search("c"); }
+fn test_search_on_c() {
+    check_search("c");
+}
 #[test]
-fn test_search_on_cpp() { check_search("cpp"); }
+fn test_search_on_cpp() {
+    check_search("cpp");
+}
 #[test]
-fn test_search_on_ruby() { check_search("ruby"); }
+fn test_search_on_ruby() {
+    check_search("ruby");
+}
 #[test]
-fn test_search_on_kotlin() { check_search("kotlin"); }
+fn test_search_on_kotlin() {
+    check_search("kotlin");
+}
 #[test]
-fn test_search_on_swift() { check_search("swift"); }
+fn test_search_on_swift() {
+    check_search("swift");
+}
 #[test]
-fn test_search_on_csharp() { check_search("csharp"); }
+fn test_search_on_csharp() {
+    check_search("csharp");
+}
 #[test]
-fn test_search_on_scala() { check_search("scala"); }
+fn test_search_on_scala() {
+    check_search("scala");
+}
 #[test]
-fn test_search_on_php() { check_search("php"); }
+fn test_search_on_php() {
+    check_search("php");
+}
 #[test]
-fn test_search_on_lua() { check_search("lua"); }
+fn test_search_on_lua() {
+    check_search("lua");
+}
 #[test]
-fn test_search_on_luau() { check_search("luau"); }
+fn test_search_on_luau() {
+    check_search("luau");
+}
 #[test]
-fn test_search_on_elixir() { check_search("elixir"); }
+fn test_search_on_elixir() {
+    check_search("elixir");
+}
 #[test]
-fn test_search_on_ocaml() { check_search("ocaml"); }
+fn test_search_on_ocaml() {
+    check_search("ocaml");
+}
 
 // ---------------------------------------------------------------- context
 #[test]
-fn test_context_on_python() { check_context("python"); }
+fn test_context_on_python() {
+    check_context("python");
+}
 #[test]
-fn test_context_on_typescript() { check_context("typescript"); }
+fn test_context_on_typescript() {
+    check_context("typescript");
+}
 #[test]
-fn test_context_on_javascript() { check_context("javascript"); }
+fn test_context_on_javascript() {
+    check_context("javascript");
+}
 #[test]
-fn test_context_on_go() { check_context("go"); }
+fn test_context_on_go() {
+    check_context("go");
+}
 #[test]
-fn test_context_on_rust() { check_context("rust"); }
+fn test_context_on_rust() {
+    check_context("rust");
+}
 #[test]
-fn test_context_on_java() { check_context("java"); }
+fn test_context_on_java() {
+    check_context("java");
+}
 #[test]
-fn test_context_on_c() { check_context("c"); }
+fn test_context_on_c() {
+    check_context("c");
+}
 #[test]
-fn test_context_on_cpp() { check_context("cpp"); }
+fn test_context_on_cpp() {
+    check_context("cpp");
+}
 #[test]
-fn test_context_on_ruby() { check_context("ruby"); }
+fn test_context_on_ruby() {
+    check_context("ruby");
+}
 #[test]
-fn test_context_on_kotlin() { check_context("kotlin"); }
+fn test_context_on_kotlin() {
+    check_context("kotlin");
+}
 #[test]
-fn test_context_on_swift() { check_context("swift"); }
+fn test_context_on_swift() {
+    check_context("swift");
+}
 #[test]
-fn test_context_on_csharp() { check_context("csharp"); }
+fn test_context_on_csharp() {
+    check_context("csharp");
+}
 #[test]
-fn test_context_on_scala() { check_context("scala"); }
+fn test_context_on_scala() {
+    check_context("scala");
+}
 #[test]
-fn test_context_on_php() { check_context("php"); }
+fn test_context_on_php() {
+    check_context("php");
+}
 #[test]
-fn test_context_on_lua() { check_context("lua"); }
+fn test_context_on_lua() {
+    check_context("lua");
+}
 #[test]
-fn test_context_on_luau() { check_context("luau"); }
+fn test_context_on_luau() {
+    check_context("luau");
+}
 #[test]
-fn test_context_on_elixir() { check_context("elixir"); }
+fn test_context_on_elixir() {
+    check_context("elixir");
+}
 #[test]
-fn test_context_on_ocaml() { check_context("ocaml"); }
+fn test_context_on_ocaml() {
+    check_context("ocaml");
+}
 
 // ---------------------------------------------------------------- temporal
 //
@@ -1962,117 +2750,225 @@ fn test_context_on_ocaml() { check_context("ocaml"); }
 // (see commands/patterns/temporal.rs analyze_temporal_directory which now
 // dispatches via Language::from_path + build_project_call_graph_v2).
 #[test]
-fn test_temporal_on_python() { check_temporal("python"); }
+fn test_temporal_on_python() {
+    check_temporal("python");
+}
 #[test]
-fn test_temporal_on_typescript() { check_temporal("typescript"); }
+fn test_temporal_on_typescript() {
+    check_temporal("typescript");
+}
 #[test]
-fn test_temporal_on_javascript() { check_temporal("javascript"); }
+fn test_temporal_on_javascript() {
+    check_temporal("javascript");
+}
 #[test]
-fn test_temporal_on_go() { check_temporal("go"); }
+fn test_temporal_on_go() {
+    check_temporal("go");
+}
 #[test]
-fn test_temporal_on_rust() { check_temporal("rust"); }
+fn test_temporal_on_rust() {
+    check_temporal("rust");
+}
 #[test]
-fn test_temporal_on_java() { check_temporal("java"); }
+fn test_temporal_on_java() {
+    check_temporal("java");
+}
 #[test]
-fn test_temporal_on_c() { check_temporal("c"); }
+fn test_temporal_on_c() {
+    check_temporal("c");
+}
 #[test]
-fn test_temporal_on_cpp() { check_temporal("cpp"); }
+fn test_temporal_on_cpp() {
+    check_temporal("cpp");
+}
 #[test]
-fn test_temporal_on_ruby() { check_temporal("ruby"); }
+fn test_temporal_on_ruby() {
+    check_temporal("ruby");
+}
 #[test]
-fn test_temporal_on_kotlin() { check_temporal("kotlin"); }
+fn test_temporal_on_kotlin() {
+    check_temporal("kotlin");
+}
 #[test]
-fn test_temporal_on_swift() { check_temporal("swift"); }
+fn test_temporal_on_swift() {
+    check_temporal("swift");
+}
 #[test]
-fn test_temporal_on_csharp() { check_temporal("csharp"); }
+fn test_temporal_on_csharp() {
+    check_temporal("csharp");
+}
 #[test]
-fn test_temporal_on_scala() { check_temporal("scala"); }
+fn test_temporal_on_scala() {
+    check_temporal("scala");
+}
 #[test]
-fn test_temporal_on_php() { check_temporal("php"); }
+fn test_temporal_on_php() {
+    check_temporal("php");
+}
 #[test]
-fn test_temporal_on_lua() { check_temporal("lua"); }
+fn test_temporal_on_lua() {
+    check_temporal("lua");
+}
 #[test]
-fn test_temporal_on_luau() { check_temporal("luau"); }
+fn test_temporal_on_luau() {
+    check_temporal("luau");
+}
 #[test]
-fn test_temporal_on_elixir() { check_temporal("elixir"); }
+fn test_temporal_on_elixir() {
+    check_temporal("elixir");
+}
 #[test]
-fn test_temporal_on_ocaml() { check_temporal("ocaml"); }
+fn test_temporal_on_ocaml() {
+    check_temporal("ocaml");
+}
 
 // ---------------------------------------------------------------- diagnostics
 #[test]
-fn test_diagnostics_on_python() { check_diagnostics("python"); }
+fn test_diagnostics_on_python() {
+    check_diagnostics("python");
+}
 #[test]
-fn test_diagnostics_on_typescript() { check_diagnostics("typescript"); }
+fn test_diagnostics_on_typescript() {
+    check_diagnostics("typescript");
+}
 #[test]
-fn test_diagnostics_on_javascript() { check_diagnostics("javascript"); }
+fn test_diagnostics_on_javascript() {
+    check_diagnostics("javascript");
+}
 #[test]
-fn test_diagnostics_on_go() { check_diagnostics("go"); }
+fn test_diagnostics_on_go() {
+    check_diagnostics("go");
+}
 #[test]
-fn test_diagnostics_on_rust() { check_diagnostics("rust"); }
+fn test_diagnostics_on_rust() {
+    check_diagnostics("rust");
+}
 #[test]
-fn test_diagnostics_on_java() { check_diagnostics("java"); }
+fn test_diagnostics_on_java() {
+    check_diagnostics("java");
+}
 #[test]
-fn test_diagnostics_on_c() { check_diagnostics("c"); }
+fn test_diagnostics_on_c() {
+    check_diagnostics("c");
+}
 #[test]
-fn test_diagnostics_on_cpp() { check_diagnostics("cpp"); }
+fn test_diagnostics_on_cpp() {
+    check_diagnostics("cpp");
+}
 #[test]
-fn test_diagnostics_on_ruby() { check_diagnostics("ruby"); }
+fn test_diagnostics_on_ruby() {
+    check_diagnostics("ruby");
+}
 #[test]
-fn test_diagnostics_on_kotlin() { check_diagnostics("kotlin"); }
+fn test_diagnostics_on_kotlin() {
+    check_diagnostics("kotlin");
+}
 #[test]
-fn test_diagnostics_on_swift() { check_diagnostics("swift"); }
+fn test_diagnostics_on_swift() {
+    check_diagnostics("swift");
+}
 #[test]
-fn test_diagnostics_on_csharp() { check_diagnostics("csharp"); }
+fn test_diagnostics_on_csharp() {
+    check_diagnostics("csharp");
+}
 #[test]
-fn test_diagnostics_on_scala() { check_diagnostics("scala"); }
+fn test_diagnostics_on_scala() {
+    check_diagnostics("scala");
+}
 #[test]
-fn test_diagnostics_on_php() { check_diagnostics("php"); }
+fn test_diagnostics_on_php() {
+    check_diagnostics("php");
+}
 #[test]
-fn test_diagnostics_on_lua() { check_diagnostics("lua"); }
+fn test_diagnostics_on_lua() {
+    check_diagnostics("lua");
+}
 #[test]
-fn test_diagnostics_on_luau() { check_diagnostics("luau"); }
+fn test_diagnostics_on_luau() {
+    check_diagnostics("luau");
+}
 #[test]
-fn test_diagnostics_on_elixir() { check_diagnostics("elixir"); }
+fn test_diagnostics_on_elixir() {
+    check_diagnostics("elixir");
+}
 #[test]
-fn test_diagnostics_on_ocaml() { check_diagnostics("ocaml"); }
+fn test_diagnostics_on_ocaml() {
+    check_diagnostics("ocaml");
+}
 
 // ---------------------------------------------------------------- inheritance
 #[test]
-fn test_inheritance_on_python() { check_inheritance("python"); }
+fn test_inheritance_on_python() {
+    check_inheritance("python");
+}
 #[test]
-fn test_inheritance_on_typescript() { check_inheritance("typescript"); }
+fn test_inheritance_on_typescript() {
+    check_inheritance("typescript");
+}
 #[test]
-fn test_inheritance_on_javascript() { check_inheritance("javascript"); }
+fn test_inheritance_on_javascript() {
+    check_inheritance("javascript");
+}
 #[test]
-fn test_inheritance_on_go() { check_inheritance("go"); }
+fn test_inheritance_on_go() {
+    check_inheritance("go");
+}
 #[test]
-fn test_inheritance_on_rust() { check_inheritance("rust"); }
+fn test_inheritance_on_rust() {
+    check_inheritance("rust");
+}
 #[test]
-fn test_inheritance_on_java() { check_inheritance("java"); }
+fn test_inheritance_on_java() {
+    check_inheritance("java");
+}
 #[test]
-fn test_inheritance_on_c() { check_inheritance("c"); }
+fn test_inheritance_on_c() {
+    check_inheritance("c");
+}
 #[test]
-fn test_inheritance_on_cpp() { check_inheritance("cpp"); }
+fn test_inheritance_on_cpp() {
+    check_inheritance("cpp");
+}
 #[test]
-fn test_inheritance_on_ruby() { check_inheritance("ruby"); }
+fn test_inheritance_on_ruby() {
+    check_inheritance("ruby");
+}
 #[test]
-fn test_inheritance_on_kotlin() { check_inheritance("kotlin"); }
+fn test_inheritance_on_kotlin() {
+    check_inheritance("kotlin");
+}
 #[test]
-fn test_inheritance_on_swift() { check_inheritance("swift"); }
+fn test_inheritance_on_swift() {
+    check_inheritance("swift");
+}
 #[test]
-fn test_inheritance_on_csharp() { check_inheritance("csharp"); }
+fn test_inheritance_on_csharp() {
+    check_inheritance("csharp");
+}
 #[test]
-fn test_inheritance_on_scala() { check_inheritance("scala"); }
+fn test_inheritance_on_scala() {
+    check_inheritance("scala");
+}
 #[test]
-fn test_inheritance_on_php() { check_inheritance("php"); }
+fn test_inheritance_on_php() {
+    check_inheritance("php");
+}
 #[test]
-fn test_inheritance_on_lua() { check_inheritance("lua"); }
+fn test_inheritance_on_lua() {
+    check_inheritance("lua");
+}
 #[test]
-fn test_inheritance_on_luau() { check_inheritance("luau"); }
+fn test_inheritance_on_luau() {
+    check_inheritance("luau");
+}
 #[test]
-fn test_inheritance_on_elixir() { check_inheritance("elixir"); }
+fn test_inheritance_on_elixir() {
+    check_inheritance("elixir");
+}
 #[test]
-fn test_inheritance_on_ocaml() { check_inheritance("ocaml"); }
+fn test_inheritance_on_ocaml() {
+    check_inheritance("ocaml");
+}
 
 // ---------------------------------------------------------------- definition
 //
@@ -2082,779 +2978,1526 @@ fn test_inheritance_on_ocaml() { check_inheritance("ocaml"); }
 // definition site of the requested symbol, with a project walk for
 // cross-file resolution.
 #[test]
-fn test_definition_on_python() { check_definition("python"); }
+fn test_definition_on_python() {
+    check_definition("python");
+}
 #[test]
-fn test_definition_on_typescript() { check_definition("typescript"); }
+fn test_definition_on_typescript() {
+    check_definition("typescript");
+}
 #[test]
-fn test_definition_on_javascript() { check_definition("javascript"); }
+fn test_definition_on_javascript() {
+    check_definition("javascript");
+}
 #[test]
-fn test_definition_on_go() { check_definition("go"); }
+fn test_definition_on_go() {
+    check_definition("go");
+}
 #[test]
-fn test_definition_on_rust() { check_definition("rust"); }
+fn test_definition_on_rust() {
+    check_definition("rust");
+}
 #[test]
-fn test_definition_on_java() { check_definition("java"); }
+fn test_definition_on_java() {
+    check_definition("java");
+}
 #[test]
-fn test_definition_on_c() { check_definition("c"); }
+fn test_definition_on_c() {
+    check_definition("c");
+}
 #[test]
-fn test_definition_on_cpp() { check_definition("cpp"); }
+fn test_definition_on_cpp() {
+    check_definition("cpp");
+}
 #[test]
-fn test_definition_on_ruby() { check_definition("ruby"); }
+fn test_definition_on_ruby() {
+    check_definition("ruby");
+}
 #[test]
-fn test_definition_on_kotlin() { check_definition("kotlin"); }
+fn test_definition_on_kotlin() {
+    check_definition("kotlin");
+}
 #[test]
-fn test_definition_on_swift() { check_definition("swift"); }
+fn test_definition_on_swift() {
+    check_definition("swift");
+}
 #[test]
-fn test_definition_on_csharp() { check_definition("csharp"); }
+fn test_definition_on_csharp() {
+    check_definition("csharp");
+}
 #[test]
-fn test_definition_on_scala() { check_definition("scala"); }
+fn test_definition_on_scala() {
+    check_definition("scala");
+}
 #[test]
-fn test_definition_on_php() { check_definition("php"); }
+fn test_definition_on_php() {
+    check_definition("php");
+}
 #[test]
-fn test_definition_on_lua() { check_definition("lua"); }
+fn test_definition_on_lua() {
+    check_definition("lua");
+}
 #[test]
-fn test_definition_on_luau() { check_definition("luau"); }
+fn test_definition_on_luau() {
+    check_definition("luau");
+}
 #[test]
-fn test_definition_on_elixir() { check_definition("elixir"); }
+fn test_definition_on_elixir() {
+    check_definition("elixir");
+}
 #[test]
-fn test_definition_on_ocaml() { check_definition("ocaml"); }
+fn test_definition_on_ocaml() {
+    check_definition("ocaml");
+}
 
 // ---------------------------------------------------------------- cohesion
 #[test]
-fn test_cohesion_on_python() { check_cohesion("python"); }
+fn test_cohesion_on_python() {
+    check_cohesion("python");
+}
 #[test]
-fn test_cohesion_on_typescript() { check_cohesion("typescript"); }
+fn test_cohesion_on_typescript() {
+    check_cohesion("typescript");
+}
 #[test]
-fn test_cohesion_on_javascript() { check_cohesion("javascript"); }
+fn test_cohesion_on_javascript() {
+    check_cohesion("javascript");
+}
 #[test]
-fn test_cohesion_on_go() { check_cohesion("go"); }
+fn test_cohesion_on_go() {
+    check_cohesion("go");
+}
 #[test]
-fn test_cohesion_on_rust() { check_cohesion("rust"); }
+fn test_cohesion_on_rust() {
+    check_cohesion("rust");
+}
 #[test]
-fn test_cohesion_on_java() { check_cohesion("java"); }
+fn test_cohesion_on_java() {
+    check_cohesion("java");
+}
 #[test]
-fn test_cohesion_on_c() { check_cohesion("c"); }
+fn test_cohesion_on_c() {
+    check_cohesion("c");
+}
 #[test]
-fn test_cohesion_on_cpp() { check_cohesion("cpp"); }
+fn test_cohesion_on_cpp() {
+    check_cohesion("cpp");
+}
 #[test]
-fn test_cohesion_on_ruby() { check_cohesion("ruby"); }
+fn test_cohesion_on_ruby() {
+    check_cohesion("ruby");
+}
 #[test]
-fn test_cohesion_on_kotlin() { check_cohesion("kotlin"); }
+fn test_cohesion_on_kotlin() {
+    check_cohesion("kotlin");
+}
 #[test]
-fn test_cohesion_on_swift() { check_cohesion("swift"); }
+fn test_cohesion_on_swift() {
+    check_cohesion("swift");
+}
 #[test]
-fn test_cohesion_on_csharp() { check_cohesion("csharp"); }
+fn test_cohesion_on_csharp() {
+    check_cohesion("csharp");
+}
 #[test]
-fn test_cohesion_on_scala() { check_cohesion("scala"); }
+fn test_cohesion_on_scala() {
+    check_cohesion("scala");
+}
 #[test]
-fn test_cohesion_on_php() { check_cohesion("php"); }
+fn test_cohesion_on_php() {
+    check_cohesion("php");
+}
 #[test]
-fn test_cohesion_on_lua() { check_cohesion("lua"); }
+fn test_cohesion_on_lua() {
+    check_cohesion("lua");
+}
 #[test]
-fn test_cohesion_on_luau() { check_cohesion("luau"); }
+fn test_cohesion_on_luau() {
+    check_cohesion("luau");
+}
 #[test]
-fn test_cohesion_on_elixir() { check_cohesion("elixir"); }
+fn test_cohesion_on_elixir() {
+    check_cohesion("elixir");
+}
 #[test]
-fn test_cohesion_on_ocaml() { check_cohesion("ocaml"); }
+fn test_cohesion_on_ocaml() {
+    check_cohesion("ocaml");
+}
 
 // ---------------------------------------------------------------- slice
 #[test]
-fn test_slice_on_python() { check_slice("python"); }
+fn test_slice_on_python() {
+    check_slice("python");
+}
 #[test]
-fn test_slice_on_typescript() { check_slice("typescript"); }
+fn test_slice_on_typescript() {
+    check_slice("typescript");
+}
 #[test]
-fn test_slice_on_javascript() { check_slice("javascript"); }
+fn test_slice_on_javascript() {
+    check_slice("javascript");
+}
 #[test]
-fn test_slice_on_go() { check_slice("go"); }
+fn test_slice_on_go() {
+    check_slice("go");
+}
 #[test]
-fn test_slice_on_rust() { check_slice("rust"); }
+fn test_slice_on_rust() {
+    check_slice("rust");
+}
 #[test]
-fn test_slice_on_java() { check_slice("java"); }
+fn test_slice_on_java() {
+    check_slice("java");
+}
 #[test]
-fn test_slice_on_c() { check_slice("c"); }
+fn test_slice_on_c() {
+    check_slice("c");
+}
 #[test]
-fn test_slice_on_cpp() { check_slice("cpp"); }
+fn test_slice_on_cpp() {
+    check_slice("cpp");
+}
 #[test]
-fn test_slice_on_ruby() { check_slice("ruby"); }
+fn test_slice_on_ruby() {
+    check_slice("ruby");
+}
 #[test]
-fn test_slice_on_kotlin() { check_slice("kotlin"); }
+fn test_slice_on_kotlin() {
+    check_slice("kotlin");
+}
 #[test]
-fn test_slice_on_swift() { check_slice("swift"); }
+fn test_slice_on_swift() {
+    check_slice("swift");
+}
 #[test]
-fn test_slice_on_csharp() { check_slice("csharp"); }
+fn test_slice_on_csharp() {
+    check_slice("csharp");
+}
 #[test]
-fn test_slice_on_scala() { check_slice("scala"); }
+fn test_slice_on_scala() {
+    check_slice("scala");
+}
 #[test]
-fn test_slice_on_php() { check_slice("php"); }
+fn test_slice_on_php() {
+    check_slice("php");
+}
 #[test]
-fn test_slice_on_lua() { check_slice("lua"); }
+fn test_slice_on_lua() {
+    check_slice("lua");
+}
 #[test]
-fn test_slice_on_luau() { check_slice("luau"); }
+fn test_slice_on_luau() {
+    check_slice("luau");
+}
 #[test]
-fn test_slice_on_elixir() { check_slice("elixir"); }
+fn test_slice_on_elixir() {
+    check_slice("elixir");
+}
 #[test]
-fn test_slice_on_ocaml() { check_slice("ocaml"); }
+fn test_slice_on_ocaml() {
+    check_slice("ocaml");
+}
 
 // ---------------------------------------------------------------- chop
 #[test]
-fn test_chop_on_python() { check_chop("python"); }
+fn test_chop_on_python() {
+    check_chop("python");
+}
 #[test]
-fn test_chop_on_typescript() { check_chop("typescript"); }
+fn test_chop_on_typescript() {
+    check_chop("typescript");
+}
 #[test]
-fn test_chop_on_javascript() { check_chop("javascript"); }
+fn test_chop_on_javascript() {
+    check_chop("javascript");
+}
 #[test]
-fn test_chop_on_go() { check_chop("go"); }
+fn test_chop_on_go() {
+    check_chop("go");
+}
 #[test]
-fn test_chop_on_rust() { check_chop("rust"); }
+fn test_chop_on_rust() {
+    check_chop("rust");
+}
 #[test]
-fn test_chop_on_java() { check_chop("java"); }
+fn test_chop_on_java() {
+    check_chop("java");
+}
 #[test]
-fn test_chop_on_c() { check_chop("c"); }
+fn test_chop_on_c() {
+    check_chop("c");
+}
 #[test]
-fn test_chop_on_cpp() { check_chop("cpp"); }
+fn test_chop_on_cpp() {
+    check_chop("cpp");
+}
 #[test]
-fn test_chop_on_ruby() { check_chop("ruby"); }
+fn test_chop_on_ruby() {
+    check_chop("ruby");
+}
 #[test]
-fn test_chop_on_kotlin() { check_chop("kotlin"); }
+fn test_chop_on_kotlin() {
+    check_chop("kotlin");
+}
 #[test]
-fn test_chop_on_swift() { check_chop("swift"); }
+fn test_chop_on_swift() {
+    check_chop("swift");
+}
 #[test]
-fn test_chop_on_csharp() { check_chop("csharp"); }
+fn test_chop_on_csharp() {
+    check_chop("csharp");
+}
 #[test]
-fn test_chop_on_scala() { check_chop("scala"); }
+fn test_chop_on_scala() {
+    check_chop("scala");
+}
 #[test]
-fn test_chop_on_php() { check_chop("php"); }
+fn test_chop_on_php() {
+    check_chop("php");
+}
 #[test]
-fn test_chop_on_lua() { check_chop("lua"); }
+fn test_chop_on_lua() {
+    check_chop("lua");
+}
 #[test]
-fn test_chop_on_luau() { check_chop("luau"); }
+fn test_chop_on_luau() {
+    check_chop("luau");
+}
 #[test]
-fn test_chop_on_elixir() { check_chop("elixir"); }
+fn test_chop_on_elixir() {
+    check_chop("elixir");
+}
 #[test]
-fn test_chop_on_ocaml() { check_chop("ocaml"); }
+fn test_chop_on_ocaml() {
+    check_chop("ocaml");
+}
 
 // ---------------------------------------------------------------- reaching-defs
 #[test]
-fn test_reaching_defs_on_python() { check_reaching_defs("python"); }
+fn test_reaching_defs_on_python() {
+    check_reaching_defs("python");
+}
 #[test]
-fn test_reaching_defs_on_typescript() { check_reaching_defs("typescript"); }
+fn test_reaching_defs_on_typescript() {
+    check_reaching_defs("typescript");
+}
 #[test]
-fn test_reaching_defs_on_javascript() { check_reaching_defs("javascript"); }
+fn test_reaching_defs_on_javascript() {
+    check_reaching_defs("javascript");
+}
 #[test]
-fn test_reaching_defs_on_go() { check_reaching_defs("go"); }
+fn test_reaching_defs_on_go() {
+    check_reaching_defs("go");
+}
 #[test]
-fn test_reaching_defs_on_rust() { check_reaching_defs("rust"); }
+fn test_reaching_defs_on_rust() {
+    check_reaching_defs("rust");
+}
 #[test]
-fn test_reaching_defs_on_java() { check_reaching_defs("java"); }
+fn test_reaching_defs_on_java() {
+    check_reaching_defs("java");
+}
 #[test]
-fn test_reaching_defs_on_c() { check_reaching_defs("c"); }
+fn test_reaching_defs_on_c() {
+    check_reaching_defs("c");
+}
 #[test]
-fn test_reaching_defs_on_cpp() { check_reaching_defs("cpp"); }
+fn test_reaching_defs_on_cpp() {
+    check_reaching_defs("cpp");
+}
 #[test]
-fn test_reaching_defs_on_ruby() { check_reaching_defs("ruby"); }
+fn test_reaching_defs_on_ruby() {
+    check_reaching_defs("ruby");
+}
 #[test]
-fn test_reaching_defs_on_kotlin() { check_reaching_defs("kotlin"); }
+fn test_reaching_defs_on_kotlin() {
+    check_reaching_defs("kotlin");
+}
 #[test]
-fn test_reaching_defs_on_swift() { check_reaching_defs("swift"); }
+fn test_reaching_defs_on_swift() {
+    check_reaching_defs("swift");
+}
 #[test]
-fn test_reaching_defs_on_csharp() { check_reaching_defs("csharp"); }
+fn test_reaching_defs_on_csharp() {
+    check_reaching_defs("csharp");
+}
 #[test]
-fn test_reaching_defs_on_scala() { check_reaching_defs("scala"); }
+fn test_reaching_defs_on_scala() {
+    check_reaching_defs("scala");
+}
 #[test]
-fn test_reaching_defs_on_php() { check_reaching_defs("php"); }
+fn test_reaching_defs_on_php() {
+    check_reaching_defs("php");
+}
 #[test]
-fn test_reaching_defs_on_lua() { check_reaching_defs("lua"); }
+fn test_reaching_defs_on_lua() {
+    check_reaching_defs("lua");
+}
 #[test]
-fn test_reaching_defs_on_luau() { check_reaching_defs("luau"); }
+fn test_reaching_defs_on_luau() {
+    check_reaching_defs("luau");
+}
 #[test]
-fn test_reaching_defs_on_elixir() { check_reaching_defs("elixir"); }
+fn test_reaching_defs_on_elixir() {
+    check_reaching_defs("elixir");
+}
 #[test]
-fn test_reaching_defs_on_ocaml() { check_reaching_defs("ocaml"); }
+fn test_reaching_defs_on_ocaml() {
+    check_reaching_defs("ocaml");
+}
 
 // ---------------------------------------------------------------- available
 #[test]
-fn test_available_on_python() { check_available("python"); }
+fn test_available_on_python() {
+    check_available("python");
+}
 #[test]
-fn test_available_on_typescript() { check_available("typescript"); }
+fn test_available_on_typescript() {
+    check_available("typescript");
+}
 #[test]
-fn test_available_on_javascript() { check_available("javascript"); }
+fn test_available_on_javascript() {
+    check_available("javascript");
+}
 #[test]
-fn test_available_on_go() { check_available("go"); }
+fn test_available_on_go() {
+    check_available("go");
+}
 #[test]
-fn test_available_on_rust() { check_available("rust"); }
+fn test_available_on_rust() {
+    check_available("rust");
+}
 #[test]
-fn test_available_on_java() { check_available("java"); }
+fn test_available_on_java() {
+    check_available("java");
+}
 #[test]
-fn test_available_on_c() { check_available("c"); }
+fn test_available_on_c() {
+    check_available("c");
+}
 #[test]
-fn test_available_on_cpp() { check_available("cpp"); }
+fn test_available_on_cpp() {
+    check_available("cpp");
+}
 #[test]
-fn test_available_on_ruby() { check_available("ruby"); }
+fn test_available_on_ruby() {
+    check_available("ruby");
+}
 #[test]
-fn test_available_on_kotlin() { check_available("kotlin"); }
+fn test_available_on_kotlin() {
+    check_available("kotlin");
+}
 #[test]
-fn test_available_on_swift() { check_available("swift"); }
+fn test_available_on_swift() {
+    check_available("swift");
+}
 #[test]
-fn test_available_on_csharp() { check_available("csharp"); }
+fn test_available_on_csharp() {
+    check_available("csharp");
+}
 #[test]
-fn test_available_on_scala() { check_available("scala"); }
+fn test_available_on_scala() {
+    check_available("scala");
+}
 #[test]
-fn test_available_on_php() { check_available("php"); }
+fn test_available_on_php() {
+    check_available("php");
+}
 #[test]
-fn test_available_on_lua() { check_available("lua"); }
+fn test_available_on_lua() {
+    check_available("lua");
+}
 #[test]
-fn test_available_on_luau() { check_available("luau"); }
+fn test_available_on_luau() {
+    check_available("luau");
+}
 #[test]
-fn test_available_on_elixir() { check_available("elixir"); }
+fn test_available_on_elixir() {
+    check_available("elixir");
+}
 #[test]
-fn test_available_on_ocaml() { check_available("ocaml"); }
+fn test_available_on_ocaml() {
+    check_available("ocaml");
+}
 
 // ---------------------------------------------------------------- dead-stores
 #[test]
-fn test_dead_stores_on_python() { check_dead_stores("python"); }
+fn test_dead_stores_on_python() {
+    check_dead_stores("python");
+}
 #[test]
-fn test_dead_stores_on_typescript() { check_dead_stores("typescript"); }
+fn test_dead_stores_on_typescript() {
+    check_dead_stores("typescript");
+}
 #[test]
-fn test_dead_stores_on_javascript() { check_dead_stores("javascript"); }
+fn test_dead_stores_on_javascript() {
+    check_dead_stores("javascript");
+}
 #[test]
-fn test_dead_stores_on_go() { check_dead_stores("go"); }
+fn test_dead_stores_on_go() {
+    check_dead_stores("go");
+}
 #[test]
-fn test_dead_stores_on_rust() { check_dead_stores("rust"); }
+fn test_dead_stores_on_rust() {
+    check_dead_stores("rust");
+}
 #[test]
-fn test_dead_stores_on_java() { check_dead_stores("java"); }
+fn test_dead_stores_on_java() {
+    check_dead_stores("java");
+}
 #[test]
-fn test_dead_stores_on_c() { check_dead_stores("c"); }
+fn test_dead_stores_on_c() {
+    check_dead_stores("c");
+}
 #[test]
-fn test_dead_stores_on_cpp() { check_dead_stores("cpp"); }
+fn test_dead_stores_on_cpp() {
+    check_dead_stores("cpp");
+}
 #[test]
-fn test_dead_stores_on_ruby() { check_dead_stores("ruby"); }
+fn test_dead_stores_on_ruby() {
+    check_dead_stores("ruby");
+}
 #[test]
-fn test_dead_stores_on_kotlin() { check_dead_stores("kotlin"); }
+fn test_dead_stores_on_kotlin() {
+    check_dead_stores("kotlin");
+}
 #[test]
-fn test_dead_stores_on_swift() { check_dead_stores("swift"); }
+fn test_dead_stores_on_swift() {
+    check_dead_stores("swift");
+}
 #[test]
-fn test_dead_stores_on_csharp() { check_dead_stores("csharp"); }
+fn test_dead_stores_on_csharp() {
+    check_dead_stores("csharp");
+}
 #[test]
-fn test_dead_stores_on_scala() { check_dead_stores("scala"); }
+fn test_dead_stores_on_scala() {
+    check_dead_stores("scala");
+}
 #[test]
-fn test_dead_stores_on_php() { check_dead_stores("php"); }
+fn test_dead_stores_on_php() {
+    check_dead_stores("php");
+}
 #[test]
-fn test_dead_stores_on_lua() { check_dead_stores("lua"); }
+fn test_dead_stores_on_lua() {
+    check_dead_stores("lua");
+}
 #[test]
-fn test_dead_stores_on_luau() { check_dead_stores("luau"); }
+fn test_dead_stores_on_luau() {
+    check_dead_stores("luau");
+}
 #[test]
-fn test_dead_stores_on_elixir() { check_dead_stores("elixir"); }
+fn test_dead_stores_on_elixir() {
+    check_dead_stores("elixir");
+}
 #[test]
-fn test_dead_stores_on_ocaml() { check_dead_stores("ocaml"); }
+fn test_dead_stores_on_ocaml() {
+    check_dead_stores("ocaml");
+}
 
 // ---------------------------------------------------------------- resources
 #[test]
-fn test_resources_on_python() { check_resources("python"); }
+fn test_resources_on_python() {
+    check_resources("python");
+}
 #[test]
-fn test_resources_on_typescript() { check_resources("typescript"); }
+fn test_resources_on_typescript() {
+    check_resources("typescript");
+}
 #[test]
-fn test_resources_on_javascript() { check_resources("javascript"); }
+fn test_resources_on_javascript() {
+    check_resources("javascript");
+}
 #[test]
-fn test_resources_on_go() { check_resources("go"); }
+fn test_resources_on_go() {
+    check_resources("go");
+}
 #[test]
-fn test_resources_on_rust() { check_resources("rust"); }
+fn test_resources_on_rust() {
+    check_resources("rust");
+}
 #[test]
-fn test_resources_on_java() { check_resources("java"); }
+fn test_resources_on_java() {
+    check_resources("java");
+}
 #[test]
-fn test_resources_on_c() { check_resources("c"); }
+fn test_resources_on_c() {
+    check_resources("c");
+}
 #[test]
-fn test_resources_on_cpp() { check_resources("cpp"); }
+fn test_resources_on_cpp() {
+    check_resources("cpp");
+}
 #[test]
-fn test_resources_on_ruby() { check_resources("ruby"); }
+fn test_resources_on_ruby() {
+    check_resources("ruby");
+}
 #[test]
-fn test_resources_on_kotlin() { check_resources("kotlin"); }
+fn test_resources_on_kotlin() {
+    check_resources("kotlin");
+}
 #[test]
-fn test_resources_on_swift() { check_resources("swift"); }
+fn test_resources_on_swift() {
+    check_resources("swift");
+}
 #[test]
-fn test_resources_on_csharp() { check_resources("csharp"); }
+fn test_resources_on_csharp() {
+    check_resources("csharp");
+}
 #[test]
-fn test_resources_on_scala() { check_resources("scala"); }
+fn test_resources_on_scala() {
+    check_resources("scala");
+}
 #[test]
-fn test_resources_on_php() { check_resources("php"); }
+fn test_resources_on_php() {
+    check_resources("php");
+}
 #[test]
-fn test_resources_on_lua() { check_resources("lua"); }
+fn test_resources_on_lua() {
+    check_resources("lua");
+}
 #[test]
-fn test_resources_on_luau() { check_resources("luau"); }
+fn test_resources_on_luau() {
+    check_resources("luau");
+}
 #[test]
-fn test_resources_on_elixir() { check_resources("elixir"); }
+fn test_resources_on_elixir() {
+    check_resources("elixir");
+}
 #[test]
-fn test_resources_on_ocaml() { check_resources("ocaml"); }
+fn test_resources_on_ocaml() {
+    check_resources("ocaml");
+}
 
 // ---------------------------------------------------------------- explain
 #[test]
-fn test_explain_on_python() { check_explain("python"); }
+fn test_explain_on_python() {
+    check_explain("python");
+}
 #[test]
-fn test_explain_on_typescript() { check_explain("typescript"); }
+fn test_explain_on_typescript() {
+    check_explain("typescript");
+}
 #[test]
-fn test_explain_on_javascript() { check_explain("javascript"); }
+fn test_explain_on_javascript() {
+    check_explain("javascript");
+}
 #[test]
-fn test_explain_on_go() { check_explain("go"); }
+fn test_explain_on_go() {
+    check_explain("go");
+}
 #[test]
-fn test_explain_on_rust() { check_explain("rust"); }
+fn test_explain_on_rust() {
+    check_explain("rust");
+}
 #[test]
-fn test_explain_on_java() { check_explain("java"); }
+fn test_explain_on_java() {
+    check_explain("java");
+}
 #[test]
-fn test_explain_on_c() { check_explain("c"); }
+fn test_explain_on_c() {
+    check_explain("c");
+}
 #[test]
-fn test_explain_on_cpp() { check_explain("cpp"); }
+fn test_explain_on_cpp() {
+    check_explain("cpp");
+}
 #[test]
-fn test_explain_on_ruby() { check_explain("ruby"); }
+fn test_explain_on_ruby() {
+    check_explain("ruby");
+}
 #[test]
-fn test_explain_on_kotlin() { check_explain("kotlin"); }
+fn test_explain_on_kotlin() {
+    check_explain("kotlin");
+}
 #[test]
-fn test_explain_on_swift() { check_explain("swift"); }
+fn test_explain_on_swift() {
+    check_explain("swift");
+}
 #[test]
-fn test_explain_on_csharp() { check_explain("csharp"); }
+fn test_explain_on_csharp() {
+    check_explain("csharp");
+}
 #[test]
-fn test_explain_on_scala() { check_explain("scala"); }
+fn test_explain_on_scala() {
+    check_explain("scala");
+}
 #[test]
-fn test_explain_on_php() { check_explain("php"); }
+fn test_explain_on_php() {
+    check_explain("php");
+}
 #[test]
-fn test_explain_on_lua() { check_explain("lua"); }
+fn test_explain_on_lua() {
+    check_explain("lua");
+}
 #[test]
-fn test_explain_on_luau() { check_explain("luau"); }
+fn test_explain_on_luau() {
+    check_explain("luau");
+}
 #[test]
-fn test_explain_on_elixir() { check_explain("elixir"); }
+fn test_explain_on_elixir() {
+    check_explain("elixir");
+}
 #[test]
-fn test_explain_on_ocaml() { check_explain("ocaml"); }
+fn test_explain_on_ocaml() {
+    check_explain("ocaml");
+}
 
 // ---------------------------------------------------------------- contracts
 #[test]
-fn test_contracts_on_python() { check_contracts("python"); }
+fn test_contracts_on_python() {
+    check_contracts("python");
+}
 #[test]
-fn test_contracts_on_typescript() { check_contracts("typescript"); }
+fn test_contracts_on_typescript() {
+    check_contracts("typescript");
+}
 #[test]
-fn test_contracts_on_javascript() { check_contracts("javascript"); }
+fn test_contracts_on_javascript() {
+    check_contracts("javascript");
+}
 #[test]
-fn test_contracts_on_go() { check_contracts("go"); }
+fn test_contracts_on_go() {
+    check_contracts("go");
+}
 #[test]
-fn test_contracts_on_rust() { check_contracts("rust"); }
+fn test_contracts_on_rust() {
+    check_contracts("rust");
+}
 #[test]
-fn test_contracts_on_java() { check_contracts("java"); }
+fn test_contracts_on_java() {
+    check_contracts("java");
+}
 #[test]
-fn test_contracts_on_c() { check_contracts("c"); }
+fn test_contracts_on_c() {
+    check_contracts("c");
+}
 #[test]
-fn test_contracts_on_cpp() { check_contracts("cpp"); }
+fn test_contracts_on_cpp() {
+    check_contracts("cpp");
+}
 #[test]
-fn test_contracts_on_ruby() { check_contracts("ruby"); }
+fn test_contracts_on_ruby() {
+    check_contracts("ruby");
+}
 #[test]
-fn test_contracts_on_kotlin() { check_contracts("kotlin"); }
+fn test_contracts_on_kotlin() {
+    check_contracts("kotlin");
+}
 #[test]
-fn test_contracts_on_swift() { check_contracts("swift"); }
+fn test_contracts_on_swift() {
+    check_contracts("swift");
+}
 #[test]
-fn test_contracts_on_csharp() { check_contracts("csharp"); }
+fn test_contracts_on_csharp() {
+    check_contracts("csharp");
+}
 #[test]
-fn test_contracts_on_scala() { check_contracts("scala"); }
+fn test_contracts_on_scala() {
+    check_contracts("scala");
+}
 #[test]
-fn test_contracts_on_php() { check_contracts("php"); }
+fn test_contracts_on_php() {
+    check_contracts("php");
+}
 #[test]
-fn test_contracts_on_lua() { check_contracts("lua"); }
+fn test_contracts_on_lua() {
+    check_contracts("lua");
+}
 #[test]
-fn test_contracts_on_luau() { check_contracts("luau"); }
+fn test_contracts_on_luau() {
+    check_contracts("luau");
+}
 #[test]
-fn test_contracts_on_elixir() { check_contracts("elixir"); }
+fn test_contracts_on_elixir() {
+    check_contracts("elixir");
+}
 #[test]
-fn test_contracts_on_ocaml() { check_contracts("ocaml"); }
+fn test_contracts_on_ocaml() {
+    check_contracts("ocaml");
+}
 
 // ---------------------------------------------------------------- taint
 #[test]
-fn test_taint_on_python() { check_taint("python"); }
+fn test_taint_on_python() {
+    check_taint("python");
+}
 #[test]
-fn test_taint_on_typescript() { check_taint("typescript"); }
+fn test_taint_on_typescript() {
+    check_taint("typescript");
+}
 #[test]
-fn test_taint_on_javascript() { check_taint("javascript"); }
+fn test_taint_on_javascript() {
+    check_taint("javascript");
+}
 #[test]
-fn test_taint_on_go() { check_taint("go"); }
+fn test_taint_on_go() {
+    check_taint("go");
+}
 #[test]
-fn test_taint_on_rust() { check_taint("rust"); }
+fn test_taint_on_rust() {
+    check_taint("rust");
+}
 #[test]
-fn test_taint_on_java() { check_taint("java"); }
+fn test_taint_on_java() {
+    check_taint("java");
+}
 #[test]
-fn test_taint_on_c() { check_taint("c"); }
+fn test_taint_on_c() {
+    check_taint("c");
+}
 #[test]
-fn test_taint_on_cpp() { check_taint("cpp"); }
+fn test_taint_on_cpp() {
+    check_taint("cpp");
+}
 #[test]
-fn test_taint_on_ruby() { check_taint("ruby"); }
+fn test_taint_on_ruby() {
+    check_taint("ruby");
+}
 #[test]
-fn test_taint_on_kotlin() { check_taint("kotlin"); }
+fn test_taint_on_kotlin() {
+    check_taint("kotlin");
+}
 #[test]
-fn test_taint_on_swift() { check_taint("swift"); }
+fn test_taint_on_swift() {
+    check_taint("swift");
+}
 #[test]
-fn test_taint_on_csharp() { check_taint("csharp"); }
+fn test_taint_on_csharp() {
+    check_taint("csharp");
+}
 #[test]
-fn test_taint_on_scala() { check_taint("scala"); }
+fn test_taint_on_scala() {
+    check_taint("scala");
+}
 #[test]
-fn test_taint_on_php() { check_taint("php"); }
+fn test_taint_on_php() {
+    check_taint("php");
+}
 #[test]
-fn test_taint_on_lua() { check_taint("lua"); }
+fn test_taint_on_lua() {
+    check_taint("lua");
+}
 #[test]
-fn test_taint_on_luau() { check_taint("luau"); }
+fn test_taint_on_luau() {
+    check_taint("luau");
+}
 #[test]
-fn test_taint_on_elixir() { check_taint("elixir"); }
+fn test_taint_on_elixir() {
+    check_taint("elixir");
+}
 #[test]
-fn test_taint_on_ocaml() { check_taint("ocaml"); }
+fn test_taint_on_ocaml() {
+    check_taint("ocaml");
+}
 
 // ---------------------------------------------------------------- diff
 #[test]
-fn test_diff_on_python() { check_diff("python"); }
+fn test_diff_on_python() {
+    check_diff("python");
+}
 #[test]
-fn test_diff_on_typescript() { check_diff("typescript"); }
+fn test_diff_on_typescript() {
+    check_diff("typescript");
+}
 #[test]
-fn test_diff_on_javascript() { check_diff("javascript"); }
+fn test_diff_on_javascript() {
+    check_diff("javascript");
+}
 #[test]
-fn test_diff_on_go() { check_diff("go"); }
+fn test_diff_on_go() {
+    check_diff("go");
+}
 #[test]
-fn test_diff_on_rust() { check_diff("rust"); }
+fn test_diff_on_rust() {
+    check_diff("rust");
+}
 #[test]
-fn test_diff_on_java() { check_diff("java"); }
+fn test_diff_on_java() {
+    check_diff("java");
+}
 #[test]
-fn test_diff_on_c() { check_diff("c"); }
+fn test_diff_on_c() {
+    check_diff("c");
+}
 #[test]
-fn test_diff_on_cpp() { check_diff("cpp"); }
+fn test_diff_on_cpp() {
+    check_diff("cpp");
+}
 #[test]
-fn test_diff_on_ruby() { check_diff("ruby"); }
+fn test_diff_on_ruby() {
+    check_diff("ruby");
+}
 #[test]
-fn test_diff_on_kotlin() { check_diff("kotlin"); }
+fn test_diff_on_kotlin() {
+    check_diff("kotlin");
+}
 #[test]
-fn test_diff_on_swift() { check_diff("swift"); }
+fn test_diff_on_swift() {
+    check_diff("swift");
+}
 #[test]
-fn test_diff_on_csharp() { check_diff("csharp"); }
+fn test_diff_on_csharp() {
+    check_diff("csharp");
+}
 #[test]
-fn test_diff_on_scala() { check_diff("scala"); }
+fn test_diff_on_scala() {
+    check_diff("scala");
+}
 #[test]
-fn test_diff_on_php() { check_diff("php"); }
+fn test_diff_on_php() {
+    check_diff("php");
+}
 #[test]
-fn test_diff_on_lua() { check_diff("lua"); }
+fn test_diff_on_lua() {
+    check_diff("lua");
+}
 #[test]
-fn test_diff_on_luau() { check_diff("luau"); }
+fn test_diff_on_luau() {
+    check_diff("luau");
+}
 #[test]
-fn test_diff_on_elixir() { check_diff("elixir"); }
+fn test_diff_on_elixir() {
+    check_diff("elixir");
+}
 #[test]
-fn test_diff_on_ocaml() { check_diff("ocaml"); }
+fn test_diff_on_ocaml() {
+    check_diff("ocaml");
+}
 
 // ---------------------------------------------------------------- dice
 #[test]
-fn test_dice_on_python() { check_dice("python"); }
+fn test_dice_on_python() {
+    check_dice("python");
+}
 #[test]
-fn test_dice_on_typescript() { check_dice("typescript"); }
+fn test_dice_on_typescript() {
+    check_dice("typescript");
+}
 #[test]
-fn test_dice_on_javascript() { check_dice("javascript"); }
+fn test_dice_on_javascript() {
+    check_dice("javascript");
+}
 #[test]
-fn test_dice_on_go() { check_dice("go"); }
+fn test_dice_on_go() {
+    check_dice("go");
+}
 #[test]
-fn test_dice_on_rust() { check_dice("rust"); }
+fn test_dice_on_rust() {
+    check_dice("rust");
+}
 #[test]
-fn test_dice_on_java() { check_dice("java"); }
+fn test_dice_on_java() {
+    check_dice("java");
+}
 #[test]
-fn test_dice_on_c() { check_dice("c"); }
+fn test_dice_on_c() {
+    check_dice("c");
+}
 #[test]
-fn test_dice_on_cpp() { check_dice("cpp"); }
+fn test_dice_on_cpp() {
+    check_dice("cpp");
+}
 #[test]
-fn test_dice_on_ruby() { check_dice("ruby"); }
+fn test_dice_on_ruby() {
+    check_dice("ruby");
+}
 #[test]
-fn test_dice_on_kotlin() { check_dice("kotlin"); }
+fn test_dice_on_kotlin() {
+    check_dice("kotlin");
+}
 #[test]
-fn test_dice_on_swift() { check_dice("swift"); }
+fn test_dice_on_swift() {
+    check_dice("swift");
+}
 #[test]
-fn test_dice_on_csharp() { check_dice("csharp"); }
+fn test_dice_on_csharp() {
+    check_dice("csharp");
+}
 #[test]
-fn test_dice_on_scala() { check_dice("scala"); }
+fn test_dice_on_scala() {
+    check_dice("scala");
+}
 #[test]
-fn test_dice_on_php() { check_dice("php"); }
+fn test_dice_on_php() {
+    check_dice("php");
+}
 #[test]
-fn test_dice_on_lua() { check_dice("lua"); }
+fn test_dice_on_lua() {
+    check_dice("lua");
+}
 #[test]
-fn test_dice_on_luau() { check_dice("luau"); }
+fn test_dice_on_luau() {
+    check_dice("luau");
+}
 #[test]
-fn test_dice_on_elixir() { check_dice("elixir"); }
+fn test_dice_on_elixir() {
+    check_dice("elixir");
+}
 #[test]
-fn test_dice_on_ocaml() { check_dice("ocaml"); }
+fn test_dice_on_ocaml() {
+    check_dice("ocaml");
+}
 
 // ---------------------------------------------------------------- coupling
 #[test]
-fn test_coupling_on_python() { check_coupling("python"); }
+fn test_coupling_on_python() {
+    check_coupling("python");
+}
 #[test]
-fn test_coupling_on_typescript() { check_coupling("typescript"); }
+fn test_coupling_on_typescript() {
+    check_coupling("typescript");
+}
 #[test]
-fn test_coupling_on_javascript() { check_coupling("javascript"); }
+fn test_coupling_on_javascript() {
+    check_coupling("javascript");
+}
 #[test]
-fn test_coupling_on_go() { check_coupling("go"); }
+fn test_coupling_on_go() {
+    check_coupling("go");
+}
 #[test]
-fn test_coupling_on_rust() { check_coupling("rust"); }
+fn test_coupling_on_rust() {
+    check_coupling("rust");
+}
 #[test]
-fn test_coupling_on_java() { check_coupling("java"); }
+fn test_coupling_on_java() {
+    check_coupling("java");
+}
 #[test]
-fn test_coupling_on_c() { check_coupling("c"); }
+fn test_coupling_on_c() {
+    check_coupling("c");
+}
 #[test]
-fn test_coupling_on_cpp() { check_coupling("cpp"); }
+fn test_coupling_on_cpp() {
+    check_coupling("cpp");
+}
 #[test]
-fn test_coupling_on_ruby() { check_coupling("ruby"); }
+fn test_coupling_on_ruby() {
+    check_coupling("ruby");
+}
 #[test]
-fn test_coupling_on_kotlin() { check_coupling("kotlin"); }
+fn test_coupling_on_kotlin() {
+    check_coupling("kotlin");
+}
 #[test]
-fn test_coupling_on_swift() { check_coupling("swift"); }
+fn test_coupling_on_swift() {
+    check_coupling("swift");
+}
 #[test]
-fn test_coupling_on_csharp() { check_coupling("csharp"); }
+fn test_coupling_on_csharp() {
+    check_coupling("csharp");
+}
 #[test]
-fn test_coupling_on_scala() { check_coupling("scala"); }
+fn test_coupling_on_scala() {
+    check_coupling("scala");
+}
 #[test]
-fn test_coupling_on_php() { check_coupling("php"); }
+fn test_coupling_on_php() {
+    check_coupling("php");
+}
 #[test]
-fn test_coupling_on_lua() { check_coupling("lua"); }
+fn test_coupling_on_lua() {
+    check_coupling("lua");
+}
 #[test]
-fn test_coupling_on_luau() { check_coupling("luau"); }
+fn test_coupling_on_luau() {
+    check_coupling("luau");
+}
 #[test]
-fn test_coupling_on_elixir() { check_coupling("elixir"); }
+fn test_coupling_on_elixir() {
+    check_coupling("elixir");
+}
 #[test]
-fn test_coupling_on_ocaml() { check_coupling("ocaml"); }
+fn test_coupling_on_ocaml() {
+    check_coupling("ocaml");
+}
 
 // ---------------------------------------------------------------- embed
 #[test]
-fn test_embed_on_python() { check_embed("python"); }
+fn test_embed_on_python() {
+    check_embed("python");
+}
 #[test]
-fn test_embed_on_typescript() { check_embed("typescript"); }
+fn test_embed_on_typescript() {
+    check_embed("typescript");
+}
 #[test]
-fn test_embed_on_javascript() { check_embed("javascript"); }
+fn test_embed_on_javascript() {
+    check_embed("javascript");
+}
 #[test]
-fn test_embed_on_go() { check_embed("go"); }
+fn test_embed_on_go() {
+    check_embed("go");
+}
 #[test]
-fn test_embed_on_rust() { check_embed("rust"); }
+fn test_embed_on_rust() {
+    check_embed("rust");
+}
 #[test]
-fn test_embed_on_java() { check_embed("java"); }
+fn test_embed_on_java() {
+    check_embed("java");
+}
 #[test]
-fn test_embed_on_c() { check_embed("c"); }
+fn test_embed_on_c() {
+    check_embed("c");
+}
 #[test]
-fn test_embed_on_cpp() { check_embed("cpp"); }
+fn test_embed_on_cpp() {
+    check_embed("cpp");
+}
 #[test]
-fn test_embed_on_ruby() { check_embed("ruby"); }
+fn test_embed_on_ruby() {
+    check_embed("ruby");
+}
 #[test]
-fn test_embed_on_kotlin() { check_embed("kotlin"); }
+fn test_embed_on_kotlin() {
+    check_embed("kotlin");
+}
 #[test]
-fn test_embed_on_swift() { check_embed("swift"); }
+fn test_embed_on_swift() {
+    check_embed("swift");
+}
 #[test]
-fn test_embed_on_csharp() { check_embed("csharp"); }
+fn test_embed_on_csharp() {
+    check_embed("csharp");
+}
 #[test]
-fn test_embed_on_scala() { check_embed("scala"); }
+fn test_embed_on_scala() {
+    check_embed("scala");
+}
 #[test]
-fn test_embed_on_php() { check_embed("php"); }
+fn test_embed_on_php() {
+    check_embed("php");
+}
 #[test]
-fn test_embed_on_lua() { check_embed("lua"); }
+fn test_embed_on_lua() {
+    check_embed("lua");
+}
 #[test]
-fn test_embed_on_luau() { check_embed("luau"); }
+fn test_embed_on_luau() {
+    check_embed("luau");
+}
 #[test]
-fn test_embed_on_elixir() { check_embed("elixir"); }
+fn test_embed_on_elixir() {
+    check_embed("elixir");
+}
 #[test]
-fn test_embed_on_ocaml() { check_embed("ocaml"); }
+fn test_embed_on_ocaml() {
+    check_embed("ocaml");
+}
 
 // ---------------------------------------------------------------- semantic
 #[test]
-fn test_semantic_on_python() { check_semantic("python"); }
+fn test_semantic_on_python() {
+    check_semantic("python");
+}
 #[test]
-fn test_semantic_on_typescript() { check_semantic("typescript"); }
+fn test_semantic_on_typescript() {
+    check_semantic("typescript");
+}
 #[test]
-fn test_semantic_on_javascript() { check_semantic("javascript"); }
+fn test_semantic_on_javascript() {
+    check_semantic("javascript");
+}
 #[test]
-fn test_semantic_on_go() { check_semantic("go"); }
+fn test_semantic_on_go() {
+    check_semantic("go");
+}
 #[test]
-fn test_semantic_on_rust() { check_semantic("rust"); }
+fn test_semantic_on_rust() {
+    check_semantic("rust");
+}
 #[test]
-fn test_semantic_on_java() { check_semantic("java"); }
+fn test_semantic_on_java() {
+    check_semantic("java");
+}
 #[test]
-fn test_semantic_on_c() { check_semantic("c"); }
+fn test_semantic_on_c() {
+    check_semantic("c");
+}
 #[test]
-fn test_semantic_on_cpp() { check_semantic("cpp"); }
+fn test_semantic_on_cpp() {
+    check_semantic("cpp");
+}
 #[test]
-fn test_semantic_on_ruby() { check_semantic("ruby"); }
+fn test_semantic_on_ruby() {
+    check_semantic("ruby");
+}
 #[test]
-fn test_semantic_on_kotlin() { check_semantic("kotlin"); }
+fn test_semantic_on_kotlin() {
+    check_semantic("kotlin");
+}
 #[test]
-fn test_semantic_on_swift() { check_semantic("swift"); }
+fn test_semantic_on_swift() {
+    check_semantic("swift");
+}
 #[test]
-fn test_semantic_on_csharp() { check_semantic("csharp"); }
+fn test_semantic_on_csharp() {
+    check_semantic("csharp");
+}
 #[test]
-fn test_semantic_on_scala() { check_semantic("scala"); }
+fn test_semantic_on_scala() {
+    check_semantic("scala");
+}
 #[test]
-fn test_semantic_on_php() { check_semantic("php"); }
+fn test_semantic_on_php() {
+    check_semantic("php");
+}
 #[test]
-fn test_semantic_on_lua() { check_semantic("lua"); }
+fn test_semantic_on_lua() {
+    check_semantic("lua");
+}
 #[test]
-fn test_semantic_on_luau() { check_semantic("luau"); }
+fn test_semantic_on_luau() {
+    check_semantic("luau");
+}
 #[test]
-fn test_semantic_on_elixir() { check_semantic("elixir"); }
+fn test_semantic_on_elixir() {
+    check_semantic("elixir");
+}
 #[test]
-fn test_semantic_on_ocaml() { check_semantic("ocaml"); }
+fn test_semantic_on_ocaml() {
+    check_semantic("ocaml");
+}
 
 // ---------------------------------------------------------------- similar
 #[test]
-fn test_similar_on_python() { check_similar("python"); }
+fn test_similar_on_python() {
+    check_similar("python");
+}
 #[test]
-fn test_similar_on_typescript() { check_similar("typescript"); }
+fn test_similar_on_typescript() {
+    check_similar("typescript");
+}
 #[test]
-fn test_similar_on_javascript() { check_similar("javascript"); }
+fn test_similar_on_javascript() {
+    check_similar("javascript");
+}
 #[test]
-fn test_similar_on_go() { check_similar("go"); }
+fn test_similar_on_go() {
+    check_similar("go");
+}
 #[test]
-fn test_similar_on_rust() { check_similar("rust"); }
+fn test_similar_on_rust() {
+    check_similar("rust");
+}
 #[test]
-fn test_similar_on_java() { check_similar("java"); }
+fn test_similar_on_java() {
+    check_similar("java");
+}
 #[test]
-fn test_similar_on_c() { check_similar("c"); }
+fn test_similar_on_c() {
+    check_similar("c");
+}
 #[test]
-fn test_similar_on_cpp() { check_similar("cpp"); }
+fn test_similar_on_cpp() {
+    check_similar("cpp");
+}
 #[test]
-fn test_similar_on_ruby() { check_similar("ruby"); }
+fn test_similar_on_ruby() {
+    check_similar("ruby");
+}
 #[test]
-fn test_similar_on_kotlin() { check_similar("kotlin"); }
+fn test_similar_on_kotlin() {
+    check_similar("kotlin");
+}
 #[test]
-fn test_similar_on_swift() { check_similar("swift"); }
+fn test_similar_on_swift() {
+    check_similar("swift");
+}
 #[test]
-fn test_similar_on_csharp() { check_similar("csharp"); }
+fn test_similar_on_csharp() {
+    check_similar("csharp");
+}
 #[test]
-fn test_similar_on_scala() { check_similar("scala"); }
+fn test_similar_on_scala() {
+    check_similar("scala");
+}
 #[test]
-fn test_similar_on_php() { check_similar("php"); }
+fn test_similar_on_php() {
+    check_similar("php");
+}
 #[test]
-fn test_similar_on_lua() { check_similar("lua"); }
+fn test_similar_on_lua() {
+    check_similar("lua");
+}
 #[test]
-fn test_similar_on_luau() { check_similar("luau"); }
+fn test_similar_on_luau() {
+    check_similar("luau");
+}
 #[test]
-fn test_similar_on_elixir() { check_similar("elixir"); }
+fn test_similar_on_elixir() {
+    check_similar("elixir");
+}
 #[test]
-fn test_similar_on_ocaml() { check_similar("ocaml"); }
+fn test_similar_on_ocaml() {
+    check_similar("ocaml");
+}
 
 // ---------------------------------------------------------------- surface
 #[test]
-fn test_surface_on_python() { check_surface("python"); }
+fn test_surface_on_python() {
+    check_surface("python");
+}
 #[test]
-fn test_surface_on_typescript() { check_surface("typescript"); }
+fn test_surface_on_typescript() {
+    check_surface("typescript");
+}
 #[test]
-fn test_surface_on_javascript() { check_surface("javascript"); }
+fn test_surface_on_javascript() {
+    check_surface("javascript");
+}
 #[test]
-fn test_surface_on_go() { check_surface("go"); }
+fn test_surface_on_go() {
+    check_surface("go");
+}
 #[test]
-fn test_surface_on_rust() { check_surface("rust"); }
+fn test_surface_on_rust() {
+    check_surface("rust");
+}
 #[test]
-fn test_surface_on_java() { check_surface("java"); }
+fn test_surface_on_java() {
+    check_surface("java");
+}
 #[test]
-fn test_surface_on_c() { check_surface("c"); }
+fn test_surface_on_c() {
+    check_surface("c");
+}
 #[test]
-fn test_surface_on_cpp() { check_surface("cpp"); }
+fn test_surface_on_cpp() {
+    check_surface("cpp");
+}
 #[test]
-fn test_surface_on_ruby() { check_surface("ruby"); }
+fn test_surface_on_ruby() {
+    check_surface("ruby");
+}
 #[test]
-fn test_surface_on_kotlin() { check_surface("kotlin"); }
+fn test_surface_on_kotlin() {
+    check_surface("kotlin");
+}
 #[test]
-fn test_surface_on_swift() { check_surface("swift"); }
+fn test_surface_on_swift() {
+    check_surface("swift");
+}
 #[test]
-fn test_surface_on_csharp() { check_surface("csharp"); }
+fn test_surface_on_csharp() {
+    check_surface("csharp");
+}
 #[test]
-fn test_surface_on_scala() { check_surface("scala"); }
+fn test_surface_on_scala() {
+    check_surface("scala");
+}
 #[test]
-fn test_surface_on_php() { check_surface("php"); }
+fn test_surface_on_php() {
+    check_surface("php");
+}
 #[test]
-fn test_surface_on_lua() { check_surface("lua"); }
+fn test_surface_on_lua() {
+    check_surface("lua");
+}
 #[test]
-fn test_surface_on_luau() { check_surface("luau"); }
+fn test_surface_on_luau() {
+    check_surface("luau");
+}
 #[test]
-fn test_surface_on_elixir() { check_surface("elixir"); }
+fn test_surface_on_elixir() {
+    check_surface("elixir");
+}
 #[test]
-fn test_surface_on_ocaml() { check_surface("ocaml"); }
+fn test_surface_on_ocaml() {
+    check_surface("ocaml");
+}
 
 // ---------------------------------------------------------------- churn
 // VAL-017: per-language churn cells. `make_git_fixture` provides 3
 // commits so churn always has non-empty `files` to report.
 #[test]
-fn test_churn_on_python() { check_churn("python"); }
+fn test_churn_on_python() {
+    check_churn("python");
+}
 #[test]
-fn test_churn_on_typescript() { check_churn("typescript"); }
+fn test_churn_on_typescript() {
+    check_churn("typescript");
+}
 #[test]
-fn test_churn_on_javascript() { check_churn("javascript"); }
+fn test_churn_on_javascript() {
+    check_churn("javascript");
+}
 #[test]
-fn test_churn_on_go() { check_churn("go"); }
+fn test_churn_on_go() {
+    check_churn("go");
+}
 #[test]
-fn test_churn_on_rust() { check_churn("rust"); }
+fn test_churn_on_rust() {
+    check_churn("rust");
+}
 #[test]
-fn test_churn_on_java() { check_churn("java"); }
+fn test_churn_on_java() {
+    check_churn("java");
+}
 #[test]
-fn test_churn_on_c() { check_churn("c"); }
+fn test_churn_on_c() {
+    check_churn("c");
+}
 #[test]
-fn test_churn_on_cpp() { check_churn("cpp"); }
+fn test_churn_on_cpp() {
+    check_churn("cpp");
+}
 #[test]
-fn test_churn_on_ruby() { check_churn("ruby"); }
+fn test_churn_on_ruby() {
+    check_churn("ruby");
+}
 #[test]
-fn test_churn_on_kotlin() { check_churn("kotlin"); }
+fn test_churn_on_kotlin() {
+    check_churn("kotlin");
+}
 #[test]
-fn test_churn_on_swift() { check_churn("swift"); }
+fn test_churn_on_swift() {
+    check_churn("swift");
+}
 #[test]
-fn test_churn_on_csharp() { check_churn("csharp"); }
+fn test_churn_on_csharp() {
+    check_churn("csharp");
+}
 #[test]
-fn test_churn_on_scala() { check_churn("scala"); }
+fn test_churn_on_scala() {
+    check_churn("scala");
+}
 #[test]
-fn test_churn_on_php() { check_churn("php"); }
+fn test_churn_on_php() {
+    check_churn("php");
+}
 #[test]
-fn test_churn_on_lua() { check_churn("lua"); }
+fn test_churn_on_lua() {
+    check_churn("lua");
+}
 #[test]
-fn test_churn_on_luau() { check_churn("luau"); }
+fn test_churn_on_luau() {
+    check_churn("luau");
+}
 #[test]
-fn test_churn_on_elixir() { check_churn("elixir"); }
+fn test_churn_on_elixir() {
+    check_churn("elixir");
+}
 #[test]
-fn test_churn_on_ocaml() { check_churn("ocaml"); }
+fn test_churn_on_ocaml() {
+    check_churn("ocaml");
+}
 
 // ---------------------------------------------------------------- hotspots
 // VAL-017: per-language hotspots cells. The 3-commit fixture matches
 // the default `min_commits = 3` threshold, ensuring `hotspots` array
 // is non-empty for every language.
 #[test]
-fn test_hotspots_on_python() { check_hotspots("python"); }
+fn test_hotspots_on_python() {
+    check_hotspots("python");
+}
 #[test]
-fn test_hotspots_on_typescript() { check_hotspots("typescript"); }
+fn test_hotspots_on_typescript() {
+    check_hotspots("typescript");
+}
 #[test]
-fn test_hotspots_on_javascript() { check_hotspots("javascript"); }
+fn test_hotspots_on_javascript() {
+    check_hotspots("javascript");
+}
 #[test]
-fn test_hotspots_on_go() { check_hotspots("go"); }
+fn test_hotspots_on_go() {
+    check_hotspots("go");
+}
 #[test]
-fn test_hotspots_on_rust() { check_hotspots("rust"); }
+fn test_hotspots_on_rust() {
+    check_hotspots("rust");
+}
 #[test]
-fn test_hotspots_on_java() { check_hotspots("java"); }
+fn test_hotspots_on_java() {
+    check_hotspots("java");
+}
 #[test]
-fn test_hotspots_on_c() { check_hotspots("c"); }
+fn test_hotspots_on_c() {
+    check_hotspots("c");
+}
 #[test]
-fn test_hotspots_on_cpp() { check_hotspots("cpp"); }
+fn test_hotspots_on_cpp() {
+    check_hotspots("cpp");
+}
 #[test]
-fn test_hotspots_on_ruby() { check_hotspots("ruby"); }
+fn test_hotspots_on_ruby() {
+    check_hotspots("ruby");
+}
 #[test]
-fn test_hotspots_on_kotlin() { check_hotspots("kotlin"); }
+fn test_hotspots_on_kotlin() {
+    check_hotspots("kotlin");
+}
 #[test]
-fn test_hotspots_on_swift() { check_hotspots("swift"); }
+fn test_hotspots_on_swift() {
+    check_hotspots("swift");
+}
 #[test]
-fn test_hotspots_on_csharp() { check_hotspots("csharp"); }
+fn test_hotspots_on_csharp() {
+    check_hotspots("csharp");
+}
 #[test]
-fn test_hotspots_on_scala() { check_hotspots("scala"); }
+fn test_hotspots_on_scala() {
+    check_hotspots("scala");
+}
 #[test]
-fn test_hotspots_on_php() { check_hotspots("php"); }
+fn test_hotspots_on_php() {
+    check_hotspots("php");
+}
 #[test]
-fn test_hotspots_on_lua() { check_hotspots("lua"); }
+fn test_hotspots_on_lua() {
+    check_hotspots("lua");
+}
 #[test]
-fn test_hotspots_on_luau() { check_hotspots("luau"); }
+fn test_hotspots_on_luau() {
+    check_hotspots("luau");
+}
 #[test]
-fn test_hotspots_on_elixir() { check_hotspots("elixir"); }
+fn test_hotspots_on_elixir() {
+    check_hotspots("elixir");
+}
 #[test]
-fn test_hotspots_on_ocaml() { check_hotspots("ocaml"); }
+fn test_hotspots_on_ocaml() {
+    check_hotspots("ocaml");
+}
 
 // ============================================================================
 // Orchestrator commands — sanity-only (--help)
 // ============================================================================
-#[test] fn test_help_only_coverage() { check_help_only("coverage"); }
-#[test] fn test_help_only_fix() { check_help_only("fix"); }
-#[test] fn test_help_only_bugbot() { check_help_only("bugbot"); }
-#[test] fn test_help_only_daemon() { check_help_only("daemon"); }
-#[test] fn test_help_only_cache() { check_help_only("cache"); }
-#[test] fn test_help_only_stats() { check_help_only("stats"); }
-#[test] fn test_help_only_warm() { check_help_only("warm"); }
-#[test] fn test_help_only_doctor() { check_help_only("doctor"); }
+#[test]
+fn test_help_only_coverage() {
+    check_help_only("coverage");
+}
+#[test]
+fn test_help_only_fix() {
+    check_help_only("fix");
+}
+#[test]
+fn test_help_only_bugbot() {
+    check_help_only("bugbot");
+}
+#[test]
+fn test_help_only_daemon() {
+    check_help_only("daemon");
+}
+#[test]
+fn test_help_only_cache() {
+    check_help_only("cache");
+}
+#[test]
+fn test_help_only_stats() {
+    check_help_only("stats");
+}
+#[test]
+fn test_help_only_warm() {
+    check_help_only("warm");
+}
+#[test]
+fn test_help_only_doctor() {
+    check_help_only("doctor");
+}
 
-#[test] fn test_tree_runs_crash_free() { check_tree_one(); }
+#[test]
+fn test_tree_runs_crash_free() {
+    check_tree_one();
+}

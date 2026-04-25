@@ -131,9 +131,7 @@ impl ToolRegistry {
 
         // Cache successful results only (errors should be retryable)
         if !skip_cache && result.is_error != Some(true) {
-            self.cache
-                .borrow_mut()
-                .insert(cache_key, result.clone());
+            self.cache.borrow_mut().insert(cache_key, result.clone());
         }
 
         result

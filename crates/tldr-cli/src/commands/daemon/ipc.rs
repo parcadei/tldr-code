@@ -224,8 +224,8 @@ impl IpcListener {
         }
 
         // Bind the Unix socket
-        let listener = tokio::net::UnixListener::bind(&socket_path)
-            .map_err(DaemonError::SocketBindFailed)?;
+        let listener =
+            tokio::net::UnixListener::bind(&socket_path).map_err(DaemonError::SocketBindFailed)?;
 
         // Set socket permissions to 0600 (owner-only) - TIGER-P3-01
         let permissions = std::fs::Permissions::from_mode(0o600);

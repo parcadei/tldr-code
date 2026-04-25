@@ -76,16 +76,52 @@ struct TldrCommand {
 /// All tldr commands that this engine runs.
 const TLDR_COMMANDS: &[TldrCommand] = &[
     // LOCAL (per-file, parse per-function from output):
-    TldrCommand { name: "complexity", args: &["complexity"], category: TldrCategory::Local },
-    TldrCommand { name: "cognitive", args: &["cognitive"], category: TldrCategory::Local },
-    TldrCommand { name: "contracts", args: &["contracts"], category: TldrCategory::Local },
-    TldrCommand { name: "smells", args: &["smells"], category: TldrCategory::Local },
+    TldrCommand {
+        name: "complexity",
+        args: &["complexity"],
+        category: TldrCategory::Local,
+    },
+    TldrCommand {
+        name: "cognitive",
+        args: &["cognitive"],
+        category: TldrCategory::Local,
+    },
+    TldrCommand {
+        name: "contracts",
+        args: &["contracts"],
+        category: TldrCategory::Local,
+    },
+    TldrCommand {
+        name: "smells",
+        args: &["smells"],
+        category: TldrCategory::Local,
+    },
     // FLOW (project-wide, run on project root):
-    TldrCommand { name: "calls", args: &["calls"], category: TldrCategory::Flow },
-    TldrCommand { name: "deps", args: &["deps"], category: TldrCategory::Flow },
-    TldrCommand { name: "coupling", args: &["coupling"], category: TldrCategory::Flow },
-    TldrCommand { name: "cohesion", args: &["cohesion"], category: TldrCategory::Flow },
-    TldrCommand { name: "dead", args: &["dead"], category: TldrCategory::Flow },
+    TldrCommand {
+        name: "calls",
+        args: &["calls"],
+        category: TldrCategory::Flow,
+    },
+    TldrCommand {
+        name: "deps",
+        args: &["deps"],
+        category: TldrCategory::Flow,
+    },
+    TldrCommand {
+        name: "coupling",
+        args: &["coupling"],
+        category: TldrCategory::Flow,
+    },
+    TldrCommand {
+        name: "cohesion",
+        args: &["cohesion"],
+        category: TldrCategory::Flow,
+    },
+    TldrCommand {
+        name: "dead",
+        args: &["dead"],
+        category: TldrCategory::Flow,
+    },
 ];
 
 /// The set of finding types that TldrDifferentialEngine can produce.
@@ -140,11 +176,7 @@ impl TldrDifferentialEngine {
     ///
     /// The caller is responsible for building the full argument list including
     /// `--format json`.
-    fn run_tldr_command(
-        &self,
-        args: &[&str],
-        target: &Path,
-    ) -> Result<serde_json::Value, String> {
+    fn run_tldr_command(&self, args: &[&str], target: &Path) -> Result<serde_json::Value, String> {
         let target_str = target.to_string_lossy().to_string();
         let mut full_args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
         full_args.push(target_str);
@@ -204,10 +236,7 @@ impl TldrDifferentialEngine {
     }
 
     /// Low-level: spawn `tldr` with the given arguments, capture stdout, parse as JSON.
-    fn run_tldr_raw(
-        &self,
-        args: &[String],
-    ) -> Result<serde_json::Value, String> {
+    fn run_tldr_raw(&self, args: &[String]) -> Result<serde_json::Value, String> {
         let child = Command::new("tldr")
             .args(args)
             .stdout(std::process::Stdio::piped())
@@ -275,8 +304,13 @@ impl TldrDifferentialEngine {
             ));
         }
 
-        serde_json::from_str(&stdout)
-            .map_err(|e| format!("Failed to parse tldr JSON: {} (first 200 chars: {:?})", e, &stdout[..stdout.len().min(200)]))
+        serde_json::from_str(&stdout).map_err(|e| {
+            format!(
+                "Failed to parse tldr JSON: {} (first 200 chars: {:?})",
+                e,
+                &stdout[..stdout.len().min(200)]
+            )
+        })
     }
 
     /// Run all LOCAL commands on baseline and current temp files for a single changed file.
@@ -312,11 +346,17 @@ impl TldrDifferentialEngine {
         let current_file = tmp_dir.path().join(format!("current.{}", ext));
 
         if std::fs::write(&baseline_file, baseline_source).is_err() {
-            partial_reasons.push(format!("write baseline tmpfile failed for {}", file_path.display()));
+            partial_reasons.push(format!(
+                "write baseline tmpfile failed for {}",
+                file_path.display()
+            ));
             return findings;
         }
         if std::fs::write(&current_file, current_source).is_err() {
-            partial_reasons.push(format!("write current tmpfile failed for {}", file_path.display()));
+            partial_reasons.push(format!(
+                "write current tmpfile failed for {}",
+                file_path.display()
+            ));
             return findings;
         }
 
@@ -328,12 +368,8 @@ impl TldrDifferentialEngine {
 
             match (baseline_result, current_result) {
                 (Ok(baseline_json), Ok(current_json)) => {
-                    let cmd_findings = self.diff_local_metrics(
-                        cmd_name,
-                        file_path,
-                        &baseline_json,
-                        &current_json,
-                    );
+                    let cmd_findings =
+                        self.diff_local_metrics(cmd_name, file_path, &baseline_json, &current_json);
                     findings.extend(cmd_findings);
                 }
                 (Err(e), _) | (_, Err(e)) => {
@@ -383,12 +419,8 @@ impl TldrDifferentialEngine {
             let baseline_agg = Self::aggregate_per_function_complexity(&baseline_entries);
             let current_agg = Self::aggregate_per_function_complexity(&current_entries);
 
-            let complexity_findings = self.diff_local_metrics(
-                "complexity",
-                file_path,
-                &baseline_agg,
-                &current_agg,
-            );
+            let complexity_findings =
+                self.diff_local_metrics("complexity", file_path, &baseline_agg, &current_agg);
             findings.extend(complexity_findings);
         }
 
@@ -455,13 +487,11 @@ impl TldrDifferentialEngine {
         result: &Result<serde_json::Value, String>,
     ) -> Vec<String> {
         match result {
-            Ok(json) => {
-                Self::extract_function_entries(json)
-                    .into_iter()
-                    .map(|(name, _)| name)
-                    .filter(|name| !is_test_function(name))
-                    .collect()
-            }
+            Ok(json) => Self::extract_function_entries(json)
+                .into_iter()
+                .map(|(name, _)| name)
+                .filter(|name| !is_test_function(name))
+                .collect(),
             Err(_) => Vec::new(),
         }
     }
@@ -470,12 +500,20 @@ impl TldrDifferentialEngine {
     ///
     /// Each per-function call returns `{ "function": "name", "cyclomatic": N, ... }`.
     /// We wrap them into `{ "functions": [{ "name": "...", "cyclomatic": N }] }` for diff_local_metrics.
-    fn aggregate_per_function_complexity(entries: &[(String, serde_json::Value)]) -> serde_json::Value {
+    fn aggregate_per_function_complexity(
+        entries: &[(String, serde_json::Value)],
+    ) -> serde_json::Value {
         let functions: Vec<serde_json::Value> = entries
             .iter()
             .map(|(name, json)| {
-                let cyclomatic = json.get("cyclomatic").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                let line = json.get("lines_of_code").and_then(|v| v.as_u64()).unwrap_or(1);
+                let cyclomatic = json
+                    .get("cyclomatic")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0);
+                let line = json
+                    .get("lines_of_code")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(1);
                 serde_json::json!({
                     "name": name,
                     "cyclomatic": cyclomatic,
@@ -489,12 +527,20 @@ impl TldrDifferentialEngine {
     /// Aggregate per-function contracts results into the standard `{ "functions": [...] }` shape.
     ///
     /// Each per-function call returns `{ "function": "name", "preconditions": [...], ... }`.
-    fn aggregate_per_function_contracts(entries: &[(String, serde_json::Value)]) -> serde_json::Value {
+    fn aggregate_per_function_contracts(
+        entries: &[(String, serde_json::Value)],
+    ) -> serde_json::Value {
         let functions: Vec<serde_json::Value> = entries
             .iter()
             .map(|(name, json)| {
-                let preconditions = json.get("preconditions").cloned().unwrap_or(serde_json::json!([]));
-                let postconditions = json.get("postconditions").cloned().unwrap_or(serde_json::json!([]));
+                let preconditions = json
+                    .get("preconditions")
+                    .cloned()
+                    .unwrap_or(serde_json::json!([]));
+                let postconditions = json
+                    .get("postconditions")
+                    .cloned()
+                    .unwrap_or(serde_json::json!([]));
                 serde_json::json!({
                     "name": name,
                     "preconditions": preconditions,
@@ -543,19 +589,10 @@ impl TldrDifferentialEngine {
                 // we don't have known_current_funcs context, so pass empty
                 // slice. The primary contracts path in analyze_per_function
                 // passes actual current_funcs for accurate deletion detection.
-                findings.extend(self.diff_contracts(
-                    file_path,
-                    baseline_json,
-                    current_json,
-                    &[],
-                ));
+                findings.extend(self.diff_contracts(file_path, baseline_json, current_json, &[]));
             }
             "smells" => {
-                findings.extend(self.diff_smells(
-                    file_path,
-                    baseline_json,
-                    current_json,
-                ));
+                findings.extend(self.diff_smells(file_path, baseline_json, current_json));
             }
             _ => {}
         }
@@ -621,14 +658,18 @@ impl TldrDifferentialEngine {
         for (func_name, current_entry) in &current_entries {
             let Some(baseline_entry) = baseline_map.get(func_name.as_str()) else {
                 // New function -- report as info for awareness
-                if let Some(current_val) = current_entry.get(metric_field).and_then(|v| v.as_f64()) {
+                if let Some(current_val) = current_entry.get(metric_field).and_then(|v| v.as_f64())
+                {
                     if current_val > 10.0 {
                         findings.push(BugbotFinding {
                             finding_type: finding_type.to_string(),
                             severity: "info".to_string(),
                             file: file_path.to_path_buf(),
                             function: func_name.clone(),
-                            line: current_entry.get("line").and_then(|l| l.as_u64()).unwrap_or(1) as usize,
+                            line: current_entry
+                                .get("line")
+                                .and_then(|l| l.as_u64())
+                                .unwrap_or(1) as usize,
                             message: format!(
                                 "New function `{}` has {} = {:.1}",
                                 func_name, metric_field, current_val,
@@ -640,15 +681,26 @@ impl TldrDifferentialEngine {
                                 "new_function": true,
                             }),
                             confidence: Some("DETERMINISTIC".to_string()),
-                            finding_id: Some(compute_finding_id(finding_type, file_path, func_name, 0)),
+                            finding_id: Some(compute_finding_id(
+                                finding_type,
+                                file_path,
+                                func_name,
+                                0,
+                            )),
                         });
                     }
                 }
                 continue;
             };
 
-            let baseline_val = baseline_entry.get(metric_field).and_then(|v| v.as_f64()).unwrap_or(0.0);
-            let current_val = current_entry.get(metric_field).and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let baseline_val = baseline_entry
+                .get(metric_field)
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            let current_val = current_entry
+                .get(metric_field)
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
 
             if current_val > baseline_val {
                 let delta = current_val - baseline_val;
@@ -680,7 +732,10 @@ impl TldrDifferentialEngine {
                     "low"
                 };
 
-                let line = current_entry.get("line").and_then(|l| l.as_u64()).unwrap_or(1) as usize;
+                let line = current_entry
+                    .get("line")
+                    .and_then(|l| l.as_u64())
+                    .unwrap_or(1) as usize;
 
                 findings.push(BugbotFinding {
                     finding_type: finding_type.to_string(),
@@ -737,8 +792,16 @@ impl TldrDifferentialEngine {
 
         // Count contracts per function in baseline
         let baseline_contract_count = |entry: &serde_json::Value| -> usize {
-            let pre = entry.get("preconditions").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
-            let post = entry.get("postconditions").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+            let pre = entry
+                .get("preconditions")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
+            let post = entry
+                .get("postconditions")
+                .and_then(|v| v.as_array())
+                .map(|a| a.len())
+                .unwrap_or(0);
             pre + post
         };
 
@@ -774,7 +837,12 @@ impl TldrDifferentialEngine {
                             "removed": removed,
                         }),
                         confidence: Some("DETERMINISTIC".to_string()),
-                        finding_id: Some(compute_finding_id("contract-removed", file_path, func_name, 1)),
+                        finding_id: Some(compute_finding_id(
+                            "contract-removed",
+                            file_path,
+                            func_name,
+                            1,
+                        )),
                     });
                 }
             } else if !current_names.contains(func_name.as_str()) {
@@ -802,7 +870,12 @@ impl TldrDifferentialEngine {
                         "function_deleted": true,
                     }),
                     confidence: Some("DETERMINISTIC".to_string()),
-                    finding_id: Some(compute_finding_id("contract-removed", file_path, func_name, 0)),
+                    finding_id: Some(compute_finding_id(
+                        "contract-removed",
+                        file_path,
+                        func_name,
+                        0,
+                    )),
                 });
             }
         }
@@ -866,20 +939,26 @@ impl TldrDifferentialEngine {
             // Smell types that are too noisy to report. message_chain fires on
             // idiomatic Rust iterator chains; long_parameter_list fires on
             // constructors and builders that legitimately need many params.
-            const SUPPRESSED_SMELL_TYPES: &[&str] = &[
-                "message_chain",
-                "long_parameter_list",
-            ];
+            const SUPPRESSED_SMELL_TYPES: &[&str] = &["message_chain", "long_parameter_list"];
 
             // Report each new smell (the last `introduced` entries are likely new)
             for (i, smell) in current_smells.iter().rev().take(introduced).enumerate() {
-                let smell_type = smell.get("smell_type").or_else(|| smell.get("type")).or_else(|| smell.get("kind")).and_then(|v| v.as_str()).unwrap_or("unknown");
+                let smell_type = smell
+                    .get("smell_type")
+                    .or_else(|| smell.get("type"))
+                    .or_else(|| smell.get("kind"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
 
                 if SUPPRESSED_SMELL_TYPES.contains(&smell_type) {
                     continue;
                 }
 
-                let func_name = smell.get("function").or_else(|| smell.get("name")).and_then(|v| v.as_str()).unwrap_or("(file-level)");
+                let func_name = smell
+                    .get("function")
+                    .or_else(|| smell.get("name"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("(file-level)");
                 let line = smell.get("line").and_then(|l| l.as_u64()).unwrap_or(1) as usize;
 
                 // Severity by smell type: structural issues are medium,
@@ -908,7 +987,12 @@ impl TldrDifferentialEngine {
                         "index": i,
                     }),
                     confidence: Some("DETERMINISTIC".to_string()),
-                    finding_id: Some(compute_finding_id("smell-introduced", file_path, func_name, line)),
+                    finding_id: Some(compute_finding_id(
+                        "smell-introduced",
+                        file_path,
+                        func_name,
+                        line,
+                    )),
                 });
             }
         }
@@ -945,7 +1029,10 @@ impl TldrDifferentialEngine {
         let flow_engine = TldrDifferentialEngine::with_timeout(300);
 
         // === Dead code: count-only, no baseline needed ===
-        for cmd in TLDR_COMMANDS.iter().filter(|c| c.category == TldrCategory::Flow && c.name == "dead") {
+        for cmd in TLDR_COMMANDS
+            .iter()
+            .filter(|c| c.category == TldrCategory::Flow && c.name == "dead")
+        {
             match flow_engine.run_tldr_flow_command(cmd.name, cmd.args, project, language) {
                 Ok(json) => {
                     let dead_count = Self::count_dead_code_entries(&json);
@@ -1041,7 +1128,12 @@ impl TldrDifferentialEngine {
             let worktree_path = baseline_dir.path().join("baseline");
 
             let worktree_ok = match Command::new("git")
-                .args(["worktree", "add", &worktree_path.to_string_lossy(), base_ref])
+                .args([
+                    "worktree",
+                    "add",
+                    &worktree_path.to_string_lossy(),
+                    base_ref,
+                ])
                 .current_dir(project)
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::piped())
@@ -1056,7 +1148,10 @@ impl TldrDifferentialEngine {
                     false
                 }
                 Err(e) => {
-                    partial_reasons.push(format!("git worktree add: {}; skipping baseline flow diff", e));
+                    partial_reasons.push(format!(
+                        "git worktree add: {}; skipping baseline flow diff",
+                        e
+                    ));
                     false
                 }
             };
@@ -1071,20 +1166,28 @@ impl TldrDifferentialEngine {
 
                 // --- Calls/deps: only if not already handled via cache ---
                 if !calls_deps_done {
-                    let baseline_calls = flow_engine.run_tldr_flow_command("calls", &["calls"], &worktree_path, language);
-                    let current_calls_result: Result<std::borrow::Cow<'_, serde_json::Value>, String> =
-                        if let Some(cached) = current_calls_json {
-                            Ok(std::borrow::Cow::Borrowed(cached))
-                        } else {
-                            flow_engine
-                                .run_tldr_flow_command("calls", &["calls"], project, language)
-                                .map(std::borrow::Cow::Owned)
-                        };
+                    let baseline_calls = flow_engine.run_tldr_flow_command(
+                        "calls",
+                        &["calls"],
+                        &worktree_path,
+                        language,
+                    );
+                    let current_calls_result: Result<
+                        std::borrow::Cow<'_, serde_json::Value>,
+                        String,
+                    > = if let Some(cached) = current_calls_json {
+                        Ok(std::borrow::Cow::Borrowed(cached))
+                    } else {
+                        flow_engine
+                            .run_tldr_flow_command("calls", &["calls"], project, language)
+                            .map(std::borrow::Cow::Owned)
+                    };
 
                     match (&baseline_calls, &current_calls_result) {
                         (Ok(baseline_json), Ok(current_json)) => {
                             // Diff call graph edges
-                            findings.extend(self.diff_calls_json(baseline_json, current_json.as_ref()));
+                            findings
+                                .extend(self.diff_calls_json(baseline_json, current_json.as_ref()));
 
                             // Derive deps from calls in-memory instead of running `tldr deps`
                             let baseline_deps = Self::derive_deps_from_calls(baseline_json);
@@ -1093,7 +1196,12 @@ impl TldrDifferentialEngine {
 
                             // Cache the baseline for next run (non-fatal).
                             if let Some(ref hash) = base_commit {
-                                let _ = save_baseline_call_graph(project, baseline_json, hash, language);
+                                let _ = save_baseline_call_graph(
+                                    project,
+                                    baseline_json,
+                                    hash,
+                                    language,
+                                );
                             }
                         }
                         (Err(e), _) => {
@@ -1106,9 +1214,18 @@ impl TldrDifferentialEngine {
                 }
 
                 // --- Cohesion: separate subprocess (requires LCOM4, not derivable from calls) ---
-                for cmd in TLDR_COMMANDS.iter().filter(|c| c.category == TldrCategory::Flow && c.name == "cohesion") {
-                    let baseline_result = flow_engine.run_tldr_flow_command(cmd.name, cmd.args, &worktree_path, language);
-                    let current_result = flow_engine.run_tldr_flow_command(cmd.name, cmd.args, project, language);
+                for cmd in TLDR_COMMANDS
+                    .iter()
+                    .filter(|c| c.category == TldrCategory::Flow && c.name == "cohesion")
+                {
+                    let baseline_result = flow_engine.run_tldr_flow_command(
+                        cmd.name,
+                        cmd.args,
+                        &worktree_path,
+                        language,
+                    );
+                    let current_result =
+                        flow_engine.run_tldr_flow_command(cmd.name, cmd.args, project, language);
                     match (baseline_result, current_result) {
                         (Ok(baseline_json), Ok(current_json)) => {
                             findings.extend(self.diff_cohesion_json(&baseline_json, &current_json));
@@ -1124,7 +1241,12 @@ impl TldrDifferentialEngine {
 
                 // Clean up worktree
                 let _ = Command::new("git")
-                    .args(["worktree", "remove", "--force", &worktree_path.to_string_lossy()])
+                    .args([
+                        "worktree",
+                        "remove",
+                        "--force",
+                        &worktree_path.to_string_lossy(),
+                    ])
                     .current_dir(project)
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
@@ -1142,10 +1264,7 @@ impl TldrDifferentialEngine {
     /// finding if `importer_count > 0` or `caller_count > 0`.
     ///
     /// Severity: `high` if importer_count > 10, `medium` if > 3, else `low`.
-    fn parse_whatbreaks_findings(
-        file_path: &Path,
-        json: &serde_json::Value,
-    ) -> Vec<BugbotFinding> {
+    fn parse_whatbreaks_findings(file_path: &Path, json: &serde_json::Value) -> Vec<BugbotFinding> {
         let mut findings = Vec::new();
 
         let summary = json.get("summary").unwrap_or(json);
@@ -1453,8 +1572,7 @@ impl TldrDifferentialEngine {
                         findings.extend(Self::parse_whatbreaks_findings(file_path, &json));
                     }
                     Err(e) => {
-                        partial_reasons
-                            .push(format!("tldr whatbreaks {} failed: {}", rel_str, e));
+                        partial_reasons.push(format!("tldr whatbreaks {} failed: {}", rel_str, e));
                     }
                 }
             }
@@ -1493,10 +1611,8 @@ impl TldrDifferentialEngine {
             let relative = file_path.strip_prefix(project).unwrap_or(file_path);
             let full_path = project.join(relative);
 
-            let cognitive_result =
-                impact_engine.run_tldr_command(&["cognitive"], &full_path);
-            let func_names =
-                Self::discover_function_names_from_cognitive(&cognitive_result);
+            let cognitive_result = impact_engine.run_tldr_command(&["cognitive"], &full_path);
+            let func_names = Self::discover_function_names_from_cognitive(&cognitive_result);
             all_functions.extend(func_names);
         }
 
@@ -1565,27 +1681,28 @@ impl TldrDifferentialEngine {
     ) -> Vec<BugbotFinding> {
         let mut findings = Vec::new();
 
-        let extract_edges = |json: &serde_json::Value| -> std::collections::HashSet<(String, String)> {
-            let mut set = std::collections::HashSet::new();
-            if let Some(edges) = json.get("edges").and_then(|v| v.as_array()) {
-                for edge in edges {
-                    let from = format!(
-                        "{}::{}",
-                        edge.get("src_file").and_then(|v| v.as_str()).unwrap_or("?"),
-                        edge.get("src_func").and_then(|v| v.as_str()).unwrap_or("?"),
-                    );
-                    let to = format!(
-                        "{}::{}",
-                        edge.get("dst_file").and_then(|v| v.as_str()).unwrap_or("?"),
-                        edge.get("dst_func").and_then(|v| v.as_str()).unwrap_or("?"),
-                    );
-                    if from != "?::?" && to != "?::?" {
-                        set.insert((from, to));
+        let extract_edges =
+            |json: &serde_json::Value| -> std::collections::HashSet<(String, String)> {
+                let mut set = std::collections::HashSet::new();
+                if let Some(edges) = json.get("edges").and_then(|v| v.as_array()) {
+                    for edge in edges {
+                        let from = format!(
+                            "{}::{}",
+                            edge.get("src_file").and_then(|v| v.as_str()).unwrap_or("?"),
+                            edge.get("src_func").and_then(|v| v.as_str()).unwrap_or("?"),
+                        );
+                        let to = format!(
+                            "{}::{}",
+                            edge.get("dst_file").and_then(|v| v.as_str()).unwrap_or("?"),
+                            edge.get("dst_func").and_then(|v| v.as_str()).unwrap_or("?"),
+                        );
+                        if from != "?::?" && to != "?::?" {
+                            set.insert((from, to));
+                        }
                     }
                 }
-            }
-            set
-        };
+                set
+            };
 
         let baseline_edges = extract_edges(baseline);
         let current_edges = extract_edges(current);
@@ -1593,7 +1710,8 @@ impl TldrDifferentialEngine {
         // New edges: in current but not in baseline
         let new_edges: Vec<&(String, String)> = current_edges.difference(&baseline_edges).collect();
         // Removed edges: in baseline but not in current
-        let removed_edges: Vec<&(String, String)> = baseline_edges.difference(&current_edges).collect();
+        let removed_edges: Vec<&(String, String)> =
+            baseline_edges.difference(&current_edges).collect();
 
         if new_edges.is_empty() && removed_edges.is_empty() {
             return findings;
@@ -1750,7 +1868,8 @@ impl TldrDifferentialEngine {
         // across all files. Alternatively, use `stats.total_internal_deps` if available.
         let count_internal_deps = |json: &serde_json::Value| -> usize {
             // Prefer stats.total_internal_deps for accuracy
-            if let Some(total) = json.get("stats")
+            if let Some(total) = json
+                .get("stats")
                 .and_then(|s| s.get("total_internal_deps"))
                 .and_then(|v| v.as_u64())
             {
@@ -1759,10 +1878,12 @@ impl TldrDifferentialEngine {
             // Fallback: sum up all dependency arrays in the dict
             json.get("internal_dependencies")
                 .and_then(|v| v.as_object())
-                .map(|obj| obj.values()
-                    .filter_map(|v| v.as_array())
-                    .map(|a| a.len())
-                    .sum())
+                .map(|obj| {
+                    obj.values()
+                        .filter_map(|v| v.as_array())
+                        .map(|a| a.len())
+                        .sum()
+                })
                 .unwrap_or(0)
         };
 
@@ -1772,7 +1893,8 @@ impl TldrDifferentialEngine {
         if current_dep_count > baseline_dep_count {
             let increase = current_dep_count - baseline_dep_count;
             // Significant increase = more than 20% growth or >5 new deps
-            if increase > 5 || (baseline_dep_count > 0 && increase * 100 / baseline_dep_count > 20) {
+            if increase > 5 || (baseline_dep_count > 0 && increase * 100 / baseline_dep_count > 20)
+            {
                 findings.push(BugbotFinding {
                     finding_type: "dependency-change".to_string(),
                     severity: "medium".to_string(),
@@ -1820,22 +1942,26 @@ impl TldrDifferentialEngine {
     ) -> Vec<BugbotFinding> {
         let mut findings = Vec::new();
 
-        let extract_metrics = |json: &serde_json::Value| -> std::collections::HashMap<String, (f64, f64, f64)> {
-            let mut map = std::collections::HashMap::new();
-            if let Some(metrics) = json.get("martin_metrics").and_then(|v| v.as_array()) {
-                for entry in metrics {
-                    let module = entry.get("module").and_then(|v| v.as_str()).unwrap_or("");
-                    if module.is_empty() {
-                        continue;
+        let extract_metrics =
+            |json: &serde_json::Value| -> std::collections::HashMap<String, (f64, f64, f64)> {
+                let mut map = std::collections::HashMap::new();
+                if let Some(metrics) = json.get("martin_metrics").and_then(|v| v.as_array()) {
+                    for entry in metrics {
+                        let module = entry.get("module").and_then(|v| v.as_str()).unwrap_or("");
+                        if module.is_empty() {
+                            continue;
+                        }
+                        let ca = entry.get("ca").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let ce = entry.get("ce").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let instability = entry
+                            .get("instability")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0);
+                        map.insert(module.to_string(), (ca, ce, instability));
                     }
-                    let ca = entry.get("ca").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                    let ce = entry.get("ce").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                    let instability = entry.get("instability").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                    map.insert(module.to_string(), (ca, ce, instability));
                 }
-            }
-            map
-        };
+                map
+            };
 
         let baseline_metrics = extract_metrics(baseline);
         let current_metrics = extract_metrics(current);
@@ -1863,8 +1989,12 @@ impl TldrDifferentialEngine {
                         line: 0,
                         message: format!(
                             "Module '{}': instability {:.2} -> {:.2} (delta {:.2}), ce {} -> {}",
-                            module, base_instability, curr_instability, instability_delta,
-                            base_ce, curr_ce,
+                            module,
+                            base_instability,
+                            curr_instability,
+                            instability_delta,
+                            base_ce,
+                            curr_ce,
                         ),
                         evidence: serde_json::json!({
                             "module": module,
@@ -1912,7 +2042,8 @@ impl TldrDifferentialEngine {
             if let Some(classes) = json.get("classes").and_then(|v| v.as_array()) {
                 for cls in classes {
                     // Try "class_name" first (actual schema), fall back to "name"
-                    let name = cls.get("class_name")
+                    let name = cls
+                        .get("class_name")
                         .or_else(|| cls.get("name"))
                         .and_then(|v| v.as_str())
                         .unwrap_or("");
@@ -2010,7 +2141,14 @@ impl TldrDifferentialEngine {
             return total as usize;
         }
         // Fallback: count array entries
-        for key in &["dead_functions", "possibly_dead", "dead_code", "unreachable", "functions", "results"] {
+        for key in &[
+            "dead_functions",
+            "possibly_dead",
+            "dead_code",
+            "unreachable",
+            "functions",
+            "results",
+        ] {
             if let Some(arr) = json.get(key).and_then(|v| v.as_array()) {
                 return arr.len();
             }
@@ -2080,10 +2218,8 @@ impl TldrDifferentialEngine {
         let internal_deps: serde_json::Map<String, serde_json::Value> = dep_map
             .into_iter()
             .map(|(k, v)| {
-                let arr: Vec<serde_json::Value> = v
-                    .into_iter()
-                    .map(serde_json::Value::String)
-                    .collect();
+                let arr: Vec<serde_json::Value> =
+                    v.into_iter().map(serde_json::Value::String).collect();
                 (k, serde_json::Value::Array(arr))
             })
             .collect();
@@ -2270,8 +2406,12 @@ impl L2Engine for TldrDifferentialEngine {
         if num_threads <= 1 || work_items.len() <= 1 {
             for (file_path, baseline_src, current_src) in &work_items {
                 let mut file_reasons = Vec::new();
-                let file_findings =
-                    self.analyze_local_commands(file_path, baseline_src, current_src, &mut file_reasons);
+                let file_findings = self.analyze_local_commands(
+                    file_path,
+                    baseline_src,
+                    current_src,
+                    &mut file_reasons,
+                );
                 all_findings.extend(file_findings);
                 partial_reasons.extend(file_reasons);
             }
@@ -2468,7 +2608,7 @@ mod tests {
         // We accept either Complete or Partial here since flow commands run
         // on project root and may fail on /tmp/test-project.
         match &output.status {
-            AnalyzerStatus::Complete => {} // ideal
+            AnalyzerStatus::Complete => {}       // ideal
             AnalyzerStatus::Partial { .. } => {} // acceptable (flow command failures)
             other => panic!("Unexpected status: {:?}", other),
         }
@@ -2491,10 +2631,7 @@ mod tests {
         match result {
             Ok(_) => {} // tldr is on PATH and ran, that's fine
             Err(e) => {
-                assert!(
-                    !e.is_empty(),
-                    "Error message should not be empty"
-                );
+                assert!(!e.is_empty(), "Error message should not be empty");
             }
         }
     }
@@ -2593,10 +2730,7 @@ mod tests {
             &current,
         );
 
-        assert!(
-            findings.is_empty(),
-            "Decrease should not produce a finding"
-        );
+        assert!(findings.is_empty(), "Decrease should not produce a finding");
     }
 
     #[test]
@@ -2620,9 +2754,14 @@ mod tests {
             &current,
         );
 
-        assert!(!findings.is_empty(), "New function with high metric should be reported");
+        assert!(
+            !findings.is_empty(),
+            "New function with high metric should be reported"
+        );
         assert_eq!(findings[0].severity, "info");
-        assert!(findings[0].evidence["new_function"].as_bool().unwrap_or(false));
+        assert!(findings[0].evidence["new_function"]
+            .as_bool()
+            .unwrap_or(false));
     }
 
     #[test]
@@ -2648,10 +2787,7 @@ mod tests {
             &current,
         );
 
-        assert!(
-            findings.is_empty(),
-            "No change should produce no findings"
-        );
+        assert!(findings.is_empty(), "No change should produce no findings");
     }
 
     #[test]
@@ -2708,16 +2844,16 @@ mod tests {
         });
 
         // Pass empty known_current_funcs so "validate" is genuinely absent
-        let findings = engine.diff_contracts(
-            Path::new("src/lib.py"),
-            &baseline,
-            &current,
-            &[],
-        );
+        let findings = engine.diff_contracts(Path::new("src/lib.py"), &baseline, &current, &[]);
 
-        assert!(!findings.is_empty(), "Should detect deleted function with contracts");
+        assert!(
+            !findings.is_empty(),
+            "Should detect deleted function with contracts"
+        );
         assert_eq!(findings[0].severity, "high");
-        assert!(findings[0].evidence["function_deleted"].as_bool().unwrap_or(false));
+        assert!(findings[0].evidence["function_deleted"]
+            .as_bool()
+            .unwrap_or(false));
     }
 
     #[test]
@@ -2747,7 +2883,10 @@ mod tests {
             &["validate".to_string()],
         );
 
-        assert!(findings.is_empty(), "Should NOT emit contract-removed when function exists but extraction failed");
+        assert!(
+            findings.is_empty(),
+            "Should NOT emit contract-removed when function exists but extraction failed"
+        );
     }
 
     #[test]
@@ -2766,11 +2905,7 @@ mod tests {
             ]
         });
 
-        let findings = engine.diff_smells(
-            Path::new("src/lib.py"),
-            &baseline,
-            &current,
-        );
+        let findings = engine.diff_smells(Path::new("src/lib.py"), &baseline, &current);
 
         assert!(!findings.is_empty(), "Should detect introduced smell");
         assert_eq!(findings[0].finding_type, "smell-introduced");
@@ -2796,13 +2931,12 @@ mod tests {
             ]
         });
 
-        let findings = engine.diff_smells(
-            Path::new("src/lib.py"),
-            &baseline,
-            &current,
-        );
+        let findings = engine.diff_smells(Path::new("src/lib.py"), &baseline, &current);
 
-        assert!(findings.is_empty(), "Same smells should produce no findings");
+        assert!(
+            findings.is_empty(),
+            "Same smells should produce no findings"
+        );
     }
 
     #[test]
@@ -2820,13 +2954,12 @@ mod tests {
             ]
         });
 
-        let findings = engine.diff_smells(
-            Path::new("src/new_module.rs"),
-            &baseline,
-            &current,
-        );
+        let findings = engine.diff_smells(Path::new("src/new_module.rs"), &baseline, &current);
 
-        assert!(findings.is_empty(), "New file (empty baseline) should not trigger smell-introduced");
+        assert!(
+            findings.is_empty(),
+            "New file (empty baseline) should not trigger smell-introduced"
+        );
     }
 
     #[test]
@@ -2881,21 +3014,32 @@ mod tests {
             "summary": { "total": 3 }
         });
 
-        let findings = engine.diff_smells(
-            Path::new("src/engine.rs"),
-            &baseline,
-            &current,
-        );
+        let findings = engine.diff_smells(Path::new("src/engine.rs"), &baseline, &current);
 
         assert_eq!(findings.len(), 2, "Should detect 2 introduced smells");
         // Verify types are extracted from smell_type field (not "unknown")
-        let types: Vec<&str> = findings.iter().map(|f| f.evidence["smell_type"].as_str().unwrap()).collect();
-        assert!(types.contains(&"feature_envy"), "Should extract feature_envy type");
-        assert!(types.contains(&"data_clump"), "Should extract data_clump type");
+        let types: Vec<&str> = findings
+            .iter()
+            .map(|f| f.evidence["smell_type"].as_str().unwrap())
+            .collect();
+        assert!(
+            types.contains(&"feature_envy"),
+            "Should extract feature_envy type"
+        );
+        assert!(
+            types.contains(&"data_clump"),
+            "Should extract data_clump type"
+        );
         // Structural smells should be medium severity
-        assert!(findings.iter().all(|f| f.severity == "medium"), "Structural smells should be medium severity");
+        assert!(
+            findings.iter().all(|f| f.severity == "medium"),
+            "Structural smells should be medium severity"
+        );
         // None should be "unknown"
-        assert!(!types.contains(&"unknown"), "No smell should have type 'unknown'");
+        assert!(
+            !types.contains(&"unknown"),
+            "No smell should have type 'unknown'"
+        );
     }
 
     #[test]
@@ -2916,13 +3060,12 @@ mod tests {
             ]
         });
 
-        let findings = engine.diff_smells(
-            Path::new("src/lib.rs"),
-            &baseline,
-            &current,
-        );
+        let findings = engine.diff_smells(Path::new("src/lib.rs"), &baseline, &current);
 
-        assert!(findings.is_empty(), "Suppressed smell types should produce no findings");
+        assert!(
+            findings.is_empty(),
+            "Suppressed smell types should produce no findings"
+        );
     }
 
     #[test]
@@ -2981,20 +3124,41 @@ mod tests {
 
         // >50% increase = high
         let high = serde_json::json!({ "functions": [{ "name": "f", "metric": 2.0, "line": 1 }] });
-        let high_curr = serde_json::json!({ "functions": [{ "name": "f", "metric": 10.0, "line": 1 }] });
-        let findings = engine.diff_numeric_metrics("test-increase", "metric", Path::new("a.py"), &high, &high_curr);
+        let high_curr =
+            serde_json::json!({ "functions": [{ "name": "f", "metric": 10.0, "line": 1 }] });
+        let findings = engine.diff_numeric_metrics(
+            "test-increase",
+            "metric",
+            Path::new("a.py"),
+            &high,
+            &high_curr,
+        );
         assert_eq!(findings[0].severity, "high");
 
         // 20-50% increase = medium
         let med = serde_json::json!({ "functions": [{ "name": "f", "metric": 10.0, "line": 1 }] });
-        let med_curr = serde_json::json!({ "functions": [{ "name": "f", "metric": 14.0, "line": 1 }] });
-        let findings = engine.diff_numeric_metrics("test-increase", "metric", Path::new("a.py"), &med, &med_curr);
+        let med_curr =
+            serde_json::json!({ "functions": [{ "name": "f", "metric": 14.0, "line": 1 }] });
+        let findings = engine.diff_numeric_metrics(
+            "test-increase",
+            "metric",
+            Path::new("a.py"),
+            &med,
+            &med_curr,
+        );
         assert_eq!(findings[0].severity, "medium");
 
         // <20% increase = low
         let low = serde_json::json!({ "functions": [{ "name": "f", "metric": 10.0, "line": 1 }] });
-        let low_curr = serde_json::json!({ "functions": [{ "name": "f", "metric": 11.0, "line": 1 }] });
-        let findings = engine.diff_numeric_metrics("test-increase", "metric", Path::new("a.py"), &low, &low_curr);
+        let low_curr =
+            serde_json::json!({ "functions": [{ "name": "f", "metric": 11.0, "line": 1 }] });
+        let findings = engine.diff_numeric_metrics(
+            "test-increase",
+            "metric",
+            Path::new("a.py"),
+            &low,
+            &low_curr,
+        );
         assert_eq!(findings[0].severity, "low");
     }
 
@@ -3003,28 +3167,70 @@ mod tests {
         let engine = TldrDifferentialEngine::new();
 
         // Cognitive delta of 2 (below threshold of 3) should be suppressed
-        let baseline = serde_json::json!({ "functions": [{ "name": "f", "cognitive": 2.0, "line": 1 }] });
-        let current = serde_json::json!({ "functions": [{ "name": "f", "cognitive": 4.0, "line": 1 }] });
-        let findings = engine.diff_numeric_metrics("cognitive-increase", "cognitive", Path::new("a.rs"), &baseline, &current);
-        assert!(findings.is_empty(), "Cognitive delta of 2 should be suppressed (threshold 3)");
+        let baseline =
+            serde_json::json!({ "functions": [{ "name": "f", "cognitive": 2.0, "line": 1 }] });
+        let current =
+            serde_json::json!({ "functions": [{ "name": "f", "cognitive": 4.0, "line": 1 }] });
+        let findings = engine.diff_numeric_metrics(
+            "cognitive-increase",
+            "cognitive",
+            Path::new("a.rs"),
+            &baseline,
+            &current,
+        );
+        assert!(
+            findings.is_empty(),
+            "Cognitive delta of 2 should be suppressed (threshold 3)"
+        );
 
         // Cognitive delta of 3 (at threshold) should be reported
-        let baseline = serde_json::json!({ "functions": [{ "name": "g", "cognitive": 5.0, "line": 1 }] });
-        let current = serde_json::json!({ "functions": [{ "name": "g", "cognitive": 8.0, "line": 1 }] });
-        let findings = engine.diff_numeric_metrics("cognitive-increase", "cognitive", Path::new("a.rs"), &baseline, &current);
+        let baseline =
+            serde_json::json!({ "functions": [{ "name": "g", "cognitive": 5.0, "line": 1 }] });
+        let current =
+            serde_json::json!({ "functions": [{ "name": "g", "cognitive": 8.0, "line": 1 }] });
+        let findings = engine.diff_numeric_metrics(
+            "cognitive-increase",
+            "cognitive",
+            Path::new("a.rs"),
+            &baseline,
+            &current,
+        );
         assert_eq!(findings.len(), 1, "Cognitive delta of 3 should be reported");
 
         // Complexity delta of 1 (below threshold of 2) should be suppressed
-        let baseline = serde_json::json!({ "functions": [{ "name": "h", "cyclomatic": 3.0, "line": 1 }] });
-        let current = serde_json::json!({ "functions": [{ "name": "h", "cyclomatic": 4.0, "line": 1 }] });
-        let findings = engine.diff_numeric_metrics("complexity-increase", "cyclomatic", Path::new("a.rs"), &baseline, &current);
-        assert!(findings.is_empty(), "Complexity delta of 1 should be suppressed (threshold 2)");
+        let baseline =
+            serde_json::json!({ "functions": [{ "name": "h", "cyclomatic": 3.0, "line": 1 }] });
+        let current =
+            serde_json::json!({ "functions": [{ "name": "h", "cyclomatic": 4.0, "line": 1 }] });
+        let findings = engine.diff_numeric_metrics(
+            "complexity-increase",
+            "cyclomatic",
+            Path::new("a.rs"),
+            &baseline,
+            &current,
+        );
+        assert!(
+            findings.is_empty(),
+            "Complexity delta of 1 should be suppressed (threshold 2)"
+        );
 
         // Complexity delta of 2 (at threshold) should be reported
-        let baseline = serde_json::json!({ "functions": [{ "name": "j", "cyclomatic": 3.0, "line": 1 }] });
-        let current = serde_json::json!({ "functions": [{ "name": "j", "cyclomatic": 5.0, "line": 1 }] });
-        let findings = engine.diff_numeric_metrics("complexity-increase", "cyclomatic", Path::new("a.rs"), &baseline, &current);
-        assert_eq!(findings.len(), 1, "Complexity delta of 2 should be reported");
+        let baseline =
+            serde_json::json!({ "functions": [{ "name": "j", "cyclomatic": 3.0, "line": 1 }] });
+        let current =
+            serde_json::json!({ "functions": [{ "name": "j", "cyclomatic": 5.0, "line": 1 }] });
+        let findings = engine.diff_numeric_metrics(
+            "complexity-increase",
+            "cyclomatic",
+            Path::new("a.rs"),
+            &baseline,
+            &current,
+        );
+        assert_eq!(
+            findings.len(),
+            1,
+            "Complexity delta of 2 should be reported"
+        );
     }
 
     // =========================================================================
@@ -3046,10 +3252,8 @@ mod tests {
         let baseline_file = tmp_dir.path().join("baseline.py");
         let current_file = tmp_dir.path().join("current.py");
 
-        std::fs::write(
-            &baseline_file,
-            "def process(x):\n    return x + 1\n",
-        ).expect("write baseline");
+        std::fs::write(&baseline_file, "def process(x):\n    return x + 1\n")
+            .expect("write baseline");
 
         std::fs::write(
             &current_file,
@@ -3088,13 +3292,19 @@ mod tests {
 
     #[test]
     fn test_tldr_commands_local_count() {
-        let local_count = TLDR_COMMANDS.iter().filter(|c| c.category == TldrCategory::Local).count();
+        let local_count = TLDR_COMMANDS
+            .iter()
+            .filter(|c| c.category == TldrCategory::Local)
+            .count();
         assert_eq!(local_count, 4);
     }
 
     #[test]
     fn test_tldr_commands_flow_count() {
-        let flow_count = TLDR_COMMANDS.iter().filter(|c| c.category == TldrCategory::Flow).count();
+        let flow_count = TLDR_COMMANDS
+            .iter()
+            .filter(|c| c.category == TldrCategory::Flow)
+            .count();
         assert_eq!(flow_count, 5);
     }
 
@@ -3160,7 +3370,10 @@ mod tests {
             "edge_count": 1
         });
         let findings = engine.diff_calls_json(&baseline, &current);
-        assert!(!findings.is_empty(), "Should detect removed call graph edge");
+        assert!(
+            !findings.is_empty(),
+            "Should detect removed call graph edge"
+        );
         assert_eq!(findings[0].finding_type, "call-graph-change");
     }
 
@@ -3188,7 +3401,10 @@ mod tests {
         assert!(!findings.is_empty());
         // At least one finding should have medium severity when >5 new edges
         let has_medium = findings.iter().any(|f| f.severity == "medium");
-        assert!(has_medium, "Should produce a medium-severity summary finding for >5 new edges");
+        assert!(
+            has_medium,
+            "Should produce a medium-severity summary finding for >5 new edges"
+        );
     }
 
     // =========================================================================
@@ -3209,7 +3425,10 @@ mod tests {
             "stats": {"total_internal_deps": 2}
         });
         let findings = engine.diff_deps_json(&baseline, &current);
-        assert!(!findings.is_empty(), "Should detect new circular dependency");
+        assert!(
+            !findings.is_empty(),
+            "Should detect new circular dependency"
+        );
         assert_eq!(findings[0].finding_type, "dependency-change");
         assert_eq!(findings[0].severity, "high");
     }
@@ -3242,7 +3461,10 @@ mod tests {
         let findings = engine.diff_deps_json(&baseline, &current);
         // Removing a circular dependency is an improvement, not a regression
         let has_high = findings.iter().any(|f| f.severity == "high");
-        assert!(!has_high, "Removing circular dependency should not produce high severity finding");
+        assert!(
+            !has_high,
+            "Removing circular dependency should not produce high severity finding"
+        );
     }
 
     #[test]
@@ -3260,7 +3482,10 @@ mod tests {
             "stats": {"total_internal_deps": 7}
         });
         let findings = engine.diff_deps_json(&baseline, &current);
-        assert!(!findings.is_empty(), "Should detect dependency count increase of 6 (>5 threshold)");
+        assert!(
+            !findings.is_empty(),
+            "Should detect dependency count increase of 6 (>5 threshold)"
+        );
         assert_eq!(findings[0].finding_type, "dependency-change");
         assert_eq!(findings[0].severity, "medium");
     }
@@ -3278,7 +3503,10 @@ mod tests {
             "circular_dependencies": []
         });
         let findings = engine.diff_deps_json(&baseline, &current);
-        assert!(!findings.is_empty(), "Should detect dependency count increase even without stats field");
+        assert!(
+            !findings.is_empty(),
+            "Should detect dependency count increase even without stats field"
+        );
     }
 
     // =========================================================================
@@ -3334,7 +3562,10 @@ mod tests {
             "pairwise_coupling": []
         });
         let findings = engine.diff_coupling_json(&baseline, &current);
-        assert!(findings.is_empty(), "Coupling decrease should not produce findings");
+        assert!(
+            findings.is_empty(),
+            "Coupling decrease should not produce findings"
+        );
     }
 
     // =========================================================================
@@ -3390,7 +3621,10 @@ mod tests {
             "summary": {"total_classes": 1}
         });
         let findings = engine.diff_cohesion_json(&baseline, &current);
-        assert!(findings.is_empty(), "LCOM4 decrease is an improvement, should not produce findings");
+        assert!(
+            findings.is_empty(),
+            "LCOM4 decrease is an improvement, should not produce findings"
+        );
     }
 
     #[test]
@@ -3407,7 +3641,10 @@ mod tests {
             "summary": {"total_classes": 1}
         });
         let findings = engine.diff_cohesion_json(&baseline, &current);
-        assert!(!findings.is_empty(), "New class with high LCOM4 should be flagged");
+        assert!(
+            !findings.is_empty(),
+            "New class with high LCOM4 should be flagged"
+        );
         assert_eq!(findings[0].severity, "info");
     }
 
@@ -3424,7 +3661,10 @@ mod tests {
             "summary": {"total_classes": 1}
         });
         let findings = engine.diff_cohesion_json(&baseline, &current);
-        assert!(!findings.is_empty(), "Should still work with 'name' field as fallback");
+        assert!(
+            !findings.is_empty(),
+            "Should still work with 'name' field as fallback"
+        );
     }
 
     // =========================================================================
@@ -3516,12 +3756,8 @@ mod tests {
             Path::new("/tmp/nonexistent"),
             "rust",
         );
-        let _deps_result = engine.run_tldr_flow_command(
-            "deps",
-            &["deps"],
-            Path::new("/tmp/nonexistent"),
-            "rust",
-        );
+        let _deps_result =
+            engine.run_tldr_flow_command("deps", &["deps"], Path::new("/tmp/nonexistent"), "rust");
     }
 
     // =========================================================================
@@ -3615,10 +3851,7 @@ mod tests {
         assert_eq!(findings[0].severity, "high");
         assert_eq!(findings[0].function, "(file-level)");
         assert_eq!(findings[0].file, file);
-        assert_eq!(
-            findings[0].confidence.as_deref(),
-            Some("DETERMINISTIC")
-        );
+        assert_eq!(findings[0].confidence.as_deref(), Some("DETERMINISTIC"));
         assert!(findings[0].finding_id.is_some());
 
         // Verify evidence fields
@@ -3792,17 +4025,13 @@ mod tests {
                 }
             }
         });
-        let findings =
-            TldrDifferentialEngine::parse_impact_findings("process_data", &json);
+        let findings = TldrDifferentialEngine::parse_impact_findings("process_data", &json);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].finding_type, "breaking-change-risk");
         assert_eq!(findings[0].severity, "high");
         assert_eq!(findings[0].function, "process_data");
         assert_eq!(findings[0].file, PathBuf::from("(project)"));
-        assert_eq!(
-            findings[0].confidence.as_deref(),
-            Some("DETERMINISTIC")
-        );
+        assert_eq!(findings[0].confidence.as_deref(), Some("DETERMINISTIC"));
         assert!(findings[0].finding_id.is_some());
 
         // Verify evidence
@@ -3828,8 +4057,7 @@ mod tests {
                 }
             }
         });
-        let findings =
-            TldrDifferentialEngine::parse_impact_findings("helper_fn", &json);
+        let findings = TldrDifferentialEngine::parse_impact_findings("helper_fn", &json);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, "medium");
     }
@@ -3846,8 +4074,7 @@ mod tests {
                 }
             }
         });
-        let findings =
-            TldrDifferentialEngine::parse_impact_findings("rare_fn", &json);
+        let findings = TldrDifferentialEngine::parse_impact_findings("rare_fn", &json);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, "info");
     }
@@ -3862,8 +4089,7 @@ mod tests {
                 }
             }
         });
-        let findings =
-            TldrDifferentialEngine::parse_impact_findings("leaf_fn", &json);
+        let findings = TldrDifferentialEngine::parse_impact_findings("leaf_fn", &json);
         assert!(
             findings.is_empty(),
             "Function with zero callers should produce no findings"
@@ -3881,8 +4107,7 @@ mod tests {
                 }
             }
         });
-        let findings =
-            TldrDifferentialEngine::parse_impact_findings("missing_fn", &json);
+        let findings = TldrDifferentialEngine::parse_impact_findings("missing_fn", &json);
         assert!(
             findings.is_empty(),
             "Missing target key should produce no findings"
@@ -3901,8 +4126,7 @@ mod tests {
                 { "file": "w.rs", "function": "d" },
             ]
         });
-        let findings =
-            TldrDifferentialEngine::parse_impact_findings("any_fn", &json);
+        let findings = TldrDifferentialEngine::parse_impact_findings("any_fn", &json);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, "medium");
         assert_eq!(findings[0].evidence["caller_count"], 4);
@@ -3922,8 +4146,7 @@ mod tests {
                 }
             }
         });
-        let findings =
-            TldrDifferentialEngine::parse_impact_findings("boundary_fn", &json);
+        let findings = TldrDifferentialEngine::parse_impact_findings("boundary_fn", &json);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, "medium");
     }
@@ -3939,8 +4162,7 @@ mod tests {
                 }
             }
         });
-        let findings =
-            TldrDifferentialEngine::parse_impact_findings("five_fn", &json);
+        let findings = TldrDifferentialEngine::parse_impact_findings("five_fn", &json);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, "medium");
     }
@@ -3956,8 +4178,7 @@ mod tests {
                 }
             }
         });
-        let findings =
-            TldrDifferentialEngine::parse_impact_findings("six_fn", &json);
+        let findings = TldrDifferentialEngine::parse_impact_findings("six_fn", &json);
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, "high");
     }
@@ -3988,10 +4209,8 @@ mod tests {
                 }
             }
         });
-        let findings1 =
-            TldrDifferentialEngine::parse_impact_findings("stable_fn", &json);
-        let findings2 =
-            TldrDifferentialEngine::parse_impact_findings("stable_fn", &json);
+        let findings1 = TldrDifferentialEngine::parse_impact_findings("stable_fn", &json);
+        let findings2 = TldrDifferentialEngine::parse_impact_findings("stable_fn", &json);
         assert_eq!(findings1[0].finding_id, findings2[0].finding_id);
     }
 
@@ -4251,7 +4470,10 @@ mod tests {
         });
         let deps = TldrDifferentialEngine::derive_deps_from_calls(&calls);
         let circular = deps["circular_dependencies"].as_array().unwrap();
-        assert!(!circular.is_empty(), "should detect circular dependency between a.rs and b.rs");
+        assert!(
+            !circular.is_empty(),
+            "should detect circular dependency between a.rs and b.rs"
+        );
         // The cycle path should mention both files
         let path = circular[0]["path"].as_array().unwrap();
         let path_strs: Vec<&str> = path.iter().map(|v| v.as_str().unwrap()).collect();
@@ -4293,13 +4515,19 @@ mod tests {
         let metrics = coupling["martin_metrics"].as_array().unwrap();
 
         // Find b.rs entry
-        let b_metric = metrics.iter().find(|m| m["module"].as_str() == Some("b.rs")).unwrap();
+        let b_metric = metrics
+            .iter()
+            .find(|m| m["module"].as_str() == Some("b.rs"))
+            .unwrap();
         assert_eq!(b_metric["ca"].as_u64().unwrap(), 2);
         assert_eq!(b_metric["ce"].as_u64().unwrap(), 0);
         assert!((b_metric["instability"].as_f64().unwrap() - 0.0).abs() < 0.01);
 
         // a.rs: Ca=0, Ce=1, instability=1.0
-        let a_metric = metrics.iter().find(|m| m["module"].as_str() == Some("a.rs")).unwrap();
+        let a_metric = metrics
+            .iter()
+            .find(|m| m["module"].as_str() == Some("a.rs"))
+            .unwrap();
         assert_eq!(a_metric["ca"].as_u64().unwrap(), 0);
         assert_eq!(a_metric["ce"].as_u64().unwrap(), 1);
         assert!((a_metric["instability"].as_f64().unwrap() - 1.0).abs() < 0.01);
@@ -4318,12 +4546,27 @@ mod tests {
         let metrics = coupling["martin_metrics"].as_array().unwrap();
 
         for module_name in &["a.rs", "b.rs"] {
-            let m = metrics.iter().find(|m| m["module"].as_str() == Some(*module_name))
+            let m = metrics
+                .iter()
+                .find(|m| m["module"].as_str() == Some(*module_name))
                 .unwrap_or_else(|| panic!("missing metric for {}", module_name));
-            assert_eq!(m["ca"].as_u64().unwrap(), 1, "{} Ca should be 1", module_name);
-            assert_eq!(m["ce"].as_u64().unwrap(), 1, "{} Ce should be 1", module_name);
-            assert!((m["instability"].as_f64().unwrap() - 0.5).abs() < 0.01,
-                "{} instability should be 0.5", module_name);
+            assert_eq!(
+                m["ca"].as_u64().unwrap(),
+                1,
+                "{} Ca should be 1",
+                module_name
+            );
+            assert_eq!(
+                m["ce"].as_u64().unwrap(),
+                1,
+                "{} Ce should be 1",
+                module_name
+            );
+            assert!(
+                (m["instability"].as_f64().unwrap() - 0.5).abs() < 0.01,
+                "{} instability should be 0.5",
+                module_name
+            );
         }
     }
 
@@ -4339,7 +4582,9 @@ mod tests {
         let metrics = coupling["martin_metrics"].as_array().unwrap();
         // Either empty or a.rs with Ca=0, Ce=0
         if !metrics.is_empty() {
-            let a = metrics.iter().find(|m| m["module"].as_str() == Some("a.rs"));
+            let a = metrics
+                .iter()
+                .find(|m| m["module"].as_str() == Some("a.rs"));
             if let Some(a_metric) = a {
                 assert_eq!(a_metric["ca"].as_u64().unwrap(), 0);
                 assert_eq!(a_metric["ce"].as_u64().unwrap(), 0);
@@ -4413,8 +4658,10 @@ mod tests {
         });
         let results = TldrDifferentialEngine::derive_downstream_from_calls(&calls, &["lib.rs"]);
         let (_, metrics) = &results[0];
-        assert!(metrics["affected_test_count"].as_u64().unwrap() >= 1,
-            "test callers should be detected via path/name heuristic");
+        assert!(
+            metrics["affected_test_count"].as_u64().unwrap() >= 1,
+            "test callers should be detected via path/name heuristic"
+        );
         assert_eq!(metrics["importer_count"].as_u64().unwrap(), 2);
     }
 
@@ -4429,7 +4676,11 @@ mod tests {
         });
         let results = TldrDifferentialEngine::derive_downstream_from_calls(&calls, &["lib.rs"]);
         let (_, metrics) = &results[0];
-        assert_eq!(metrics["importer_count"].as_u64().unwrap(), 1, "self-calls should be excluded");
+        assert_eq!(
+            metrics["importer_count"].as_u64().unwrap(),
+            1,
+            "self-calls should be excluded"
+        );
     }
 
     #[test]
@@ -4444,7 +4695,11 @@ mod tests {
         });
         let results = TldrDifferentialEngine::derive_downstream_from_calls(&calls, &["lib.rs"]);
         let (_, metrics) = &results[0];
-        assert_eq!(metrics["importer_count"].as_u64().unwrap(), 1, "3 edges from same file = 1 importer");
+        assert_eq!(
+            metrics["importer_count"].as_u64().unwrap(),
+            1,
+            "3 edges from same file = 1 importer"
+        );
         assert_eq!(metrics["direct_caller_count"].as_u64().unwrap(), 1);
     }
 
@@ -4516,7 +4771,10 @@ mod tests {
         );
 
         // With 2 cross-file edges into lib.rs, should produce a downstream-impact finding
-        assert!(!findings.is_empty(), "cached calls should produce downstream findings");
+        assert!(
+            !findings.is_empty(),
+            "cached calls should produce downstream findings"
+        );
         assert_eq!(findings[0].finding_type, "downstream-impact");
     }
 

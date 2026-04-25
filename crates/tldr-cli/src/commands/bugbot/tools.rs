@@ -147,13 +147,7 @@ impl ToolRegistry {
                     name: "clippy",
                     binary: "cargo",
                     detection_binary: "cargo-clippy", // [PM-2]
-                    args: &[
-                        "clippy",
-                        "--message-format=json",
-                        "--",
-                        "-W",
-                        "clippy::all",
-                    ],
+                    args: &["clippy", "--message-format=json", "--", "-W", "clippy::all"],
                     category: ToolCategory::Linter,
                     parser: "cargo",
                 },

@@ -75,7 +75,10 @@ pub fn dedup_and_prioritize(findings: Vec<BugbotFinding>, max: usize) -> Vec<Bug
     // If a function has a born-dead finding, suppress ALL other findings for that function
     let mut after_born_dead: Vec<BugbotFinding> = Vec::new();
     for finding in findings {
-        let key = (finding.file.to_string_lossy().to_string(), finding.function.clone());
+        let key = (
+            finding.file.to_string_lossy().to_string(),
+            finding.function.clone(),
+        );
         if finding.finding_type == "born-dead" {
             // Always keep born-dead findings
             after_born_dead.push(finding);
@@ -121,10 +124,7 @@ pub fn dedup_and_prioritize(findings: Vec<BugbotFinding>, max: usize) -> Vec<Bug
     let mut uninit_functions: Vec<(String, String)> = Vec::new();
     for f in &after_taint {
         if f.finding_type == "uninitialized-use" {
-            uninit_functions.push((
-                f.file.to_string_lossy().to_string(),
-                f.function.clone(),
-            ));
+            uninit_functions.push((f.file.to_string_lossy().to_string(), f.function.clone()));
         }
     }
 
@@ -135,8 +135,7 @@ pub fn dedup_and_prioritize(findings: Vec<BugbotFinding>, max: usize) -> Vec<Bug
         } else {
             let file_str = finding.file.to_string_lossy();
             let dominated = uninit_functions.iter().any(|(file, func)| {
-                file.as_str() == file_str.as_ref()
-                    && func == &finding.function
+                file.as_str() == file_str.as_ref() && func == &finding.function
             });
             if dominated {
                 // Check if this finding mentions the same variable in evidence
@@ -252,7 +251,7 @@ mod tests {
     fn test_dedup_groups_by_file_function_line() {
         let findings = vec![
             make_finding("signature-regression", "high", "src/lib.rs", "foo", 10),
-            make_finding("born-dead", "low", "src/lib.rs", "foo", 12),  // within 3 lines
+            make_finding("born-dead", "low", "src/lib.rs", "foo", 12), // within 3 lines
             make_finding("complexity-increase", "medium", "src/other.rs", "bar", 50),
         ];
 
@@ -261,13 +260,13 @@ mod tests {
         // The born-dead in foo should suppress the signature-regression (born-dead rule),
         // and complexity-increase in bar should remain separate
         assert!(result.iter().any(|f| f.finding_type == "born-dead"));
-        assert!(result.iter().any(|f| f.finding_type == "complexity-increase"));
+        assert!(result
+            .iter()
+            .any(|f| f.finding_type == "complexity-increase"));
         // signature-regression should be suppressed by born-dead
         let lib_rs = std::path::Path::new("src/lib.rs");
         assert!(!result.iter().any(|f| {
-            f.finding_type == "signature-regression"
-                && f.file == lib_rs
-                && f.function == "foo"
+            f.finding_type == "signature-regression" && f.file == lib_rs && f.function == "foo"
         }));
     }
 
@@ -283,17 +282,17 @@ mod tests {
         let result = dedup_and_prioritize(findings, 0);
 
         // Only one finding should remain for foo (the highest severity one)
-        let foo_findings: Vec<&BugbotFinding> = result
-            .iter()
-            .filter(|f| f.function == "foo")
-            .collect();
+        let foo_findings: Vec<&BugbotFinding> =
+            result.iter().filter(|f| f.function == "foo").collect();
         assert_eq!(foo_findings.len(), 1);
         assert_eq!(foo_findings[0].severity, "high");
         assert_eq!(foo_findings[0].finding_type, "contract-regression");
 
         // Check that related_findings are stored in evidence
         let evidence = &foo_findings[0].evidence;
-        let related = evidence.get("related_findings").expect("should have related_findings");
+        let related = evidence
+            .get("related_findings")
+            .expect("should have related_findings");
         assert!(related.is_array());
         assert_eq!(related.as_array().unwrap().len(), 2);
     }
@@ -311,10 +310,8 @@ mod tests {
         let result = dedup_and_prioritize(findings, 0);
 
         // foo should only have born-dead
-        let foo_findings: Vec<&BugbotFinding> = result
-            .iter()
-            .filter(|f| f.function == "foo")
-            .collect();
+        let foo_findings: Vec<&BugbotFinding> =
+            result.iter().filter(|f| f.function == "foo").collect();
         assert_eq!(foo_findings.len(), 1);
         assert_eq!(foo_findings[0].finding_type, "born-dead");
 
@@ -349,10 +346,8 @@ mod tests {
         let result = dedup_and_prioritize(findings, 0);
 
         // Only uninitialized-use should remain for process()
-        let process_findings: Vec<&BugbotFinding> = result
-            .iter()
-            .filter(|f| f.function == "process")
-            .collect();
+        let process_findings: Vec<&BugbotFinding> =
+            result.iter().filter(|f| f.function == "process").collect();
         assert_eq!(process_findings.len(), 1);
         assert_eq!(process_findings[0].finding_type, "uninitialized-use");
     }
@@ -402,7 +397,15 @@ mod tests {
     #[test]
     fn test_dedup_zero_max_no_truncation() {
         let findings: Vec<BugbotFinding> = (0..20)
-            .map(|i| make_finding("test", "low", &format!("f{}.rs", i), &format!("fn_{}", i), i))
+            .map(|i| {
+                make_finding(
+                    "test",
+                    "low",
+                    &format!("f{}.rs", i),
+                    &format!("fn_{}", i),
+                    i,
+                )
+            })
             .collect();
 
         let result = dedup_and_prioritize(findings, 0);

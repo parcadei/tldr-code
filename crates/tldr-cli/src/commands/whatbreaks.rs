@@ -19,9 +19,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Args, ValueEnum};
 
-use tldr_core::analysis::whatbreaks::{
-    whatbreaks_analysis, TargetType, WhatbreaksOptions,
-};
+use tldr_core::analysis::whatbreaks::{whatbreaks_analysis, TargetType, WhatbreaksOptions};
 use tldr_core::Language;
 
 use crate::output::{format_whatbreaks_text, OutputFormat, OutputWriter};

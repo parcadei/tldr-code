@@ -27,7 +27,6 @@ pub mod types;
 pub use context::L2Context;
 pub use types::*;
 
-
 /// Trait for L2 deep-analysis engines.
 ///
 /// Implementations must be object-safe so they can be stored as
@@ -60,9 +59,9 @@ pub trait L2Engine: Send + Sync {
 /// for differential analysis. The pipeline orchestrator invokes each
 /// engine's `analyze` method.
 pub fn l2_engine_registry() -> Vec<Box<dyn L2Engine>> {
-    vec![
-        Box::new(engines::tldr_differential::TldrDifferentialEngine::new()),
-    ]
+    vec![Box::new(
+        engines::tldr_differential::TldrDifferentialEngine::new(),
+    )]
 }
 
 #[cfg(test)]
@@ -73,7 +72,11 @@ mod tests {
     #[test]
     fn test_l2_engine_registry_contains_engines() {
         let engines = l2_engine_registry();
-        assert_eq!(engines.len(), 1, "Registry should contain exactly 1 engine (TldrDifferentialEngine)");
+        assert_eq!(
+            engines.len(),
+            1,
+            "Registry should contain exactly 1 engine (TldrDifferentialEngine)"
+        );
         assert!(
             engines.iter().any(|e| e.name() == "TldrDifferentialEngine"),
             "Registry must contain TldrDifferentialEngine"
@@ -84,8 +87,13 @@ mod tests {
     #[test]
     fn test_tldr_engine_registered() {
         let engines = l2_engine_registry();
-        let engine = engines.iter().find(|e| e.name() == "TldrDifferentialEngine");
-        assert!(engine.is_some(), "TldrDifferentialEngine must be in registry");
+        let engine = engines
+            .iter()
+            .find(|e| e.name() == "TldrDifferentialEngine");
+        assert!(
+            engine.is_some(),
+            "TldrDifferentialEngine must be in registry"
+        );
         let engine = engine.unwrap();
         assert_eq!(engine.finding_types().len(), 11);
     }

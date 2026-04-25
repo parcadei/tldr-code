@@ -227,7 +227,6 @@ impl DaemonStartArgs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[test]
     fn test_daemon_start_args_default() {

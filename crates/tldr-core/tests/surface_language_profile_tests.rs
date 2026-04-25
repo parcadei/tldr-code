@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use tldr_core::surface::extract_api_surface;
 use std::path::Path;
+use tldr_core::surface::extract_api_surface;
 
 use tldr_core::surface::language_profile::{
     language_profile, static_preference_score, supported_surface_languages,

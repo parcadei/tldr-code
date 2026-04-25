@@ -23,11 +23,11 @@ use tempfile::TempDir;
 
 // These imports reference types that will be added by the implementation.
 // Until then, these cause compile errors -- which is the point of TDD.
+use tldr_cli::commands::remaining::diff::DiffArgs;
 use tldr_cli::commands::remaining::types::{
     ArchChangeType, ArchDiffSummary, ArchLevelChange, ChangeType, DiffGranularity, DiffReport,
     FileLevelChange, ImportEdge, ImportGraphSummary, ModuleLevelChange,
 };
-use tldr_cli::commands::remaining::diff::DiffArgs;
 
 // =============================================================================
 // Test Utilities
@@ -170,35 +170,41 @@ def format_output(data):
 fn test_file_level_identical_dirs() {
     // Two directories with exactly the same files and content.
     // Expected: all files classified as Identical, no changes.
-    let files = &[
-        ("utils.py", PYTHON_UTILS),
-        ("models.py", PYTHON_MODELS),
-    ];
+    let files = &[("utils.py", PYTHON_UTILS), ("models.py", PYTHON_MODELS)];
     let dir_a = create_test_dir(files);
     let dir_b = create_test_dir(files);
 
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::File);
 
     // Report should indicate identical
-    assert!(report.identical, "Identical directories should produce identical=true");
+    assert!(
+        report.identical,
+        "Identical directories should produce identical=true"
+    );
     assert_eq!(report.granularity, DiffGranularity::File);
 
     // file_changes should be present but contain only Identical entries (or be empty
     // if the implementation omits unchanged files). Either way, no Modified/Added/Removed.
-    let file_changes = report.file_changes.expect("L6 report should have file_changes");
+    let file_changes = report
+        .file_changes
+        .expect("L6 report should have file_changes");
     let non_identical: Vec<&FileLevelChange> = file_changes
         .iter()
-        .filter(|fc| fc.change_type != ChangeType::Insert
-            && fc.change_type != ChangeType::Delete
-            && fc.change_type != ChangeType::Update)
+        .filter(|fc| {
+            fc.change_type != ChangeType::Insert
+                && fc.change_type != ChangeType::Delete
+                && fc.change_type != ChangeType::Update
+        })
         .collect();
     // If the implementation includes Identical entries, they should all be Identical-equivalent.
     // If it omits them, the list should be empty. Check there are no Insert/Delete/Update.
     let modifications: Vec<&FileLevelChange> = file_changes
         .iter()
-        .filter(|fc| fc.change_type == ChangeType::Update
-            || fc.change_type == ChangeType::Insert
-            || fc.change_type == ChangeType::Delete)
+        .filter(|fc| {
+            fc.change_type == ChangeType::Update
+                || fc.change_type == ChangeType::Insert
+                || fc.change_type == ChangeType::Delete
+        })
         .collect();
     assert!(
         modifications.is_empty(),
@@ -210,20 +216,20 @@ fn test_file_level_identical_dirs() {
 #[test]
 fn test_file_level_added_file() {
     // dir_b has one extra file not present in dir_a.
-    let dir_a = create_test_dir(&[
-        ("utils.py", PYTHON_UTILS),
-    ]);
-    let dir_b = create_test_dir(&[
-        ("utils.py", PYTHON_UTILS),
-        ("models.py", PYTHON_MODELS),
-    ]);
+    let dir_a = create_test_dir(&[("utils.py", PYTHON_UTILS)]);
+    let dir_b = create_test_dir(&[("utils.py", PYTHON_UTILS), ("models.py", PYTHON_MODELS)]);
 
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::File);
 
-    assert!(!report.identical, "Directories with an added file should not be identical");
+    assert!(
+        !report.identical,
+        "Directories with an added file should not be identical"
+    );
     assert_eq!(report.granularity, DiffGranularity::File);
 
-    let file_changes = report.file_changes.expect("L6 report should have file_changes");
+    let file_changes = report
+        .file_changes
+        .expect("L6 report should have file_changes");
     let added: Vec<&FileLevelChange> = file_changes
         .iter()
         .filter(|fc| fc.change_type == ChangeType::Insert)
@@ -231,26 +237,32 @@ fn test_file_level_added_file() {
     assert_eq!(added.len(), 1, "Should detect exactly one added file");
     assert_eq!(added[0].relative_path, "models.py");
     // Added files should have a new_fingerprint but no old_fingerprint
-    assert!(added[0].new_fingerprint.is_some(), "Added file should have new_fingerprint");
-    assert!(added[0].old_fingerprint.is_none(), "Added file should not have old_fingerprint");
+    assert!(
+        added[0].new_fingerprint.is_some(),
+        "Added file should have new_fingerprint"
+    );
+    assert!(
+        added[0].old_fingerprint.is_none(),
+        "Added file should not have old_fingerprint"
+    );
 }
 
 #[test]
 fn test_file_level_removed_file() {
     // dir_b is missing a file that was in dir_a.
-    let dir_a = create_test_dir(&[
-        ("utils.py", PYTHON_UTILS),
-        ("models.py", PYTHON_MODELS),
-    ]);
-    let dir_b = create_test_dir(&[
-        ("utils.py", PYTHON_UTILS),
-    ]);
+    let dir_a = create_test_dir(&[("utils.py", PYTHON_UTILS), ("models.py", PYTHON_MODELS)]);
+    let dir_b = create_test_dir(&[("utils.py", PYTHON_UTILS)]);
 
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::File);
 
-    assert!(!report.identical, "Directories with a removed file should not be identical");
+    assert!(
+        !report.identical,
+        "Directories with a removed file should not be identical"
+    );
 
-    let file_changes = report.file_changes.expect("L6 report should have file_changes");
+    let file_changes = report
+        .file_changes
+        .expect("L6 report should have file_changes");
     let removed: Vec<&FileLevelChange> = file_changes
         .iter()
         .filter(|fc| fc.change_type == ChangeType::Delete)
@@ -258,26 +270,33 @@ fn test_file_level_removed_file() {
     assert_eq!(removed.len(), 1, "Should detect exactly one removed file");
     assert_eq!(removed[0].relative_path, "models.py");
     // Removed files should have old_fingerprint but no new_fingerprint
-    assert!(removed[0].old_fingerprint.is_some(), "Removed file should have old_fingerprint");
-    assert!(removed[0].new_fingerprint.is_none(), "Removed file should not have new_fingerprint");
+    assert!(
+        removed[0].old_fingerprint.is_some(),
+        "Removed file should have old_fingerprint"
+    );
+    assert!(
+        removed[0].new_fingerprint.is_none(),
+        "Removed file should not have new_fingerprint"
+    );
 }
 
 #[test]
 fn test_file_level_modified_file() {
     // Same file path in both dirs, but with different function signatures.
     // helper_one gains a new parameter -> structural fingerprint changes.
-    let dir_a = create_test_dir(&[
-        ("utils.py", PYTHON_UTILS),
-    ]);
-    let dir_b = create_test_dir(&[
-        ("utils.py", PYTHON_UTILS_MODIFIED),
-    ]);
+    let dir_a = create_test_dir(&[("utils.py", PYTHON_UTILS)]);
+    let dir_b = create_test_dir(&[("utils.py", PYTHON_UTILS_MODIFIED)]);
 
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::File);
 
-    assert!(!report.identical, "Modified file should make dirs non-identical");
+    assert!(
+        !report.identical,
+        "Modified file should make dirs non-identical"
+    );
 
-    let file_changes = report.file_changes.expect("L6 report should have file_changes");
+    let file_changes = report
+        .file_changes
+        .expect("L6 report should have file_changes");
     let modified: Vec<&FileLevelChange> = file_changes
         .iter()
         .filter(|fc| fc.change_type == ChangeType::Update)
@@ -286,9 +305,16 @@ fn test_file_level_modified_file() {
     assert_eq!(modified[0].relative_path, "utils.py");
 
     // Modified files should have both old and new fingerprints, and they should differ
-    let old_fp = modified[0].old_fingerprint.expect("Modified file should have old_fingerprint");
-    let new_fp = modified[0].new_fingerprint.expect("Modified file should have new_fingerprint");
-    assert_ne!(old_fp, new_fp, "Fingerprints should differ for modified files");
+    let old_fp = modified[0]
+        .old_fingerprint
+        .expect("Modified file should have old_fingerprint");
+    let new_fp = modified[0]
+        .new_fingerprint
+        .expect("Modified file should have new_fingerprint");
+    assert_ne!(
+        old_fp, new_fp,
+        "Fingerprints should differ for modified files"
+    );
 
     // Signature changes should list what changed
     let sig_changes = modified[0]
@@ -335,7 +361,9 @@ def get_routes():
 
     assert!(!report.identical);
 
-    let file_changes = report.file_changes.expect("L6 report should have file_changes");
+    let file_changes = report
+        .file_changes
+        .expect("L6 report should have file_changes");
 
     // Count by change type
     let added_count = file_changes
@@ -393,7 +421,9 @@ fn test_file_level_nested_dirs() {
 
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::File);
 
-    let file_changes = report.file_changes.expect("L6 report should have file_changes");
+    let file_changes = report
+        .file_changes
+        .expect("L6 report should have file_changes");
     let modified: Vec<&FileLevelChange> = file_changes
         .iter()
         .filter(|fc| fc.change_type == ChangeType::Update)
@@ -447,9 +477,10 @@ fn test_module_level_import_added() {
         !main_change.imports_added.is_empty(),
         "main.py should have imports_added"
     );
-    let has_models_import = main_change.imports_added.iter().any(|edge| {
-        edge.target_module.contains("models")
-    });
+    let has_models_import = main_change
+        .imports_added
+        .iter()
+        .any(|edge| edge.target_module.contains("models"));
     assert!(
         has_models_import,
         "imports_added should include an edge to 'models', got: {:?}",
@@ -493,9 +524,10 @@ fn test_module_level_import_removed() {
         !main_change.imports_removed.is_empty(),
         "main.py should have imports_removed"
     );
-    let has_models_removal = main_change.imports_removed.iter().any(|edge| {
-        edge.target_module.contains("models")
-    });
+    let has_models_removal = main_change
+        .imports_removed
+        .iter()
+        .any(|edge| edge.target_module.contains("models"));
     assert!(
         has_models_removal,
         "imports_removed should include an edge to 'models', got: {:?}",
@@ -553,9 +585,10 @@ def get_routes():
         !routes_change.imports_added.is_empty(),
         "New module should have its imports listed in imports_added"
     );
-    let imports_utils = routes_change.imports_added.iter().any(|edge| {
-        edge.target_module.contains("utils")
-    });
+    let imports_utils = routes_change
+        .imports_added
+        .iter()
+        .any(|edge| edge.target_module.contains("utils"));
     assert!(
         imports_utils,
         "routes.py imports from utils, should show in imports_added"
@@ -607,10 +640,7 @@ def get_routes():
         "At least 2 edges should be added (models import + routes import), got {}",
         summary.edges_added
     );
-    assert_eq!(
-        summary.edges_removed, 0,
-        "No edges should be removed"
-    );
+    assert_eq!(summary.edges_removed, 0, "No edges should be removed");
     assert!(
         summary.modules_with_import_changes >= 1,
         "At least 1 module (main.py) should have import changes, got {}",
@@ -627,7 +657,7 @@ fn test_module_level_with_file_change() {
         ("main.py", PYTHON_MAIN_IMPORTS_UTILS),
     ]);
     let dir_b = create_test_dir(&[
-        ("utils.py", PYTHON_UTILS_MODIFIED),  // structural change
+        ("utils.py", PYTHON_UTILS_MODIFIED),   // structural change
         ("main.py", PYTHON_MAIN_IMPORTS_BOTH), // import change + structural change
     ]);
 
@@ -669,7 +699,10 @@ fn test_arch_level_stable() {
 
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::Architecture);
 
-    assert!(report.identical, "Identical projects should be architecturally identical");
+    assert!(
+        report.identical,
+        "Identical projects should be architecturally identical"
+    );
     assert_eq!(report.granularity, DiffGranularity::Architecture);
 
     let summary = report
@@ -743,7 +776,10 @@ def logging_middleware(request):
     assert!(
         has_middleware,
         "Added directories should include 'middleware', got: {:?}",
-        added_dirs.iter().map(|ac| &ac.directory).collect::<Vec<_>>()
+        added_dirs
+            .iter()
+            .map(|ac| &ac.directory)
+            .collect::<Vec<_>>()
     );
 
     let summary = report
@@ -807,13 +843,14 @@ def analyze(data):
         !removed_dirs.is_empty(),
         "Should detect at least one removed directory"
     );
-    let has_utils = removed_dirs
-        .iter()
-        .any(|ac| ac.directory.contains("utils"));
+    let has_utils = removed_dirs.iter().any(|ac| ac.directory.contains("utils"));
     assert!(
         has_utils,
         "Removed directories should include 'utils', got: {:?}",
-        removed_dirs.iter().map(|ac| &ac.directory).collect::<Vec<_>>()
+        removed_dirs
+            .iter()
+            .map(|ac| &ac.directory)
+            .collect::<Vec<_>>()
     );
 
     let summary = report
@@ -890,9 +927,7 @@ def background_task(data):
     );
 
     // Verify that arch_changes entries exist
-    let arch_changes = report
-        .arch_changes
-        .expect("Should have arch_changes");
+    let arch_changes = report.arch_changes.expect("Should have arch_changes");
     assert!(
         arch_changes.len() >= 2,
         "Should have at least 2 arch changes (added + removed), got {}",
@@ -969,13 +1004,19 @@ fn test_diff_report_json_roundtrip_l6() {
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::File);
 
     // Serialize to JSON
-    let json_str = serde_json::to_string_pretty(&report)
-        .expect("DiffReport should serialize to JSON");
+    let json_str =
+        serde_json::to_string_pretty(&report).expect("DiffReport should serialize to JSON");
 
     // Parse as generic Value to check structure
     let value: Value = serde_json::from_str(&json_str).expect("JSON should parse");
-    assert!(value.get("granularity").is_some(), "JSON should contain granularity field");
-    assert!(value.get("file_changes").is_some(), "JSON should contain file_changes field");
+    assert!(
+        value.get("granularity").is_some(),
+        "JSON should contain granularity field"
+    );
+    assert!(
+        value.get("file_changes").is_some(),
+        "JSON should contain file_changes field"
+    );
 
     // Deserialize back to DiffReport
     let roundtrip: DiffReport =
@@ -999,8 +1040,8 @@ fn test_diff_report_json_roundtrip_l7() {
 
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::Module);
 
-    let json_str = serde_json::to_string_pretty(&report)
-        .expect("DiffReport should serialize to JSON");
+    let json_str =
+        serde_json::to_string_pretty(&report).expect("DiffReport should serialize to JSON");
     let value: Value = serde_json::from_str(&json_str).expect("JSON should parse");
 
     assert!(
@@ -1029,8 +1070,8 @@ fn test_diff_report_json_roundtrip_l8() {
 
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::Architecture);
 
-    let json_str = serde_json::to_string_pretty(&report)
-        .expect("DiffReport should serialize to JSON");
+    let json_str =
+        serde_json::to_string_pretty(&report).expect("DiffReport should serialize to JSON");
     let value: Value = serde_json::from_str(&json_str).expect("JSON should parse");
 
     assert!(
@@ -1222,7 +1263,10 @@ fn test_module_level_typescript_import_added() {
 
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::Module);
 
-    assert!(!report.identical, "TypeScript import addition should produce non-identical report");
+    assert!(
+        !report.identical,
+        "TypeScript import addition should produce non-identical report"
+    );
     assert_eq!(report.granularity, DiffGranularity::Module);
 
     let module_changes = report
@@ -1240,9 +1284,10 @@ fn test_module_level_typescript_import_added() {
         !main_change.imports_added.is_empty(),
         "main.ts should have imports_added for the new models import"
     );
-    let has_models_import = main_change.imports_added.iter().any(|edge| {
-        edge.target_module.contains("models")
-    });
+    let has_models_import = main_change
+        .imports_added
+        .iter()
+        .any(|edge| edge.target_module.contains("models"));
     assert!(
         has_models_import,
         "imports_added should include an edge to 'models', got: {:?}",
@@ -1279,9 +1324,10 @@ fn test_module_level_typescript_import_removed() {
         !main_change.imports_removed.is_empty(),
         "main.ts should have imports_removed for the models import"
     );
-    let has_models_removal = main_change.imports_removed.iter().any(|edge| {
-        edge.target_module.contains("models")
-    });
+    let has_models_removal = main_change
+        .imports_removed
+        .iter()
+        .any(|edge| edge.target_module.contains("models"));
     assert!(
         has_models_removal,
         "imports_removed should include an edge to 'models', got: {:?}",
@@ -1305,7 +1351,10 @@ fn test_module_level_go_import_added() {
 
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::Module);
 
-    assert!(!report.identical, "Go import addition should produce non-identical report");
+    assert!(
+        !report.identical,
+        "Go import addition should produce non-identical report"
+    );
 
     let module_changes = report
         .module_changes
@@ -1320,9 +1369,10 @@ fn test_module_level_go_import_added() {
         !main_change.imports_added.is_empty(),
         "main.go should have imports_added for the new models import"
     );
-    let has_models_import = main_change.imports_added.iter().any(|edge| {
-        edge.target_module.contains("models")
-    });
+    let has_models_import = main_change
+        .imports_added
+        .iter()
+        .any(|edge| edge.target_module.contains("models"));
     assert!(
         has_models_import,
         "imports_added should include an edge to 'models', got: {:?}",
@@ -1346,7 +1396,10 @@ fn test_module_level_rust_import_added() {
 
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::Module);
 
-    assert!(!report.identical, "Rust import addition should produce non-identical report");
+    assert!(
+        !report.identical,
+        "Rust import addition should produce non-identical report"
+    );
 
     let module_changes = report
         .module_changes
@@ -1361,9 +1414,10 @@ fn test_module_level_rust_import_added() {
         !main_change.imports_added.is_empty(),
         "main.rs should have imports_added for the new models use"
     );
-    let has_models_import = main_change.imports_added.iter().any(|edge| {
-        edge.target_module.contains("models")
-    });
+    let has_models_import = main_change
+        .imports_added
+        .iter()
+        .any(|edge| edge.target_module.contains("models"));
     assert!(
         has_models_import,
         "imports_added should include an edge to 'models', got: {:?}",
@@ -1392,7 +1446,10 @@ fn test_module_level_mixed_languages() {
 
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::Module);
 
-    assert!(!report.identical, "Mixed-language import changes should be non-identical");
+    assert!(
+        !report.identical,
+        "Mixed-language import changes should be non-identical"
+    );
 
     let module_changes = report
         .module_changes
@@ -1468,10 +1525,7 @@ fn test_module_level_import_graph_summary_multilang() {
         summary.total_edges_b,
         summary.total_edges_a
     );
-    assert!(
-        summary.edges_added > 0,
-        "Should have added edges, got 0"
-    );
+    assert!(summary.edges_added > 0, "Should have added edges, got 0");
 }
 
 // =============================================================================
@@ -1495,7 +1549,10 @@ fn test_arch_level_with_typescript_project() {
 
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::Architecture);
 
-    assert!(!report.identical, "Adding a service directory should be non-identical");
+    assert!(
+        !report.identical,
+        "Adding a service directory should be non-identical"
+    );
 
     let arch_changes = report
         .arch_changes
@@ -1533,8 +1590,14 @@ fn test_arch_level_mixed_language_project() {
     let report = run_diff(dir_a.path(), dir_b.path(), DiffGranularity::Architecture);
 
     // Identical directories should produce identical report
-    assert!(report.identical, "Identical mixed-language dirs should be identical");
+    assert!(
+        report.identical,
+        "Identical mixed-language dirs should be identical"
+    );
 
     let summary = report.arch_summary.expect("L8 should have arch_summary");
-    assert_eq!(summary.stability_score, 1.0, "Identical dirs should have stability_score 1.0");
+    assert_eq!(
+        summary.stability_score, 1.0,
+        "Identical dirs should have stability_score 1.0"
+    );
 }

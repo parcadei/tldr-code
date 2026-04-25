@@ -12,16 +12,15 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 use tldr_core::patterns::signals::{
-    ApiConventionSignals, AsyncPatternSignals, ErrorHandlingSignals, ResourceManagementSignals, SoftDeleteSignals, TestIdiomSignals,
-    TypeCoverageSignals, ValidationSignals,
+    ApiConventionSignals, AsyncPatternSignals, ErrorHandlingSignals, ResourceManagementSignals,
+    SoftDeleteSignals, TestIdiomSignals, TypeCoverageSignals, ValidationSignals,
 };
 use tldr_core::patterns::{
     detect_patterns, detect_patterns_with_config, generate_constraints, DetectedPatterns,
     PatternConfig, PatternDetector, PatternMiner, PatternSignals,
 };
 use tldr_core::types::{
-    Language, NamingConvention,
-    NamingPattern, PatternCategory, SoftDeletePattern,
+    Language, NamingConvention, NamingPattern, PatternCategory, SoftDeletePattern,
 };
 
 // ============================================================================

@@ -102,7 +102,10 @@ class Calculator:
 
     let report = diff_classes(source, source);
 
-    assert!(report.identical, "Identical class files should produce identical=true");
+    assert!(
+        report.identical,
+        "Identical class files should produce identical=true"
+    );
     assert!(
         report.changes.is_empty(),
         "Identical class files should have zero changes, got {}",
@@ -633,9 +636,7 @@ class Added:
     // OR old_method was renamed to new_method (body differs, so likely delete+insert)
     // The algorithm should detect at least one of these patterns
     let has_delete_insert = old_method_delete.is_some() && new_method_insert.is_some();
-    let has_rename = children
-        .iter()
-        .any(|c| c.change_type == ChangeType::Rename);
+    let has_rename = children.iter().any(|c| c.change_type == ChangeType::Rename);
     assert!(
         has_delete_insert || has_rename,
         "old_method->new_method should be detected as either delete+insert or rename"

@@ -39,10 +39,7 @@ pub fn parse_pyright_output(stdout: &str) -> Result<Vec<L1Finding>, ParseError> 
             .get("severity")
             .and_then(|v| v.as_str())
             .unwrap_or("information");
-        let message = diag
-            .get("message")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let message = diag.get("message").and_then(|v| v.as_str()).unwrap_or("");
         let rule = diag.get("rule").and_then(|v| v.as_str()).unwrap_or("");
 
         // Pyright uses 0-based line numbers
@@ -126,10 +123,7 @@ mod tests {
         );
         assert_eq!(findings[0].line, 3); // 0-based → 1-based
         assert_eq!(findings[0].column, 8);
-        assert_eq!(
-            findings[0].code,
-            Some("reportMissingImports".to_string())
-        );
+        assert_eq!(findings[0].code, Some("reportMissingImports".to_string()));
         assert_eq!(findings[0].severity, "high");
         assert_eq!(findings[0].native_severity, "error");
         assert_eq!(findings[0].category, ToolCategory::TypeChecker);

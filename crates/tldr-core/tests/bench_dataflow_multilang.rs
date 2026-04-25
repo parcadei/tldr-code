@@ -208,7 +208,8 @@ fn run_reaching_defs(
 
 #[test]
 fn test_reaching_defs_python() {
-    let (du_chains, ud_chains, refs) = run_reaching_defs(PYTHON_SOURCE, "example", Language::Python, ".py");
+    let (du_chains, ud_chains, refs) =
+        run_reaching_defs(PYTHON_SOURCE, "example", Language::Python, ".py");
 
     // There should be at least one def-use chain
     assert!(
@@ -217,7 +218,10 @@ fn test_reaching_defs_python() {
     );
 
     // Verify that x's definition reaches y's computation (x is used on the line of y)
-    let x_defs: Vec<_> = du_chains.iter().filter(|c| c.definition.var == "x").collect();
+    let x_defs: Vec<_> = du_chains
+        .iter()
+        .filter(|c| c.definition.var == "x")
+        .collect();
     assert!(
         !x_defs.is_empty(),
         "Python: expected def-use chain for variable 'x'"
@@ -255,7 +259,10 @@ fn test_reaching_defs_javascript() {
         !du_chains.is_empty(),
         "JavaScript: expected at least one def-use chain"
     );
-    let x_chains: Vec<_> = du_chains.iter().filter(|c| c.definition.var == "x").collect();
+    let x_chains: Vec<_> = du_chains
+        .iter()
+        .filter(|c| c.definition.var == "x")
+        .collect();
     assert!(
         !x_chains.is_empty(),
         "JavaScript: expected def-use chain for 'x'"
@@ -264,34 +271,22 @@ fn test_reaching_defs_javascript() {
         x_chains.iter().any(|c| !c.uses.is_empty()),
         "JavaScript: 'x' definition should reach uses"
     );
-    assert!(
-        !ud_chains.is_empty(),
-        "JavaScript: expected use-def chains"
-    );
+    assert!(!ud_chains.is_empty(), "JavaScript: expected use-def chains");
 }
 
 #[test]
 fn test_reaching_defs_typescript() {
     let (du_chains, ud_chains, _) =
         run_reaching_defs(TYPESCRIPT_SOURCE, "example", Language::TypeScript, ".ts");
-    assert!(
-        !du_chains.is_empty(),
-        "TypeScript: expected def-use chains"
-    );
-    assert!(
-        !ud_chains.is_empty(),
-        "TypeScript: expected use-def chains"
-    );
+    assert!(!du_chains.is_empty(), "TypeScript: expected def-use chains");
+    assert!(!ud_chains.is_empty(), "TypeScript: expected use-def chains");
 }
 
 #[test]
 fn test_reaching_defs_go() {
     let (du_chains, _ud_chains, refs) =
         run_reaching_defs(GO_SOURCE, "example", Language::Go, ".go");
-    assert!(
-        !du_chains.is_empty(),
-        "Go: expected def-use chains"
-    );
+    assert!(!du_chains.is_empty(), "Go: expected def-use chains");
     // Go should find definitions for x, y, z, etc.
     let def_count = refs
         .iter()
@@ -308,24 +303,15 @@ fn test_reaching_defs_go() {
 fn test_reaching_defs_rust() {
     let (du_chains, ud_chains, _) =
         run_reaching_defs(RUST_SOURCE, "example", Language::Rust, ".rs");
-    assert!(
-        !du_chains.is_empty(),
-        "Rust: expected def-use chains"
-    );
-    assert!(
-        !ud_chains.is_empty(),
-        "Rust: expected use-def chains"
-    );
+    assert!(!du_chains.is_empty(), "Rust: expected def-use chains");
+    assert!(!ud_chains.is_empty(), "Rust: expected use-def chains");
 }
 
 #[test]
 fn test_reaching_defs_java() {
     let (du_chains, _ud_chains, refs) =
         run_reaching_defs(JAVA_SOURCE, "example", Language::Java, ".java");
-    assert!(
-        !du_chains.is_empty(),
-        "Java: expected def-use chains"
-    );
+    assert!(!du_chains.is_empty(), "Java: expected def-use chains");
     let def_count = refs
         .iter()
         .filter(|r| matches!(r.ref_type, RefType::Definition))
@@ -339,42 +325,29 @@ fn test_reaching_defs_java() {
 
 #[test]
 fn test_reaching_defs_c() {
-    let (du_chains, _ud_chains, _) =
-        run_reaching_defs(C_SOURCE, "example", Language::C, ".c");
-    assert!(
-        !du_chains.is_empty(),
-        "C: expected def-use chains"
-    );
+    let (du_chains, _ud_chains, _) = run_reaching_defs(C_SOURCE, "example", Language::C, ".c");
+    assert!(!du_chains.is_empty(), "C: expected def-use chains");
 }
 
 #[test]
 fn test_reaching_defs_cpp() {
     let (du_chains, _ud_chains, _) =
         run_reaching_defs(CPP_SOURCE, "example", Language::Cpp, ".cpp");
-    assert!(
-        !du_chains.is_empty(),
-        "C++: expected def-use chains"
-    );
+    assert!(!du_chains.is_empty(), "C++: expected def-use chains");
 }
 
 #[test]
 fn test_reaching_defs_ruby() {
     let (du_chains, _ud_chains, _) =
         run_reaching_defs(RUBY_SOURCE, "example", Language::Ruby, ".rb");
-    assert!(
-        !du_chains.is_empty(),
-        "Ruby: expected def-use chains"
-    );
+    assert!(!du_chains.is_empty(), "Ruby: expected def-use chains");
 }
 
 #[test]
 fn test_reaching_defs_php() {
     let (du_chains, _ud_chains, _) =
         run_reaching_defs(PHP_SOURCE, "example", Language::Php, ".php");
-    assert!(
-        !du_chains.is_empty(),
-        "PHP: expected def-use chains"
-    );
+    assert!(!du_chains.is_empty(), "PHP: expected def-use chains");
 }
 
 // =============================================================================
@@ -531,8 +504,7 @@ fn run_dead_stores(
     let path = tmp.path().to_str().unwrap();
     let code = std::fs::read_to_string(path).expect("read tempfile");
 
-    let ssa = construct_ssa(&code, func, lang, SsaType::Minimal)
-        .expect("SSA construction failed");
+    let ssa = construct_ssa(&code, func, lang, SsaType::Minimal).expect("SSA construction failed");
     find_dead_code(&ssa).expect("dead code detection failed")
 }
 
@@ -606,28 +578,19 @@ fn test_dead_stores_c() {
 #[test]
 fn test_dead_stores_cpp() {
     let dead = run_dead_stores(CPP_SOURCE, "example", Language::Cpp, ".cpp");
-    assert!(
-        !dead.is_empty(),
-        "C++: expected at least one dead store"
-    );
+    assert!(!dead.is_empty(), "C++: expected at least one dead store");
 }
 
 #[test]
 fn test_dead_stores_ruby() {
     let dead = run_dead_stores(RUBY_SOURCE, "example", Language::Ruby, ".rb");
-    assert!(
-        !dead.is_empty(),
-        "Ruby: expected at least one dead store"
-    );
+    assert!(!dead.is_empty(), "Ruby: expected at least one dead store");
 }
 
 #[test]
 fn test_dead_stores_php() {
     let dead = run_dead_stores(PHP_SOURCE, "example", Language::Php, ".php");
-    assert!(
-        !dead.is_empty(),
-        "PHP: expected at least one dead store"
-    );
+    assert!(!dead.is_empty(), "PHP: expected at least one dead store");
 }
 
 // =============================================================================
@@ -660,8 +623,7 @@ fn run_forward_slice(
     let tmp = write_temp(source, ext);
     let path = tmp.path().to_str().unwrap();
 
-    get_slice(path, func, line, SliceDirection::Forward, None, lang)
-        .expect("forward slice failed")
+    get_slice(path, func, line, SliceDirection::Forward, None, lang).expect("forward slice failed")
 }
 
 // Python slice tests
@@ -697,8 +659,15 @@ fn test_slice_python_rich() {
     let tmp = write_temp(PYTHON_SOURCE, ".py");
     let path = tmp.path().to_str().unwrap();
 
-    let rich = get_slice_rich(path, "example", 8, SliceDirection::Backward, None, Language::Python)
-        .expect("rich slice failed");
+    let rich = get_slice_rich(
+        path,
+        "example",
+        8,
+        SliceDirection::Backward,
+        None,
+        Language::Python,
+    )
+    .expect("rich slice failed");
 
     // Rich slice should have nodes and edges
     assert!(
@@ -851,8 +820,15 @@ fn run_chop(
 
     let forward = get_slice(path, func, source_line, SliceDirection::Forward, None, lang)
         .expect("forward slice for chop failed");
-    let backward = get_slice(path, func, target_line, SliceDirection::Backward, None, lang)
-        .expect("backward slice for chop failed");
+    let backward = get_slice(
+        path,
+        func,
+        target_line,
+        SliceDirection::Backward,
+        None,
+        lang,
+    )
+    .expect("backward slice for chop failed");
 
     forward.intersection(&backward).copied().collect()
 }
@@ -872,7 +848,14 @@ fn test_chop_python() {
 
 #[test]
 fn test_chop_javascript() {
-    let chop = run_chop(JAVASCRIPT_SOURCE, "example", 3, 8, Language::JavaScript, ".js");
+    let chop = run_chop(
+        JAVASCRIPT_SOURCE,
+        "example",
+        3,
+        8,
+        Language::JavaScript,
+        ".js",
+    );
     assert!(
         !chop.is_empty(),
         "JavaScript: chop from x to return should be non-empty"
@@ -881,7 +864,14 @@ fn test_chop_javascript() {
 
 #[test]
 fn test_chop_typescript() {
-    let chop = run_chop(TYPESCRIPT_SOURCE, "example", 3, 8, Language::TypeScript, ".ts");
+    let chop = run_chop(
+        TYPESCRIPT_SOURCE,
+        "example",
+        3,
+        8,
+        Language::TypeScript,
+        ".ts",
+    );
     assert!(
         !chop.is_empty(),
         "TypeScript: chop from x to return should be non-empty"
@@ -961,12 +951,25 @@ fn test_chop_is_subset_of_both_slices_python() {
     let tmp = write_temp(PYTHON_SOURCE, ".py");
     let path = tmp.path().to_str().unwrap();
 
-    let forward = get_slice(path, "example", 3, SliceDirection::Forward, None, Language::Python)
-        .expect("forward slice failed");
-    let backward = get_slice(path, "example", 8, SliceDirection::Backward, None, Language::Python)
-        .expect("backward slice failed");
-    let chop: std::collections::HashSet<u32> =
-        forward.intersection(&backward).copied().collect();
+    let forward = get_slice(
+        path,
+        "example",
+        3,
+        SliceDirection::Forward,
+        None,
+        Language::Python,
+    )
+    .expect("forward slice failed");
+    let backward = get_slice(
+        path,
+        "example",
+        8,
+        SliceDirection::Backward,
+        None,
+        Language::Python,
+    )
+    .expect("backward slice failed");
+    let chop: std::collections::HashSet<u32> = forward.intersection(&backward).copied().collect();
 
     // Chop must be subset of forward
     for line in &chop {
@@ -1035,7 +1038,12 @@ fn run_taint(
 // Taint test: Python with explicit taint source (input()) and sink (cursor.execute)
 #[test]
 fn test_taint_python() {
-    let result = run_taint(PYTHON_TAINT_SOURCE, "taint_example", Language::Python, ".py");
+    let result = run_taint(
+        PYTHON_TAINT_SOURCE,
+        "taint_example",
+        Language::Python,
+        ".py",
+    );
 
     // Should detect at least one taint source (input() call)
     assert!(
@@ -1046,14 +1054,20 @@ fn test_taint_python() {
     );
 
     // Verify source type is UserInput
-    let has_user_input = result
-        .sources
-        .iter()
-        .any(|s| matches!(s.source_type, tldr_core::security::TaintSourceType::UserInput));
+    let has_user_input = result.sources.iter().any(|s| {
+        matches!(
+            s.source_type,
+            tldr_core::security::TaintSourceType::UserInput
+        )
+    });
     assert!(
         has_user_input,
         "Python taint: expected UserInput source type, got: {:?}",
-        result.sources.iter().map(|s| &s.source_type).collect::<Vec<_>>()
+        result
+            .sources
+            .iter()
+            .map(|s| &s.source_type)
+            .collect::<Vec<_>>()
     );
 
     // Should detect at least one sink (cursor.execute is SqlQuery)
@@ -1085,7 +1099,12 @@ fn test_taint_python() {
 // Taint: verify tainted variables are tracked across blocks
 #[test]
 fn test_taint_python_tainted_vars() {
-    let result = run_taint(PYTHON_TAINT_SOURCE, "taint_example", Language::Python, ".py");
+    let result = run_taint(
+        PYTHON_TAINT_SOURCE,
+        "taint_example",
+        Language::Python,
+        ".py",
+    );
 
     // The variable `data` should be tainted in at least one block
     let data_tainted = result
@@ -1272,7 +1291,10 @@ fn test_reaching_defs_variable_names_python() {
     let (du_chains, _ud_chains, _) =
         run_reaching_defs(PYTHON_SOURCE, "example", Language::Python, ".py");
 
-    let defined_vars: Vec<&str> = du_chains.iter().map(|c| c.definition.var.as_str()).collect();
+    let defined_vars: Vec<&str> = du_chains
+        .iter()
+        .map(|c| c.definition.var.as_str())
+        .collect();
     // Should contain at least x and y
     assert!(
         defined_vars.contains(&"x"),
@@ -1387,12 +1409,26 @@ fn test_slice_direction_difference_python() {
     let path = tmp.path().to_str().unwrap();
 
     // Forward from x = 10 (line 3): what does x affect?
-    let forward = get_slice(path, "example", 3, SliceDirection::Forward, None, Language::Python)
-        .expect("forward slice failed");
+    let forward = get_slice(
+        path,
+        "example",
+        3,
+        SliceDirection::Forward,
+        None,
+        Language::Python,
+    )
+    .expect("forward slice failed");
 
     // Backward from return y (line 8): what affects return y?
-    let backward = get_slice(path, "example", 8, SliceDirection::Backward, None, Language::Python)
-        .expect("backward slice failed");
+    let backward = get_slice(
+        path,
+        "example",
+        8,
+        SliceDirection::Backward,
+        None,
+        Language::Python,
+    )
+    .expect("backward slice failed");
 
     // Both should be non-empty
     assert!(!forward.is_empty(), "Forward slice should be non-empty");

@@ -466,9 +466,7 @@ fn test_with_timeout_result_completes_successfully() {
 #[test]
 fn test_with_timeout_result_inner_error() {
     let result = with_timeout_result(Duration::from_secs(5), || -> Result<i32, std::io::Error> {
-        Err(std::io::Error::other(
-            "inner error",
-        ))
+        Err(std::io::Error::other("inner error"))
     });
 
     assert!(result.is_err());

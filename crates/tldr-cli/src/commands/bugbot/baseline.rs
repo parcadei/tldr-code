@@ -32,11 +32,7 @@ pub enum BaselineStatus {
 /// * `BaselineStatus::Exists(content)` when the file existed at `base_ref`.
 /// * `BaselineStatus::NewFile` when `git show` reports the path does not exist.
 /// * `BaselineStatus::GitShowFailed(stderr)` on other git failures.
-pub fn get_baseline_content(
-    project: &Path,
-    file: &Path,
-    base_ref: &str,
-) -> Result<BaselineStatus> {
+pub fn get_baseline_content(project: &Path, file: &Path, base_ref: &str) -> Result<BaselineStatus> {
     // Compute relative path from project root.
     // If the file is already relative (or outside the project) we fall through.
     let relative = file.strip_prefix(project).unwrap_or(file);
@@ -55,8 +51,8 @@ pub fn get_baseline_content(
         .context("Failed to run git show")?;
 
     if output.status.success() {
-        let content = String::from_utf8(output.stdout)
-            .context("git show output is not valid UTF-8")?;
+        let content =
+            String::from_utf8(output.stdout).context("git show output is not valid UTF-8")?;
         Ok(BaselineStatus::Exists(content))
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -169,7 +165,10 @@ mod tests {
 
         match status {
             BaselineStatus::Exists(content) => {
-                assert_eq!(content, original, "Baseline should return the committed content");
+                assert_eq!(
+                    content, original,
+                    "Baseline should return the committed content"
+                );
             }
             other => panic!("Expected BaselineStatus::Exists, got: {:?}", other),
         }
@@ -220,7 +219,10 @@ mod tests {
 
         match status {
             BaselineStatus::Exists(content) => {
-                assert_eq!(content, original, "Baseline should return the committed content even after deletion");
+                assert_eq!(
+                    content, original,
+                    "Baseline should return the committed content even after deletion"
+                );
             }
             other => panic!("Expected BaselineStatus::Exists, got: {:?}", other),
         }
@@ -243,6 +245,9 @@ mod tests {
             write_baseline_tmpfile(content, &PathBuf::from("example.py")).expect("write tmpfile");
 
         let read_back = std::fs::read_to_string(tmpfile.path()).expect("read tmpfile");
-        assert_eq!(read_back, content, "Content read back from temp file should match what was written");
+        assert_eq!(
+            read_back, content,
+            "Content read back from temp file should match what was written"
+        );
     }
 }

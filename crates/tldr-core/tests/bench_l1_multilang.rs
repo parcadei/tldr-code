@@ -13,11 +13,8 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 use tldr_core::{
-    ast::extract::extract_file,
-    ast::extractor::get_code_structure,
-    ast::imports::get_imports,
-    fs::tree::get_file_tree,
-    Language, NodeType,
+    ast::extract::extract_file, ast::extractor::get_code_structure, ast::imports::get_imports,
+    fs::tree::get_file_tree, Language, NodeType,
 };
 
 /// Get the fixtures/extractor directory path
@@ -159,7 +156,12 @@ mod structure_tests {
             result.err()
         );
         let cs = result.unwrap();
-        assert_eq!(cs.files.len(), 1, "Expected exactly 1 file for {}", filename);
+        assert_eq!(
+            cs.files.len(),
+            1,
+            "Expected exactly 1 file for {}",
+            filename
+        );
         cs.files.into_iter().next().unwrap()
     }
 
@@ -239,10 +241,7 @@ mod structure_tests {
         assert!(fs.classes.contains(&"Dog".to_string()));
 
         // Methods
-        assert!(
-            !fs.methods.is_empty(),
-            "Python: expected non-empty methods"
-        );
+        assert!(!fs.methods.is_empty(), "Python: expected non-empty methods");
 
         // Definitions with line numbers
         assert!(
@@ -250,12 +249,7 @@ mod structure_tests {
             "Python: definitions should be non-empty"
         );
         assert_valid_line_numbers(&fs.definitions, "Python");
-        assert_has_definition(
-            &fs.definitions,
-            "top_level_func",
-            &["function"],
-            "Python",
-        );
+        assert_has_definition(&fs.definitions, "top_level_func", &["function"], "Python");
         assert_has_definition(&fs.definitions, "Animal", &["class"], "Python");
     }
 
@@ -286,7 +280,10 @@ mod structure_tests {
         assert!(fs.classes.contains(&"Animal".to_string()));
         assert!(fs.classes.contains(&"Dog".to_string()));
 
-        assert!(!fs.definitions.is_empty(), "Rust: definitions should be non-empty");
+        assert!(
+            !fs.definitions.is_empty(),
+            "Rust: definitions should be non-empty"
+        );
         assert_valid_line_numbers(&fs.definitions, "Rust");
         assert_has_definition(&fs.definitions, "top_level", &["function"], "Rust");
         assert_has_definition(&fs.definitions, "Animal", &["struct", "class"], "Rust");
@@ -327,7 +324,10 @@ mod structure_tests {
         assert!(fs.classes.contains(&"Animal".to_string()));
         assert!(fs.classes.contains(&"Dog".to_string()));
 
-        assert!(!fs.definitions.is_empty(), "Go: definitions should be non-empty");
+        assert!(
+            !fs.definitions.is_empty(),
+            "Go: definitions should be non-empty"
+        );
         assert_valid_line_numbers(&fs.definitions, "Go");
     }
 
@@ -356,7 +356,10 @@ mod structure_tests {
         assert!(fs.classes.contains(&"Animal".to_string()));
         assert!(fs.classes.contains(&"Dog".to_string()));
 
-        assert!(!fs.definitions.is_empty(), "TypeScript: definitions should be non-empty");
+        assert!(
+            !fs.definitions.is_empty(),
+            "TypeScript: definitions should be non-empty"
+        );
         assert_valid_line_numbers(&fs.definitions, "TypeScript");
         assert_has_definition(&fs.definitions, "topLevel", &["function"], "TypeScript");
         assert_has_definition(&fs.definitions, "Animal", &["class"], "TypeScript");
@@ -419,7 +422,10 @@ mod structure_tests {
             fs.methods
         );
 
-        assert!(!fs.definitions.is_empty(), "Java: definitions should be non-empty");
+        assert!(
+            !fs.definitions.is_empty(),
+            "Java: definitions should be non-empty"
+        );
         assert_valid_line_numbers(&fs.definitions, "Java");
         assert_has_definition(&fs.definitions, "Animal", &["class"], "Java");
     }
@@ -449,7 +455,10 @@ mod structure_tests {
             fs.classes
         );
 
-        assert!(!fs.definitions.is_empty(), "C: definitions should be non-empty");
+        assert!(
+            !fs.definitions.is_empty(),
+            "C: definitions should be non-empty"
+        );
         assert_valid_line_numbers(&fs.definitions, "C");
     }
 
@@ -478,7 +487,10 @@ mod structure_tests {
         assert!(fs.classes.contains(&"Animal".to_string()));
         assert!(fs.classes.contains(&"Dog".to_string()));
 
-        assert!(!fs.definitions.is_empty(), "C++: definitions should be non-empty");
+        assert!(
+            !fs.definitions.is_empty(),
+            "C++: definitions should be non-empty"
+        );
         assert_valid_line_numbers(&fs.definitions, "C++");
     }
 
@@ -508,9 +520,17 @@ mod structure_tests {
         assert!(fs.classes.contains(&"Animal".to_string()));
         assert!(fs.classes.contains(&"Dog".to_string()));
 
-        assert!(!fs.definitions.is_empty(), "Ruby: definitions should be non-empty");
+        assert!(
+            !fs.definitions.is_empty(),
+            "Ruby: definitions should be non-empty"
+        );
         assert_valid_line_numbers(&fs.definitions, "Ruby");
-        assert_has_definition(&fs.definitions, "top_level_func", &["function", "method"], "Ruby");
+        assert_has_definition(
+            &fs.definitions,
+            "top_level_func",
+            &["function", "method"],
+            "Ruby",
+        );
         assert_has_definition(&fs.definitions, "Animal", &["class", "module"], "Ruby");
     }
 
@@ -540,7 +560,10 @@ mod structure_tests {
         assert!(fs.classes.contains(&"Animal".to_string()));
         assert!(fs.classes.contains(&"Dog".to_string()));
 
-        assert!(!fs.definitions.is_empty(), "PHP: definitions should be non-empty");
+        assert!(
+            !fs.definitions.is_empty(),
+            "PHP: definitions should be non-empty"
+        );
         assert_valid_line_numbers(&fs.definitions, "PHP");
     }
 
@@ -570,7 +593,10 @@ mod structure_tests {
         assert!(fs.classes.contains(&"Animal".to_string()));
         assert!(fs.classes.contains(&"Dog".to_string()));
 
-        assert!(!fs.definitions.is_empty(), "Kotlin: definitions should be non-empty");
+        assert!(
+            !fs.definitions.is_empty(),
+            "Kotlin: definitions should be non-empty"
+        );
         assert_valid_line_numbers(&fs.definitions, "Kotlin");
         // companion object must produce a "Companion" definition (not an empty name)
         assert_has_definition(&fs.definitions, "Companion", &["class"], "Kotlin");
@@ -603,7 +629,10 @@ mod structure_tests {
         assert!(fs.classes.contains(&"Animal".to_string()));
         assert!(fs.classes.contains(&"Dog".to_string()));
 
-        assert!(!fs.definitions.is_empty(), "Swift: definitions should be non-empty");
+        assert!(
+            !fs.definitions.is_empty(),
+            "Swift: definitions should be non-empty"
+        );
         assert_valid_line_numbers(&fs.definitions, "Swift");
     }
 
@@ -631,7 +660,10 @@ mod structure_tests {
             fs.methods
         );
 
-        assert!(!fs.definitions.is_empty(), "C#: definitions should be non-empty");
+        assert!(
+            !fs.definitions.is_empty(),
+            "C#: definitions should be non-empty"
+        );
         assert_valid_line_numbers(&fs.definitions, "C#");
         assert_has_definition(&fs.definitions, "Animal", &["class"], "C#");
     }
@@ -661,7 +693,10 @@ mod structure_tests {
             fs.classes
         );
 
-        assert!(!fs.definitions.is_empty(), "Scala: definitions should be non-empty");
+        assert!(
+            !fs.definitions.is_empty(),
+            "Scala: definitions should be non-empty"
+        );
         assert_valid_line_numbers(&fs.definitions, "Scala");
     }
 
@@ -690,7 +725,10 @@ mod structure_tests {
         );
         assert!(fs.classes.contains(&"Animal".to_string()));
 
-        assert!(!fs.definitions.is_empty(), "Elixir: definitions should be non-empty");
+        assert!(
+            !fs.definitions.is_empty(),
+            "Elixir: definitions should be non-empty"
+        );
         assert_valid_line_numbers(&fs.definitions, "Elixir");
     }
 
@@ -708,7 +746,10 @@ mod structure_tests {
             fs.functions
         );
 
-        assert!(!fs.definitions.is_empty(), "Lua: definitions should be non-empty");
+        assert!(
+            !fs.definitions.is_empty(),
+            "Lua: definitions should be non-empty"
+        );
         assert_valid_line_numbers(&fs.definitions, "Lua");
     }
 
@@ -783,8 +824,18 @@ mod structure_tests {
         // property_declaration inside class body, TS public_field_definition /
         // field_definition).
         let valid_kinds = [
-            "function", "method", "class", "struct", "module", "constant",
-            "interface", "trait", "enum", "type_alias", "object", "field",
+            "function",
+            "method",
+            "class",
+            "struct",
+            "module",
+            "constant",
+            "interface",
+            "trait",
+            "enum",
+            "type_alias",
+            "object",
+            "field",
         ];
         let cases: Vec<(&str, Language)> = vec![
             ("test_python.py", Language::Python),
@@ -864,21 +915,45 @@ mod extract_tests {
 
         // Verify specific function names
         let fn_names: Vec<&str> = info.functions.iter().map(|f| f.name.as_str()).collect();
-        assert!(fn_names.contains(&"top_level_func"), "Missing top_level_func: {:?}", fn_names);
-        assert!(fn_names.contains(&"another_func"), "Missing another_func: {:?}", fn_names);
-        assert!(fn_names.contains(&"async_func"), "Missing async_func: {:?}", fn_names);
+        assert!(
+            fn_names.contains(&"top_level_func"),
+            "Missing top_level_func: {:?}",
+            fn_names
+        );
+        assert!(
+            fn_names.contains(&"another_func"),
+            "Missing another_func: {:?}",
+            fn_names
+        );
+        assert!(
+            fn_names.contains(&"async_func"),
+            "Missing async_func: {:?}",
+            fn_names
+        );
 
         // Verify class names
         let cls_names: Vec<&str> = info.classes.iter().map(|c| c.name.as_str()).collect();
-        assert!(cls_names.contains(&"Animal"), "Missing Animal: {:?}", cls_names);
+        assert!(
+            cls_names.contains(&"Animal"),
+            "Missing Animal: {:?}",
+            cls_names
+        );
         assert!(cls_names.contains(&"Dog"), "Missing Dog: {:?}", cls_names);
 
         // Verify line numbers
         for func in &info.functions {
-            assert!(func.line_number > 0, "Python: function '{}' has line_number=0", func.name);
+            assert!(
+                func.line_number > 0,
+                "Python: function '{}' has line_number=0",
+                func.name
+            );
         }
         for cls in &info.classes {
-            assert!(cls.line_number > 0, "Python: class '{}' has line_number=0", cls.name);
+            assert!(
+                cls.line_number > 0,
+                "Python: class '{}' has line_number=0",
+                cls.name
+            );
         }
 
         // Dog should extend Animal
@@ -911,13 +986,24 @@ mod extract_tests {
         );
 
         let fn_names: Vec<&str> = info.functions.iter().map(|f| f.name.as_str()).collect();
-        assert!(fn_names.contains(&"top_level"), "Missing top_level: {:?}", fn_names);
-        assert!(fn_names.contains(&"public_func"), "Missing public_func: {:?}", fn_names);
+        assert!(
+            fn_names.contains(&"top_level"),
+            "Missing top_level: {:?}",
+            fn_names
+        );
+        assert!(
+            fn_names.contains(&"public_func"),
+            "Missing public_func: {:?}",
+            fn_names
+        );
 
         // Verify async detection
         let async_fn = info.functions.iter().find(|f| f.name == "async_func");
         assert!(async_fn.is_some(), "Rust: async_func not found");
-        assert!(async_fn.unwrap().is_async, "Rust: async_func should be marked async");
+        assert!(
+            async_fn.unwrap().is_async,
+            "Rust: async_func should be marked async"
+        );
 
         // Structs have methods
         let animal = info.classes.iter().find(|c| c.name == "Animal");
@@ -937,12 +1023,8 @@ mod extract_tests {
         assert_eq!(info.language, Language::Go);
 
         // Go has free functions and receiver methods
-        let total = info.functions.len()
-            + info
-                .classes
-                .iter()
-                .map(|c| c.methods.len())
-                .sum::<usize>();
+        let total =
+            info.functions.len() + info.classes.iter().map(|c| c.methods.len()).sum::<usize>();
         assert!(
             total >= 4,
             "Go extract: expected >= 4 total funcs+methods, got {}: functions={:?}",
@@ -977,7 +1059,11 @@ mod extract_tests {
         );
 
         let fn_names: Vec<&str> = info.functions.iter().map(|f| f.name.as_str()).collect();
-        assert!(fn_names.contains(&"topLevel"), "Missing topLevel: {:?}", fn_names);
+        assert!(
+            fn_names.contains(&"topLevel"),
+            "Missing topLevel: {:?}",
+            fn_names
+        );
 
         // asyncFunc should be async
         let async_fn = info.functions.iter().find(|f| f.name == "asyncFunc");
@@ -1008,10 +1094,18 @@ mod extract_tests {
         );
 
         let fn_names: Vec<&str> = info.functions.iter().map(|f| f.name.as_str()).collect();
-        assert!(fn_names.contains(&"topLevel"), "Missing topLevel: {:?}", fn_names);
+        assert!(
+            fn_names.contains(&"topLevel"),
+            "Missing topLevel: {:?}",
+            fn_names
+        );
 
         let cls_names: Vec<&str> = info.classes.iter().map(|c| c.name.as_str()).collect();
-        assert!(cls_names.contains(&"Animal"), "Missing Animal: {:?}", cls_names);
+        assert!(
+            cls_names.contains(&"Animal"),
+            "Missing Animal: {:?}",
+            cls_names
+        );
         assert!(cls_names.contains(&"Dog"), "Missing Dog: {:?}", cls_names);
     }
 
@@ -1031,9 +1125,17 @@ mod extract_tests {
         );
 
         let cls_names: Vec<&str> = info.classes.iter().map(|c| c.name.as_str()).collect();
-        assert!(cls_names.contains(&"Animal"), "Missing Animal: {:?}", cls_names);
+        assert!(
+            cls_names.contains(&"Animal"),
+            "Missing Animal: {:?}",
+            cls_names
+        );
         assert!(cls_names.contains(&"Dog"), "Missing Dog: {:?}", cls_names);
-        assert!(cls_names.contains(&"Utils"), "Missing Utils: {:?}", cls_names);
+        assert!(
+            cls_names.contains(&"Utils"),
+            "Missing Utils: {:?}",
+            cls_names
+        );
 
         // Dog extends Animal
         let dog = info.classes.iter().find(|c| c.name == "Dog").unwrap();
@@ -1066,10 +1168,18 @@ mod extract_tests {
         );
 
         let fn_names: Vec<&str> = info.functions.iter().map(|f| f.name.as_str()).collect();
-        assert!(fn_names.contains(&"animal_speak"), "Missing animal_speak: {:?}", fn_names);
+        assert!(
+            fn_names.contains(&"animal_speak"),
+            "Missing animal_speak: {:?}",
+            fn_names
+        );
         assert!(fn_names.contains(&"add"), "Missing add: {:?}", fn_names);
         assert!(fn_names.contains(&"main"), "Missing main: {:?}", fn_names);
-        assert!(fn_names.contains(&"helper"), "Missing helper: {:?}", fn_names);
+        assert!(
+            fn_names.contains(&"helper"),
+            "Missing helper: {:?}",
+            fn_names
+        );
     }
 
     // --- C++ ---
@@ -1093,7 +1203,11 @@ mod extract_tests {
         );
 
         let cls_names: Vec<&str> = info.classes.iter().map(|c| c.name.as_str()).collect();
-        assert!(cls_names.contains(&"Animal"), "Missing Animal: {:?}", cls_names);
+        assert!(
+            cls_names.contains(&"Animal"),
+            "Missing Animal: {:?}",
+            cls_names
+        );
         assert!(cls_names.contains(&"Dog"), "Missing Dog: {:?}", cls_names);
     }
 
@@ -1125,7 +1239,11 @@ mod extract_tests {
         );
 
         let cls_names: Vec<&str> = info.classes.iter().map(|c| c.name.as_str()).collect();
-        assert!(cls_names.contains(&"Animal"), "Missing Animal: {:?}", cls_names);
+        assert!(
+            cls_names.contains(&"Animal"),
+            "Missing Animal: {:?}",
+            cls_names
+        );
         assert!(cls_names.contains(&"Dog"), "Missing Dog: {:?}", cls_names);
     }
 
@@ -1150,11 +1268,23 @@ mod extract_tests {
         );
 
         let fn_names: Vec<&str> = info.functions.iter().map(|f| f.name.as_str()).collect();
-        assert!(fn_names.contains(&"topLevelFunc"), "Missing topLevelFunc: {:?}", fn_names);
-        assert!(fn_names.contains(&"anotherFunc"), "Missing anotherFunc: {:?}", fn_names);
+        assert!(
+            fn_names.contains(&"topLevelFunc"),
+            "Missing topLevelFunc: {:?}",
+            fn_names
+        );
+        assert!(
+            fn_names.contains(&"anotherFunc"),
+            "Missing anotherFunc: {:?}",
+            fn_names
+        );
 
         let cls_names: Vec<&str> = info.classes.iter().map(|c| c.name.as_str()).collect();
-        assert!(cls_names.contains(&"Animal"), "Missing Animal: {:?}", cls_names);
+        assert!(
+            cls_names.contains(&"Animal"),
+            "Missing Animal: {:?}",
+            cls_names
+        );
         assert!(cls_names.contains(&"Dog"), "Missing Dog: {:?}", cls_names);
     }
 
@@ -1179,8 +1309,16 @@ mod extract_tests {
         );
 
         let fn_names: Vec<&str> = info.functions.iter().map(|f| f.name.as_str()).collect();
-        assert!(fn_names.contains(&"topLevel"), "Missing topLevel: {:?}", fn_names);
-        assert!(fn_names.contains(&"anotherFunc"), "Missing anotherFunc: {:?}", fn_names);
+        assert!(
+            fn_names.contains(&"topLevel"),
+            "Missing topLevel: {:?}",
+            fn_names
+        );
+        assert!(
+            fn_names.contains(&"anotherFunc"),
+            "Missing anotherFunc: {:?}",
+            fn_names
+        );
     }
 
     // --- Swift ---
@@ -1204,12 +1342,28 @@ mod extract_tests {
         );
 
         let fn_names: Vec<&str> = info.functions.iter().map(|f| f.name.as_str()).collect();
-        assert!(fn_names.contains(&"topLevel"), "Missing topLevel: {:?}", fn_names);
-        assert!(fn_names.contains(&"anotherFunc"), "Missing anotherFunc: {:?}", fn_names);
-        assert!(fn_names.contains(&"asyncFunc"), "Missing asyncFunc: {:?}", fn_names);
+        assert!(
+            fn_names.contains(&"topLevel"),
+            "Missing topLevel: {:?}",
+            fn_names
+        );
+        assert!(
+            fn_names.contains(&"anotherFunc"),
+            "Missing anotherFunc: {:?}",
+            fn_names
+        );
+        assert!(
+            fn_names.contains(&"asyncFunc"),
+            "Missing asyncFunc: {:?}",
+            fn_names
+        );
 
         let cls_names: Vec<&str> = info.classes.iter().map(|c| c.name.as_str()).collect();
-        assert!(cls_names.contains(&"Animal"), "Missing Animal: {:?}", cls_names);
+        assert!(
+            cls_names.contains(&"Animal"),
+            "Missing Animal: {:?}",
+            cls_names
+        );
         assert!(cls_names.contains(&"Dog"), "Missing Dog: {:?}", cls_names);
     }
 
@@ -1229,16 +1383,21 @@ mod extract_tests {
         );
 
         let cls_names: Vec<&str> = info.classes.iter().map(|c| c.name.as_str()).collect();
-        assert!(cls_names.contains(&"Animal"), "Missing Animal: {:?}", cls_names);
+        assert!(
+            cls_names.contains(&"Animal"),
+            "Missing Animal: {:?}",
+            cls_names
+        );
         assert!(cls_names.contains(&"Dog"), "Missing Dog: {:?}", cls_names);
-        assert!(cls_names.contains(&"Utils"), "Missing Utils: {:?}", cls_names);
+        assert!(
+            cls_names.contains(&"Utils"),
+            "Missing Utils: {:?}",
+            cls_names
+        );
 
         // Animal should have methods
         let animal = info.classes.iter().find(|c| c.name == "Animal").unwrap();
-        assert!(
-            !animal.methods.is_empty(),
-            "C#: Animal should have methods"
-        );
+        assert!(!animal.methods.is_empty(), "C#: Animal should have methods");
     }
 
     // --- Scala ---
@@ -1250,12 +1409,8 @@ mod extract_tests {
         assert_eq!(info.language, Language::Scala);
 
         // Scala has objects and classes
-        let total_funcs = info.functions.len()
-            + info
-                .classes
-                .iter()
-                .map(|c| c.methods.len())
-                .sum::<usize>();
+        let total_funcs =
+            info.functions.len() + info.classes.iter().map(|c| c.methods.len()).sum::<usize>();
         assert!(
             total_funcs >= 4,
             "Scala extract: expected >= 4 total funcs+methods, got {}: functions={:?}, classes={:?}",
@@ -1274,12 +1429,8 @@ mod extract_tests {
         assert_eq!(info.language, Language::Elixir);
 
         // Elixir defmodule is a class, def/defp are functions or methods
-        let total = info.functions.len()
-            + info
-                .classes
-                .iter()
-                .map(|c| c.methods.len())
-                .sum::<usize>();
+        let total =
+            info.functions.len() + info.classes.iter().map(|c| c.methods.len()).sum::<usize>();
         assert!(
             total >= 2,
             "Elixir extract: expected >= 2 total funcs+methods, got {}: functions={:?}, classes={:?}",
@@ -1457,9 +1608,7 @@ mod imports_tests {
         );
 
         // At least one import should reference stdio
-        let has_stdio = imports
-            .iter()
-            .any(|i| i.module.contains("stdio"));
+        let has_stdio = imports.iter().any(|i| i.module.contains("stdio"));
         assert!(
             has_stdio,
             "C: expected import containing 'stdio', got: {:?}",
@@ -1484,9 +1633,7 @@ mod imports_tests {
             "C++: expected imports (has #include <string>), got empty"
         );
 
-        let has_string = imports
-            .iter()
-            .any(|i| i.module.contains("string"));
+        let has_string = imports.iter().any(|i| i.module.contains("string"));
         assert!(
             has_string,
             "C++: expected import containing 'string', got: {:?}",
@@ -1511,9 +1658,7 @@ mod imports_tests {
             "C#: expected imports (has using System;), got empty"
         );
 
-        let has_system = imports
-            .iter()
-            .any(|i| i.module.contains("System"));
+        let has_system = imports.iter().any(|i| i.module.contains("System"));
         assert!(
             has_system,
             "C#: expected import containing 'System', got: {:?}",
@@ -1528,7 +1673,11 @@ mod imports_tests {
         // The test_python.py fixture has no import statements
         let file = extractor_fixtures_dir().join("test_python.py");
         let imports = get_imports(&file, Language::Python);
-        assert!(imports.is_ok(), "get_imports failed for Python: {:?}", imports.err());
+        assert!(
+            imports.is_ok(),
+            "get_imports failed for Python: {:?}",
+            imports.err()
+        );
         assert!(
             imports.unwrap().is_empty(),
             "Python fixture has no imports, expected empty"
@@ -1539,7 +1688,11 @@ mod imports_tests {
     fn test_imports_rust_no_imports() {
         let file = extractor_fixtures_dir().join("test_rust.rs");
         let imports = get_imports(&file, Language::Rust);
-        assert!(imports.is_ok(), "get_imports failed for Rust: {:?}", imports.err());
+        assert!(
+            imports.is_ok(),
+            "get_imports failed for Rust: {:?}",
+            imports.err()
+        );
         // The Rust fixture has no use statements at top level (it uses std::error inline)
     }
 
@@ -1547,7 +1700,11 @@ mod imports_tests {
     fn test_imports_go_no_imports() {
         let file = extractor_fixtures_dir().join("test_go.go");
         let imports = get_imports(&file, Language::Go);
-        assert!(imports.is_ok(), "get_imports failed for Go: {:?}", imports.err());
+        assert!(
+            imports.is_ok(),
+            "get_imports failed for Go: {:?}",
+            imports.err()
+        );
         assert!(
             imports.unwrap().is_empty(),
             "Go fixture has no import blocks, expected empty"
@@ -1588,7 +1745,11 @@ mod imports_tests {
     fn test_imports_java_no_imports() {
         let file = extractor_fixtures_dir().join("test_java.java");
         let imports = get_imports(&file, Language::Java);
-        assert!(imports.is_ok(), "get_imports failed for Java: {:?}", imports.err());
+        assert!(
+            imports.is_ok(),
+            "get_imports failed for Java: {:?}",
+            imports.err()
+        );
         assert!(
             imports.unwrap().is_empty(),
             "Java fixture has no import statements, expected empty"
@@ -1599,7 +1760,11 @@ mod imports_tests {
     fn test_imports_ruby_no_imports() {
         let file = extractor_fixtures_dir().join("test_ruby.rb");
         let imports = get_imports(&file, Language::Ruby);
-        assert!(imports.is_ok(), "get_imports failed for Ruby: {:?}", imports.err());
+        assert!(
+            imports.is_ok(),
+            "get_imports failed for Ruby: {:?}",
+            imports.err()
+        );
         assert!(
             imports.unwrap().is_empty(),
             "Ruby fixture has no require statements, expected empty"
@@ -1610,7 +1775,11 @@ mod imports_tests {
     fn test_imports_php_no_imports() {
         let file = extractor_fixtures_dir().join("test_php.php");
         let imports = get_imports(&file, Language::Php);
-        assert!(imports.is_ok(), "get_imports failed for PHP: {:?}", imports.err());
+        assert!(
+            imports.is_ok(),
+            "get_imports failed for PHP: {:?}",
+            imports.err()
+        );
         assert!(
             imports.unwrap().is_empty(),
             "PHP fixture has no use/require statements, expected empty"
@@ -1621,7 +1790,11 @@ mod imports_tests {
     fn test_imports_kotlin_no_imports() {
         let file = extractor_fixtures_dir().join("test_kotlin.kt");
         let imports = get_imports(&file, Language::Kotlin);
-        assert!(imports.is_ok(), "get_imports failed for Kotlin: {:?}", imports.err());
+        assert!(
+            imports.is_ok(),
+            "get_imports failed for Kotlin: {:?}",
+            imports.err()
+        );
         assert!(
             imports.unwrap().is_empty(),
             "Kotlin fixture has no import statements, expected empty"
@@ -1632,7 +1805,11 @@ mod imports_tests {
     fn test_imports_swift_no_imports() {
         let file = extractor_fixtures_dir().join("test_swift.swift");
         let imports = get_imports(&file, Language::Swift);
-        assert!(imports.is_ok(), "get_imports failed for Swift: {:?}", imports.err());
+        assert!(
+            imports.is_ok(),
+            "get_imports failed for Swift: {:?}",
+            imports.err()
+        );
         assert!(
             imports.unwrap().is_empty(),
             "Swift fixture has no import statements, expected empty"
@@ -1643,7 +1820,11 @@ mod imports_tests {
     fn test_imports_scala_no_imports() {
         let file = extractor_fixtures_dir().join("test_scala.scala");
         let imports = get_imports(&file, Language::Scala);
-        assert!(imports.is_ok(), "get_imports failed for Scala: {:?}", imports.err());
+        assert!(
+            imports.is_ok(),
+            "get_imports failed for Scala: {:?}",
+            imports.err()
+        );
         assert!(
             imports.unwrap().is_empty(),
             "Scala fixture has no import statements, expected empty"
@@ -1654,7 +1835,11 @@ mod imports_tests {
     fn test_imports_elixir_no_imports() {
         let file = extractor_fixtures_dir().join("test_elixir.ex");
         let imports = get_imports(&file, Language::Elixir);
-        assert!(imports.is_ok(), "get_imports failed for Elixir: {:?}", imports.err());
+        assert!(
+            imports.is_ok(),
+            "get_imports failed for Elixir: {:?}",
+            imports.err()
+        );
         // Elixir fixture has no explicit import/require/alias statements
     }
 
@@ -1662,7 +1847,11 @@ mod imports_tests {
     fn test_imports_lua_no_imports() {
         let file = extractor_fixtures_dir().join("test_lua.lua");
         let imports = get_imports(&file, Language::Lua);
-        assert!(imports.is_ok(), "get_imports failed for Lua: {:?}", imports.err());
+        assert!(
+            imports.is_ok(),
+            "get_imports failed for Lua: {:?}",
+            imports.err()
+        );
         assert!(
             imports.unwrap().is_empty(),
             "Lua fixture has no require statements, expected empty"
@@ -1673,7 +1862,11 @@ mod imports_tests {
     fn test_imports_ocaml_no_imports() {
         let file = extractor_fixtures_dir().join("test_ocaml.ml");
         let imports = get_imports(&file, Language::Ocaml);
-        assert!(imports.is_ok(), "get_imports failed for OCaml: {:?}", imports.err());
+        assert!(
+            imports.is_ok(),
+            "get_imports failed for OCaml: {:?}",
+            imports.err()
+        );
         // OCaml fixture has no open statements
     }
 

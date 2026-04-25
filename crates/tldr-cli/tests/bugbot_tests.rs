@@ -34,14 +34,26 @@ fn bugbot_check_runs_and_produces_json() {
     // Verify top-level schema fields
     assert_eq!(json["tool"], "bugbot", "tool field should be 'bugbot'");
     assert_eq!(json["mode"], "check", "mode field should be 'check'");
-    assert!(json["language"].is_string(), "language field should be a string");
-    assert!(json["base_ref"].is_string(), "base_ref field should be a string");
+    assert!(
+        json["language"].is_string(),
+        "language field should be a string"
+    );
+    assert!(
+        json["base_ref"].is_string(),
+        "base_ref field should be a string"
+    );
     assert!(
         json["detection_method"].is_string(),
         "detection_method field should be a string"
     );
-    assert!(json["timestamp"].is_string(), "timestamp field should be a string");
-    assert!(json["changed_files"].is_array(), "changed_files should be an array");
+    assert!(
+        json["timestamp"].is_string(),
+        "timestamp field should be a string"
+    );
+    assert!(
+        json["changed_files"].is_array(),
+        "changed_files should be an array"
+    );
     assert!(json["findings"].is_array(), "findings should be an array");
     assert!(json["summary"].is_object(), "summary should be an object");
     assert!(
@@ -102,7 +114,16 @@ fn bugbot_check_staged_flag_changes_detection_method() {
 #[test]
 fn bugbot_check_custom_base_ref() {
     let output = tldr_bin()
-        .args(["--lang", "rust", "bugbot", "check", "--no-fail", "--base-ref", "main", "."])
+        .args([
+            "--lang",
+            "rust",
+            "bugbot",
+            "check",
+            "--no-fail",
+            "--base-ref",
+            "main",
+            ".",
+        ])
         .output()
         .expect("failed to execute bugbot check");
 

@@ -20,9 +20,7 @@ use tldr_core::analysis::{
     whatbreaks_analysis, HubAlgorithm, WhatbreaksOptions,
 };
 use tldr_core::callgraph::{build_forward_graph, build_reverse_graph, collect_nodes};
-use tldr_core::{
-    build_project_call_graph, CallEdge, FunctionRef, Language, ProjectCallGraph,
-};
+use tldr_core::{build_project_call_graph, CallEdge, FunctionRef, Language, ProjectCallGraph};
 
 // =============================================================================
 // Test Helpers
@@ -720,13 +718,18 @@ mod calls_tests {
     fn test_calls_python() {
         let dir = make_project(&python_project());
         let graph = build_graph(dir.path(), Language::Python);
-        assert!(graph.edge_count() > 0, "Python call graph should have edges");
+        assert!(
+            graph.edge_count() > 0,
+            "Python call graph should have edges"
+        );
         // main.py: main -> helper (cross-file)
         // main.py: main -> formatter (cross-file)
         // utils.py: helper -> compute (intra-file)
         let names = all_func_names(&graph);
         assert!(
-            names.iter().any(|n| n.contains("main") || n.contains("orchestrate")),
+            names
+                .iter()
+                .any(|n| n.contains("main") || n.contains("orchestrate")),
             "Expected to find main or orchestrate in graph nodes: {:?}",
             names
         );
@@ -747,7 +750,9 @@ mod calls_tests {
         );
         let names = all_func_names(&graph);
         assert!(
-            names.iter().any(|n| n.contains("main") || n.contains("orchestrate")),
+            names
+                .iter()
+                .any(|n| n.contains("main") || n.contains("orchestrate")),
             "Expected caller functions in JS graph: {:?}",
             names
         );
@@ -763,7 +768,9 @@ mod calls_tests {
         );
         let names = all_func_names(&graph);
         assert!(
-            names.iter().any(|n| n.contains("helper") || n.contains("compute")),
+            names
+                .iter()
+                .any(|n| n.contains("helper") || n.contains("compute")),
             "Expected callee functions in TS graph: {:?}",
             names
         );
@@ -776,7 +783,9 @@ mod calls_tests {
         assert!(graph.edge_count() > 0, "Go call graph should have edges");
         let names = all_func_names(&graph);
         assert!(
-            names.iter().any(|n| n.contains("Helper") || n.contains("Compute")),
+            names
+                .iter()
+                .any(|n| n.contains("Helper") || n.contains("Compute")),
             "Expected Go function names in graph: {:?}",
             names
         );
@@ -789,7 +798,9 @@ mod calls_tests {
         assert!(graph.edge_count() > 0, "Rust call graph should have edges");
         let names = all_func_names(&graph);
         assert!(
-            names.iter().any(|n| n.contains("helper") || n.contains("compute")),
+            names
+                .iter()
+                .any(|n| n.contains("helper") || n.contains("compute")),
             "Expected Rust function names in graph: {:?}",
             names
         );
@@ -802,7 +813,9 @@ mod calls_tests {
         assert!(graph.edge_count() > 0, "Java call graph should have edges");
         let names = all_func_names(&graph);
         assert!(
-            names.iter().any(|n| n.contains("helper") || n.contains("compute")),
+            names
+                .iter()
+                .any(|n| n.contains("helper") || n.contains("compute")),
             "Expected Java function names in graph: {:?}",
             names
         );
@@ -815,7 +828,9 @@ mod calls_tests {
         assert!(graph.edge_count() > 0, "C call graph should have edges");
         let names = all_func_names(&graph);
         assert!(
-            names.iter().any(|n| n.contains("helper") || n.contains("compute")),
+            names
+                .iter()
+                .any(|n| n.contains("helper") || n.contains("compute")),
             "Expected C function names in graph: {:?}",
             names
         );
@@ -828,7 +843,9 @@ mod calls_tests {
         assert!(graph.edge_count() > 0, "Ruby call graph should have edges");
         let names = all_func_names(&graph);
         assert!(
-            names.iter().any(|n| n.contains("helper") || n.contains("compute")),
+            names
+                .iter()
+                .any(|n| n.contains("helper") || n.contains("compute")),
             "Expected Ruby function names in graph: {:?}",
             names
         );
@@ -1143,18 +1160,13 @@ mod impact_tests {
         );
         // Check that at least one caller tree mentions helper
         let mentions_helper = report.targets.values().any(|tree| {
-            tree.callers
-                .iter()
-                .any(|c| c.function.contains("helper"))
+            tree.callers.iter().any(|c| c.function.contains("helper"))
                 || tree.function.contains("helper")
         });
         assert!(
             mentions_helper,
             "Changing compute should show 'helper' as an affected caller. Targets: {:?}",
-            report
-                .targets
-                .keys()
-                .collect::<Vec<_>>()
+            report.targets.keys().collect::<Vec<_>>()
         );
     }
 
@@ -1735,7 +1747,10 @@ mod hubs_tests {
         let reverse = build_reverse_graph(&graph);
         let nodes = collect_nodes(&graph);
         let scores = compute_hub_scores(&nodes, &forward, &reverse);
-        assert!(scores.is_empty(), "Empty graph should produce no hub scores");
+        assert!(
+            scores.is_empty(),
+            "Empty graph should produce no hub scores"
+        );
     }
 
     #[test]
@@ -1937,7 +1952,10 @@ mod whatbreaks_tests {
         };
         let report = whatbreaks_analysis("helper", dir.path(), &options).unwrap();
 
-        assert_eq!(report.wrapper, "whatbreaks", "wrapper field should be 'whatbreaks'");
+        assert_eq!(
+            report.wrapper, "whatbreaks",
+            "wrapper field should be 'whatbreaks'"
+        );
         assert_eq!(report.target, "helper");
         assert!(
             report.total_elapsed_ms >= 0.0,
@@ -2106,10 +2124,7 @@ mod integration_tests {
         let reverse = build_reverse_graph(&graph);
         let nodes = collect_nodes(&graph);
         let report = compute_hub_report(&nodes, &forward, &reverse, HubAlgorithm::All, 10, None);
-        assert!(
-            report.total_nodes > 0,
-            "TS pipeline: should have hub nodes"
-        );
+        assert!(report.total_nodes > 0, "TS pipeline: should have hub nodes");
 
         let functions = vec![
             FunctionRef::new(dir.path().join("main.ts"), "main"),

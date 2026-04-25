@@ -94,17 +94,15 @@ mod tests {
 
     #[test]
     fn test_parse_error() {
-        let output = "[ERROR] /src/Main.java:10:5: Missing a Javadoc comment. [MissingJavadocMethod]";
+        let output =
+            "[ERROR] /src/Main.java:10:5: Missing a Javadoc comment. [MissingJavadocMethod]";
         let findings = parse_checkstyle_output(output).unwrap();
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].file, PathBuf::from("/src/Main.java"));
         assert_eq!(findings[0].line, 10);
         assert_eq!(findings[0].column, 5);
         assert_eq!(findings[0].severity, "high");
-        assert_eq!(
-            findings[0].code,
-            Some("MissingJavadocMethod".to_string())
-        );
+        assert_eq!(findings[0].code, Some("MissingJavadocMethod".to_string()));
     }
 
     #[test]

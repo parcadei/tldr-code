@@ -222,8 +222,13 @@ fn run_diagnose(args: &FixDiagnoseArgs, format: OutputFormat, lang: Option<&str>
         );
     }
 
-    let source = std::fs::read_to_string(&args.source)
-        .map_err(|e| anyhow!("Failed to read source file '{}': {}", args.source.display(), e))?;
+    let source = std::fs::read_to_string(&args.source).map_err(|e| {
+        anyhow!(
+            "Failed to read source file '{}': {}",
+            args.source.display(),
+            e
+        )
+    })?;
 
     let diagnosis = fix::diagnose(&error_text, &source, lang, None);
 
@@ -250,13 +255,17 @@ fn run_apply(args: &FixApplyArgs, format: OutputFormat, lang: Option<&str>) -> R
         );
     }
 
-    let source = std::fs::read_to_string(&args.source)
-        .map_err(|e| anyhow!("Failed to read source file '{}': {}", args.source.display(), e))?;
+    let source = std::fs::read_to_string(&args.source).map_err(|e| {
+        anyhow!(
+            "Failed to read source file '{}': {}",
+            args.source.display(),
+            e
+        )
+    })?;
 
-    let diagnosis = fix::diagnose(&error_text, &source, lang, None)
-        .ok_or_else(|| {
-            anyhow!("Could not parse or diagnose the error. The error format may not be supported.")
-        })?;
+    let diagnosis = fix::diagnose(&error_text, &source, lang, None).ok_or_else(|| {
+        anyhow!("Could not parse or diagnose the error. The error format may not be supported.")
+    })?;
 
     match &diagnosis.fix {
         Some(fix_data) => {
@@ -450,7 +459,10 @@ mod tests {
         let cmd = FixCommand::Check(args);
         // Verify Debug representation contains "Check"
         let debug = format!("{:?}", cmd);
-        assert!(debug.contains("Check"), "FixCommand should have Check variant");
+        assert!(
+            debug.contains("Check"),
+            "FixCommand should have Check variant"
+        );
     }
 
     #[test]
@@ -482,7 +494,11 @@ mod tests {
             max_attempts: 5,
         };
         let result = run_check(&args, OutputFormat::Json, Some("python"));
-        assert!(result.is_ok(), "Should succeed when test passes: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Should succeed when test passes: {:?}",
+            result
+        );
     }
 
     // ---- Diff flag tests ----
@@ -521,7 +537,11 @@ mod tests {
         };
         // Should succeed (produces diff output to stdout)
         let result = run_apply(&args, OutputFormat::Text, Some("python"));
-        assert!(result.is_ok(), "run_apply with --diff should succeed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "run_apply with --diff should succeed: {:?}",
+            result
+        );
     }
 
     // ---- API surface flag tests ----

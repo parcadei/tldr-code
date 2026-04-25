@@ -1075,7 +1075,9 @@ fn test_constant_value_int() {
 #[test]
 fn test_constant_value_float() {
     let val = ConstantValue::Float(std::f64::consts::PI);
-    assert!(matches!(val, ConstantValue::Float(v) if (v - std::f64::consts::PI).abs() < f64::EPSILON));
+    assert!(
+        matches!(val, ConstantValue::Float(v) if (v - std::f64::consts::PI).abs() < f64::EPSILON)
+    );
 }
 
 #[test]

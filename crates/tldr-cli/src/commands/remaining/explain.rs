@@ -616,9 +616,7 @@ fn analyze_purity_recursive(
         "assignment" | "augmented_assignment" => {
             // Check for attribute writes (self.x = ...)
             if let Some(left) = node.child_by_field_name("left") {
-                if left.kind() == "attribute"
-                    && !effects.contains(&"attribute_write".to_string())
-                {
+                if left.kind() == "attribute" && !effects.contains(&"attribute_write".to_string()) {
                     effects.push("attribute_write".to_string());
                 }
             }
@@ -1184,7 +1182,6 @@ impl ExplainArgs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     const SAMPLE_CODE: &str = r#"
 def calculate_total(items: list[dict], tax_rate: float = 0.1) -> float:

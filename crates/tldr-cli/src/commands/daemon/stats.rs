@@ -261,13 +261,11 @@ fn format_number_signed(n: i64) -> String {
 
 /// Public function to run stats command (for daemon integration).
 pub async fn cmd_stats(_: StatsArgs) -> DaemonResult<StatsOutput> {
-    let stats_path = get_stats_path().map_err(|e| {
-        DaemonError::Io(std::io::Error::other(e.to_string()))
-    })?;
+    let stats_path =
+        get_stats_path().map_err(|e| DaemonError::Io(std::io::Error::other(e.to_string())))?;
 
-    let stats = read_and_aggregate_stats(&stats_path).map_err(|e| {
-        DaemonError::Io(std::io::Error::other(e.to_string()))
-    })?;
+    let stats = read_and_aggregate_stats(&stats_path)
+        .map_err(|e| DaemonError::Io(std::io::Error::other(e.to_string())))?;
 
     match stats {
         Some(stats) => Ok(StatsOutput {

@@ -424,9 +424,7 @@ public class UserService {
             // Check body - Java uses "class_body" not "body" field
             // Try both "body" field and explicit class_body search
             let mut c2 = child.walk();
-            let class_body = child
-                .children(&mut c2)
-                .find(|gc| gc.kind() == "class_body");
+            let class_body = child.children(&mut c2).find(|gc| gc.kind() == "class_body");
             let body = child.child_by_field_name("body").or(class_body);
             assert!(
                 body.is_some(),

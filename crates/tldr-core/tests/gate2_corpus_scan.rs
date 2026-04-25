@@ -11,10 +11,10 @@
 
 use std::path::{Path, PathBuf};
 
+use tldr_core::dataflow::abstract_interp::ENABLE_GUARD_NARROWING;
 use tldr_core::{
     compute_abstract_interp, extract_file, get_cfg_context, get_dfg_context, Language, ModuleInfo,
 };
-use tldr_core::dataflow::abstract_interp::ENABLE_GUARD_NARROWING;
 
 /// Configuration for a single corpus repository to scan.
 struct CorpusRepo {
@@ -61,19 +61,13 @@ fn collect_source_files_inner(dir: &Path, extension: &str, out: &mut Vec<PathBuf
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            let dir_name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
+            let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if SKIP_DIRS.contains(&dir_name) {
                 continue;
             }
             collect_source_files_inner(&path, extension, out);
         } else if path.is_file() {
-            let file_name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
+            let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
             // Skip test files (Go convention: *_test.go, Python: test_*.py)
             if file_name.ends_with("_test.go") || file_name.starts_with("test_") {
                 continue;
@@ -199,7 +193,10 @@ fn gate2_corpus_findings_count() {
     let corpus_root = match corpus_root.canonicalize() {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("ERROR: Cannot resolve corpus root at {:?}: {}", corpus_root, e);
+            eprintln!(
+                "ERROR: Cannot resolve corpus root at {:?}: {}",
+                corpus_root, e
+            );
             eprintln!("Test skipped (corpus not found).");
             return;
         }
@@ -269,10 +266,7 @@ fn gate2_corpus_findings_count() {
     eprintln!("Functions skipped:  {}", total_skipped);
     eprintln!("Div-zero findings:  {}", total_div_zero);
     eprintln!("Null-deref findings:{}", total_null_deref);
-    eprintln!(
-        "Total findings:     {}",
-        total_div_zero + total_null_deref
-    );
+    eprintln!("Total findings:     {}", total_div_zero + total_null_deref);
     eprintln!("ENABLE_GUARD_NARROWING = {}", ENABLE_GUARD_NARROWING);
     eprintln!("=== Done ===");
 }

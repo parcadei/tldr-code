@@ -203,9 +203,9 @@ mod error_parser_fuzz {
 
 mod callgraph_fuzz {
     use super::*;
+    use tempfile::TempDir;
     use tldr_core::build_project_call_graph;
     use tldr_core::types::Language;
-    use tempfile::TempDir;
 
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(30))]

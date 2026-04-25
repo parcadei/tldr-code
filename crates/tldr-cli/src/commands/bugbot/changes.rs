@@ -73,9 +73,8 @@ pub fn detect_changes(
             .context("Failed to list uncommitted changes")?;
         let staged_files = git_changed_files(project, &["diff", "--name-only", "--staged"])
             .context("Failed to list staged changes")?;
-        let untracked =
-            git_changed_files(project, &["ls-files", "--others", "--exclude-standard"])
-                .context("Failed to list untracked files")?;
+        let untracked = git_changed_files(project, &["ls-files", "--others", "--exclude-standard"])
+            .context("Failed to list untracked files")?;
         files.extend(staged_files);
         files.extend(untracked);
         files.sort();
@@ -270,8 +269,7 @@ mod tests {
         // Now modify it without staging
         std::fs::write(&rs_file, "pub fn new_version() {}\n").expect("overwrite rs");
 
-        let result =
-            detect_changes(dir, "HEAD", false, &Language::Rust).expect("detect_changes");
+        let result = detect_changes(dir, "HEAD", false, &Language::Rust).expect("detect_changes");
 
         assert_eq!(result.detection_method, "git:uncommitted");
         assert!(
@@ -300,8 +298,7 @@ mod tests {
             .output()
             .expect("git add");
 
-        let result =
-            detect_changes(dir, "HEAD", true, &Language::Rust).expect("detect_changes");
+        let result = detect_changes(dir, "HEAD", true, &Language::Rust).expect("detect_changes");
 
         assert!(
             result.changed_files.is_empty(),
@@ -341,14 +338,14 @@ mod tests {
             .output()
             .expect("git add");
 
-        let result =
-            detect_changes(dir, "HEAD", true, &Language::Python).expect("detect_changes");
+        let result = detect_changes(dir, "HEAD", true, &Language::Python).expect("detect_changes");
 
         // corpus/vendored.py should be excluded, only src/main.py remains
         assert!(
-            !result.changed_files.iter().any(|f| {
-                f.to_string_lossy().contains("corpus")
-            }),
+            !result
+                .changed_files
+                .iter()
+                .any(|f| { f.to_string_lossy().contains("corpus") }),
             "corpus/ files should be excluded by .tldrignore, got: {:?}",
             result.changed_files
         );

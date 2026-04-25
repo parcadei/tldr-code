@@ -104,7 +104,9 @@ mod contracts {
 
         assert_eq!(json["function"], "divide");
 
-        let preconds = json["preconditions"].as_array().expect("preconditions array");
+        let preconds = json["preconditions"]
+            .as_array()
+            .expect("preconditions array");
         let has_b_guard = preconds.iter().any(|p| {
             let constraint = p["constraint"].as_str().unwrap_or("");
             let variable = p["variable"].as_str().unwrap_or("");
@@ -138,7 +140,9 @@ mod contracts {
         );
         let json = run_tldr_json(&["contracts", &path, "validate_age", "-f", "json", "-q"]);
 
-        let preconds = json["preconditions"].as_array().expect("preconditions array");
+        let preconds = json["preconditions"]
+            .as_array()
+            .expect("preconditions array");
         assert!(
             preconds.len() >= 3,
             "Expected at least 3 preconditions (isinstance + 2 range checks), got {}",
@@ -228,7 +232,9 @@ def func_b(y):
         let json = run_tldr_json(&["contracts", &path, "divide", "-f", "json", "-q"]);
         assert_eq!(json["function"], "divide");
 
-        let preconds = json["preconditions"].as_array().expect("preconditions array");
+        let preconds = json["preconditions"]
+            .as_array()
+            .expect("preconditions array");
         let has_b_guard = preconds.iter().any(|p| {
             let c = p["constraint"].as_str().unwrap_or("");
             let v = p["variable"].as_str().unwrap_or("");
@@ -252,7 +258,9 @@ def func_b(y):
         );
 
         // Check postconditions include return type
-        let postconds = json["postconditions"].as_array().expect("postconditions array");
+        let postconds = json["postconditions"]
+            .as_array()
+            .expect("postconditions array");
         let has_return_type = postconds.iter().any(|p| {
             let c = p["constraint"].as_str().unwrap_or("");
             c.contains("Result")
@@ -285,7 +293,9 @@ func divide(a, b float64) (float64, error) {
         let json = run_tldr_json(&["contracts", &path, "divide", "-f", "json", "-q"]);
         assert_eq!(json["function"], "divide");
 
-        let preconds = json["preconditions"].as_array().expect("preconditions array");
+        let preconds = json["preconditions"]
+            .as_array()
+            .expect("preconditions array");
         let has_b_guard = preconds.iter().any(|p| {
             let c = p["constraint"].as_str().unwrap_or("");
             let v = p["variable"].as_str().unwrap_or("");
@@ -320,7 +330,9 @@ func validateName(name string) error {
         let json = run_tldr_json(&["contracts", &path, "validateName", "-f", "json", "-q"]);
         assert_eq!(json["function"], "validateName");
 
-        let preconds = json["preconditions"].as_array().expect("preconditions array");
+        let preconds = json["preconditions"]
+            .as_array()
+            .expect("preconditions array");
         let has_empty_check = preconds.iter().any(|p| {
             let c = p["constraint"].as_str().unwrap_or("");
             c.contains("!= \"\"") || c.contains("not empty") || c.contains("name")
@@ -351,7 +363,9 @@ func validateName(name string) error {
         let json = run_tldr_json(&["contracts", &path, "divide", "-f", "json", "-q"]);
         assert_eq!(json["function"], "divide");
 
-        let preconds = json["preconditions"].as_array().expect("preconditions array");
+        let preconds = json["preconditions"]
+            .as_array()
+            .expect("preconditions array");
         let has_b_guard = preconds.iter().any(|p| {
             let c = p["constraint"].as_str().unwrap_or("");
             let v = p["variable"].as_str().unwrap_or("");
@@ -384,7 +398,9 @@ func validateName(name string) error {
         let json = run_tldr_json(&["contracts", &path, "validate", "-f", "json", "-q"]);
         assert_eq!(json["function"], "validate");
 
-        let preconds = json["preconditions"].as_array().expect("preconditions array");
+        let preconds = json["preconditions"]
+            .as_array()
+            .expect("preconditions array");
         let has_null_check = preconds.iter().any(|p| {
             let c = p["constraint"].as_str().unwrap_or("");
             c.contains("null") || c.contains("!= null") || c.contains("not null")
@@ -438,10 +454,7 @@ func validateName(name string) error {
             "-q",
         ]);
         // The CLI returns an error when the function is not found -- this is correct behavior
-        assert!(
-            !success,
-            "contracts should fail for a nonexistent function"
-        );
+        assert!(!success, "contracts should fail for a nonexistent function");
         assert!(
             stderr.contains("not found"),
             "Error message should mention 'not found', got: {}",
@@ -475,7 +488,10 @@ def test_add_zero():
         let json = run_tldr_json(&["specs", "--from-tests", &path, "-f", "json", "-q"]);
 
         // Check top-level structure
-        assert!(json["functions"].is_array(), "specs should have functions array");
+        assert!(
+            json["functions"].is_array(),
+            "specs should have functions array"
+        );
         assert!(json["summary"].is_object(), "specs should have summary");
 
         let functions = json["functions"].as_array().unwrap();
@@ -548,7 +564,10 @@ def test_subtract():
             .filter_map(|f| f["function_name"].as_str())
             .collect();
         assert!(names.contains(&"add"), "Should have specs for add");
-        assert!(names.contains(&"multiply"), "Should have specs for multiply");
+        assert!(
+            names.contains(&"multiply"),
+            "Should have specs for multiply"
+        );
         assert!(
             names.contains(&"subtract"),
             "Should have specs for subtract"
@@ -582,8 +601,12 @@ def test_divide_normal():
         // Should have either exception_specs or input_output_specs
         let empty_io = vec![];
         let empty_exc = vec![];
-        let io_specs = divide_fn["input_output_specs"].as_array().unwrap_or(&empty_io);
-        let exc_specs = divide_fn["exception_specs"].as_array().unwrap_or(&empty_exc);
+        let io_specs = divide_fn["input_output_specs"]
+            .as_array()
+            .unwrap_or(&empty_io);
+        let exc_specs = divide_fn["exception_specs"]
+            .as_array()
+            .unwrap_or(&empty_exc);
         assert!(
             !io_specs.is_empty() || !exc_specs.is_empty(),
             "divide should have either IO or exception specs"
@@ -629,10 +652,7 @@ def test_multiply():
         let (stdout, _stderr, success) =
             run_tldr(&["specs", "--from-tests", &path, "-f", "text", "-q"]);
         assert!(success, "specs text format should succeed");
-        assert!(
-            !stdout.is_empty(),
-            "Text output should not be empty"
-        );
+        assert!(!stdout.is_empty(), "Text output should not be empty");
     }
 }
 
@@ -708,10 +728,7 @@ def test_multiply():
             let post = f["postconditions"].as_array().map(|a| a.len()).unwrap_or(0);
             pre > 0 || post > 0
         });
-        assert!(
-            has_conditions,
-            "Expected at least some inferred invariants"
-        );
+        assert!(has_conditions, "Expected at least some inferred invariants");
 
         // Check summary fields
         let summary = &json["summary"];
@@ -843,10 +860,7 @@ def test_add_neg():
         ]);
 
         let by_kind = &json["summary"]["by_kind"];
-        assert!(
-            by_kind.is_object(),
-            "summary should have by_kind breakdown"
-        );
+        assert!(by_kind.is_object(), "summary should have by_kind breakdown");
         // by_kind should have at least some non-zero values
         let total: i64 = by_kind
             .as_object()
@@ -891,18 +905,12 @@ mod verify {
         let json = run_tldr_json(&["verify", dir_path, "-f", "json", "-q", "--quick"]);
 
         // Check top-level structure
-        assert!(
-            json["path"].is_string(),
-            "verify should have path field"
-        );
+        assert!(json["path"].is_string(), "verify should have path field");
         assert!(
             json["sub_results"].is_object(),
             "verify should have sub_results"
         );
-        assert!(
-            json["summary"].is_object(),
-            "verify should have summary"
-        );
+        assert!(json["summary"].is_object(), "verify should have summary");
 
         // Check sub_results contain expected analyses
         let sub_results = json["sub_results"].as_object().unwrap();
@@ -965,10 +973,7 @@ def test_check_bounds_zero():
         let summary = &json["summary"];
         // At minimum, contracts should find preconditions
         let contract_count = summary["contract_count"].as_i64().unwrap_or(0);
-        assert!(
-            contract_count > 0,
-            "Expected at least some contracts found"
-        );
+        assert!(contract_count > 0, "Expected at least some contracts found");
 
         // Spec count should reflect the test file
         let spec_count = summary["spec_count"].as_i64().unwrap_or(0);
@@ -1069,9 +1074,7 @@ def _private_helper(x):
         );
 
         // Private function should NOT be listed
-        let has_private = functions
-            .iter()
-            .any(|f| f["name"] == "_private_helper");
+        let has_private = functions.iter().any(|f| f["name"] == "_private_helper");
         assert!(
             !has_private,
             "Should NOT include _private_helper in interface"
@@ -1166,9 +1169,7 @@ fn private_helper(x: i32) -> i32 {
         );
 
         // private_helper should NOT appear
-        let has_private = functions
-            .iter()
-            .any(|f| f["name"] == "private_helper");
+        let has_private = functions.iter().any(|f| f["name"] == "private_helper");
         assert!(
             !has_private,
             "Rust: Should NOT include fn private_helper in interface"
@@ -1177,10 +1178,7 @@ fn private_helper(x: i32) -> i32 {
         // Config struct should be listed as a class
         let classes = json["classes"].as_array().unwrap();
         let has_config = classes.iter().any(|c| c["name"] == "Config");
-        assert!(
-            has_config,
-            "Rust: Should include pub struct Config"
-        );
+        assert!(has_config, "Rust: Should include pub struct Config");
     }
 
     // ---- Go ----
@@ -1230,15 +1228,10 @@ func privateFunction(x int) int {
         );
 
         let has_new_config = functions.iter().any(|f| f["name"] == "NewConfig");
-        assert!(
-            has_new_config,
-            "Go: Should include exported NewConfig"
-        );
+        assert!(has_new_config, "Go: Should include exported NewConfig");
 
         // privateFunction should not appear (lowercase = unexported in Go)
-        let has_private = functions
-            .iter()
-            .any(|f| f["name"] == "privateFunction");
+        let has_private = functions.iter().any(|f| f["name"] == "privateFunction");
         assert!(
             !has_private,
             "Go: Should NOT include unexported privateFunction"
@@ -1273,10 +1266,7 @@ function privateHelper(x: number): number {
         let json = run_tldr_json(&["interface", &path, "-f", "json", "-q"]);
 
         // Should have file field
-        assert!(
-            json["file"].is_string(),
-            "interface should have file field"
-        );
+        assert!(json["file"].is_string(), "interface should have file field");
 
         // Should have at least some functions or classes
         let empty_fns = vec![];
@@ -1424,10 +1414,7 @@ def baz():
         let baz_insert = changes
             .iter()
             .find(|c| c["name"] == "baz" && c["change_type"] == "insert");
-        assert!(
-            baz_insert.is_some(),
-            "Expected baz to be inserted"
-        );
+        assert!(baz_insert.is_some(), "Expected baz to be inserted");
 
         // Summary should be present
         let summary = &json["summary"];
@@ -1496,7 +1483,10 @@ def bar():
         ]);
 
         let json = run_tldr_json(&["diff", &paths[0].1, &paths[1].1, "-f", "json", "-q"]);
-        assert_eq!(json["identical"], true, "Identical files should report identical=true");
+        assert_eq!(
+            json["identical"], true,
+            "Identical files should report identical=true"
+        );
         let changes = json["changes"].as_array().unwrap();
         assert!(changes.is_empty(), "Identical files should have no changes");
     }
@@ -1587,15 +1577,10 @@ func mul(a, b int) int {
         assert_eq!(json["identical"], false);
 
         let changes = json["changes"].as_array().unwrap();
-        assert!(
-            !changes.is_empty(),
-            "Go diff should detect changes"
-        );
+        assert!(!changes.is_empty(), "Go diff should detect changes");
 
         // add should be modified
-        let add_change = changes
-            .iter()
-            .find(|c| c["name"] == "add");
+        let add_change = changes.iter().find(|c| c["name"] == "add");
         assert!(
             add_change.is_some(),
             "Go: add function should be detected as changed"
@@ -1765,9 +1750,9 @@ def another_undocumented_function():
         }
 
         // Should find missing docs
-        let has_missing_docs = issues.iter().any(|i| {
-            i["rule"].as_str().unwrap_or("") == "missing_docs"
-        });
+        let has_missing_docs = issues
+            .iter()
+            .any(|i| i["rule"].as_str().unwrap_or("") == "missing_docs");
         assert!(
             has_missing_docs,
             "Should detect missing documentation as debt"
@@ -1842,8 +1827,7 @@ def bar():
         )]);
 
         let dir_path = _dir.path().to_str().unwrap();
-        let (stdout, _stderr, success) =
-            run_tldr(&["debt", dir_path, "-f", "text", "-q"]);
+        let (stdout, _stderr, success) = run_tldr(&["debt", dir_path, "-f", "text", "-q"]);
         assert!(success, "debt text format should succeed");
         assert!(!stdout.is_empty(), "Text output should not be empty");
     }
@@ -1960,10 +1944,7 @@ def simple_function():
 
         // avg_cyclomatic should be present and reasonable
         let avg_cc = summary["avg_cyclomatic"].as_f64().unwrap_or(0.0);
-        assert!(
-            avg_cc > 0.0,
-            "Average cyclomatic complexity should be > 0"
-        );
+        assert!(avg_cc > 0.0, "Average cyclomatic complexity should be > 0");
     }
 
     #[test]
@@ -1979,10 +1960,7 @@ def simple_function():
         let json = run_tldr_json(&["health", dir_path, "-f", "json", "-q", "--quick"]);
 
         // Details section should be present
-        assert!(
-            json["details"].is_object(),
-            "health should have details"
-        );
+        assert!(json["details"].is_object(), "health should have details");
 
         let details = json["details"].as_object().unwrap();
         // Should have complexity sub-analysis at minimum
@@ -2010,10 +1988,7 @@ def simple_function():
         let dir_path = _dir.path().to_str().unwrap();
         let json = run_tldr_json(&["health", dir_path, "-f", "json", "-q", "--quick"]);
 
-        assert_eq!(
-            json["quick_mode"], true,
-            "Should report quick_mode=true"
-        );
+        assert_eq!(json["quick_mode"], true, "Should report quick_mode=true");
     }
 
     #[test]
@@ -2027,14 +2002,7 @@ def simple_function():
 
         let dir_path = _dir.path().to_str().unwrap();
         let json = run_tldr_json(&[
-            "health",
-            dir_path,
-            "--preset",
-            "strict",
-            "-f",
-            "json",
-            "-q",
-            "--quick",
+            "health", dir_path, "--preset", "strict", "-f", "json", "-q", "--quick",
         ]);
 
         // Should succeed with strict preset
@@ -2320,15 +2288,7 @@ end_of_record
 "#,
         );
 
-        let json = run_tldr_json(&[
-            "coverage",
-            &path,
-            "-R",
-            "coveragepy",
-            "-f",
-            "json",
-            "-q",
-        ]);
+        let json = run_tldr_json(&["coverage", &path, "-R", "coveragepy", "-f", "json", "-q"]);
 
         let summary = &json["summary"];
         assert!(
@@ -2375,13 +2335,9 @@ end_of_record
 "#,
         );
 
-        let (stdout, _stderr, success) =
-            run_tldr(&["coverage", &path, "-f", "text", "-q"]);
+        let (stdout, _stderr, success) = run_tldr(&["coverage", &path, "-f", "text", "-q"]);
         assert!(success, "coverage text format should succeed");
-        assert!(
-            !stdout.is_empty(),
-            "Text output should not be empty"
-        );
+        assert!(!stdout.is_empty(), "Text output should not be empty");
     }
 
     // ---- Empty/edge cases ----
@@ -2398,8 +2354,7 @@ end_of_record
         );
 
         // Should handle zero lines gracefully (no division by zero)
-        let (stdout, stderr, success) =
-            run_tldr(&["coverage", &path, "-f", "json", "-q"]);
+        let (stdout, stderr, success) = run_tldr(&["coverage", &path, "-f", "json", "-q"]);
         // Either succeeds with 0% or handles the edge case
         if success {
             let json: Value = serde_json::from_str(&stdout).unwrap();
@@ -2408,10 +2363,7 @@ end_of_record
             assert_eq!(total, 0, "Empty file should have 0 total lines");
         } else {
             // It's acceptable for the tool to report an error on empty coverage
-            assert!(
-                !stderr.is_empty(),
-                "Error case should have stderr output"
-            );
+            assert!(!stderr.is_empty(), "Error case should have stderr output");
         }
     }
 
@@ -2525,9 +2477,7 @@ def test_safe_divide_float():
 
         // Interface should also list it (it's public -- no underscore prefix)
         let functions = interface_json["functions"].as_array().unwrap();
-        let in_interface = functions
-            .iter()
-            .any(|f| f["name"] == "validate_input");
+        let in_interface = functions.iter().any(|f| f["name"] == "validate_input");
         assert!(
             in_interface,
             "Function found by contracts should also appear in interface"

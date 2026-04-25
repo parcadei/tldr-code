@@ -313,9 +313,8 @@ impl L2Context {
         function_id: &FunctionId,
         version: ContractVersion,
         build_fn: impl FnOnce() -> anyhow::Result<ContractsReport>,
-    ) -> anyhow::Result<
-        dashmap::mapref::one::Ref<'_, (FunctionId, ContractVersion), ContractsReport>,
-    > {
+    ) -> anyhow::Result<dashmap::mapref::one::Ref<'_, (FunctionId, ContractVersion), ContractsReport>>
+    {
         let key = (function_id.clone(), version);
         if let Some(entry) = self.contracts_cache.get(&key) {
             return Ok(entry);
@@ -489,7 +488,11 @@ mod tests {
         set.insert(ContractVersion::Baseline); // duplicate
         set.insert(ContractVersion::Current);
 
-        assert_eq!(set.len(), 2, "HashSet should deduplicate identical variants");
+        assert_eq!(
+            set.len(),
+            2,
+            "HashSet should deduplicate identical variants"
+        );
         assert!(set.contains(&ContractVersion::Baseline));
         assert!(set.contains(&ContractVersion::Current));
     }
@@ -638,7 +641,11 @@ mod tests {
 
         // First call: cache miss, builds the CFG.
         let result = ctx.cfg_for(PYTHON_ADD, &fid, Language::Python);
-        assert!(result.is_ok(), "CFG build should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "CFG build should succeed: {:?}",
+            result.err()
+        );
         let cfg = result.unwrap();
         assert_eq!(cfg.function, "add");
         drop(cfg);
@@ -657,7 +664,11 @@ mod tests {
 
         // First call: cache miss, builds the DFG.
         let result = ctx.dfg_for(PYTHON_ADD, &fid, Language::Python);
-        assert!(result.is_ok(), "DFG build should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "DFG build should succeed: {:?}",
+            result.err()
+        );
         let dfg = result.unwrap();
         assert_eq!(dfg.function, "add");
         drop(dfg);
@@ -676,7 +687,11 @@ mod tests {
 
         // First call: cache miss, builds SSA.
         let result = ctx.ssa_for(PYTHON_ADD, &fid, Language::Python);
-        assert!(result.is_ok(), "SSA build should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "SSA build should succeed: {:?}",
+            result.err()
+        );
         let ssa = result.unwrap();
         assert_eq!(ssa.function, "add");
         drop(ssa);
@@ -760,6 +775,7 @@ mod tests {
             affected_functions: vec![],
             detection_method: "call_graph".to_string(),
             metadata: None,
+            status: tldr_core::ChangeImpactStatus::Completed,
         };
         assert!(ctx.set_change_impact(report).is_ok());
 
@@ -829,19 +845,28 @@ mod tests {
     #[test]
     fn test_l2_context_default_is_not_first_run() {
         let ctx = L2Context::test_fixture();
-        assert!(!ctx.is_first_run, "Default L2Context should not be first run");
+        assert!(
+            !ctx.is_first_run,
+            "Default L2Context should not be first run"
+        );
     }
 
     #[test]
     fn test_l2_context_with_first_run_true() {
         let ctx = L2Context::test_fixture().with_first_run(true);
-        assert!(ctx.is_first_run, "with_first_run(true) should set is_first_run");
+        assert!(
+            ctx.is_first_run,
+            "with_first_run(true) should set is_first_run"
+        );
     }
 
     #[test]
     fn test_l2_context_with_first_run_false() {
         let ctx = L2Context::test_fixture().with_first_run(false);
-        assert!(!ctx.is_first_run, "with_first_run(false) should unset is_first_run");
+        assert!(
+            !ctx.is_first_run,
+            "with_first_run(false) should unset is_first_run"
+        );
     }
 
     #[test]
@@ -897,24 +922,15 @@ mod tests {
             Some(self.call_graph.clone())
         }
 
-        fn query_cfg(
-            &self,
-            _function_id: &FunctionId,
-        ) -> Option<tldr_core::CfgInfo> {
+        fn query_cfg(&self, _function_id: &FunctionId) -> Option<tldr_core::CfgInfo> {
             None
         }
 
-        fn query_dfg(
-            &self,
-            _function_id: &FunctionId,
-        ) -> Option<tldr_core::DfgInfo> {
+        fn query_dfg(&self, _function_id: &FunctionId) -> Option<tldr_core::DfgInfo> {
             None
         }
 
-        fn query_ssa(
-            &self,
-            _function_id: &FunctionId,
-        ) -> Option<tldr_core::ssa::SsaFunction> {
+        fn query_ssa(&self, _function_id: &FunctionId) -> Option<tldr_core::ssa::SsaFunction> {
             None
         }
 
@@ -961,8 +977,7 @@ mod tests {
     /// with_daemon should replace the default NoDaemon.
     #[test]
     fn test_l2_context_with_daemon_sets_available() {
-        let ctx = L2Context::test_fixture()
-            .with_daemon(Box::new(MockDaemonWithCallGraph::new()));
+        let ctx = L2Context::test_fixture().with_daemon(Box::new(MockDaemonWithCallGraph::new()));
         assert!(
             ctx.daemon_available(),
             "L2Context with mock daemon should report available"
@@ -982,11 +997,21 @@ mod tests {
             notified: Arc<std::sync::Mutex<Vec<Vec<PathBuf>>>>,
         }
         impl DaemonClient for ArcTrackingDaemon {
-            fn is_available(&self) -> bool { true }
-            fn query_call_graph(&self) -> Option<ProjectCallGraph> { None }
-            fn query_cfg(&self, _fid: &FunctionId) -> Option<tldr_core::CfgInfo> { None }
-            fn query_dfg(&self, _fid: &FunctionId) -> Option<tldr_core::DfgInfo> { None }
-            fn query_ssa(&self, _fid: &FunctionId) -> Option<tldr_core::ssa::SsaFunction> { None }
+            fn is_available(&self) -> bool {
+                true
+            }
+            fn query_call_graph(&self) -> Option<ProjectCallGraph> {
+                None
+            }
+            fn query_cfg(&self, _fid: &FunctionId) -> Option<tldr_core::CfgInfo> {
+                None
+            }
+            fn query_dfg(&self, _fid: &FunctionId) -> Option<tldr_core::DfgInfo> {
+                None
+            }
+            fn query_ssa(&self, _fid: &FunctionId) -> Option<tldr_core::ssa::SsaFunction> {
+                None
+            }
             fn notify_changed_files(&self, files: &[PathBuf]) {
                 self.notified.lock().unwrap().push(files.to_vec());
             }
@@ -1030,8 +1055,7 @@ mod tests {
     /// When daemon is unavailable, call_graph() should return None.
     #[test]
     fn test_l2_context_daemon_not_available_call_graph_none() {
-        let ctx = L2Context::test_fixture()
-            .with_daemon(Box::new(MockUnavailableDaemon));
+        let ctx = L2Context::test_fixture().with_daemon(Box::new(MockUnavailableDaemon));
 
         assert!(
             ctx.call_graph().is_none(),
@@ -1043,8 +1067,7 @@ mod tests {
     /// should return it even though no local set_call_graph was called.
     #[test]
     fn test_l2_context_daemon_available_uses_cached_call_graph() {
-        let ctx = L2Context::test_fixture()
-            .with_daemon(Box::new(MockDaemonWithCallGraph::new()));
+        let ctx = L2Context::test_fixture().with_daemon(Box::new(MockDaemonWithCallGraph::new()));
 
         // No set_call_graph was called, but daemon provides one
         let cg = ctx.call_graph();
@@ -1057,8 +1080,7 @@ mod tests {
     /// When daemon is not available, cfg_for falls back to local computation.
     #[test]
     fn test_l2_context_daemon_not_available_cfg_uses_local() {
-        let ctx = L2Context::test_fixture()
-            .with_daemon(Box::new(MockUnavailableDaemon));
+        let ctx = L2Context::test_fixture().with_daemon(Box::new(MockUnavailableDaemon));
         let fid = FunctionId::new("test.py", "add", 1);
 
         // cfg_for should compute locally even without daemon
@@ -1075,8 +1097,7 @@ mod tests {
     /// When daemon is not available, dfg_for falls back to local computation.
     #[test]
     fn test_l2_context_daemon_not_available_dfg_uses_local() {
-        let ctx = L2Context::test_fixture()
-            .with_daemon(Box::new(MockUnavailableDaemon));
+        let ctx = L2Context::test_fixture().with_daemon(Box::new(MockUnavailableDaemon));
         let fid = FunctionId::new("test.py", "add", 1);
 
         let result = ctx.dfg_for(PYTHON_ADD, &fid, Language::Python);
@@ -1090,8 +1111,7 @@ mod tests {
     /// When daemon is not available, ssa_for falls back to local computation.
     #[test]
     fn test_l2_context_daemon_not_available_ssa_uses_local() {
-        let ctx = L2Context::test_fixture()
-            .with_daemon(Box::new(MockUnavailableDaemon));
+        let ctx = L2Context::test_fixture().with_daemon(Box::new(MockUnavailableDaemon));
         let fid = FunctionId::new("test.py", "add", 1);
 
         let result = ctx.ssa_for(PYTHON_ADD, &fid, Language::Python);
@@ -1120,16 +1140,14 @@ mod tests {
         // Default daemon should not be available
         assert!(!ctx.daemon().is_available());
 
-        let ctx2 = L2Context::test_fixture()
-            .with_daemon(Box::new(MockDaemonWithCallGraph::new()));
+        let ctx2 = L2Context::test_fixture().with_daemon(Box::new(MockDaemonWithCallGraph::new()));
         assert!(ctx2.daemon().is_available());
     }
 
     /// Local call_graph set takes precedence over daemon query.
     #[test]
     fn test_l2_context_local_call_graph_takes_precedence() {
-        let ctx = L2Context::test_fixture()
-            .with_daemon(Box::new(MockDaemonWithCallGraph::new()));
+        let ctx = L2Context::test_fixture().with_daemon(Box::new(MockDaemonWithCallGraph::new()));
 
         // Set a local call graph
         let local_cg = ProjectCallGraph::default();

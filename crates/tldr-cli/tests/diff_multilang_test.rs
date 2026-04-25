@@ -12,10 +12,8 @@ use std::io::Write;
 
 use tempfile::NamedTempFile;
 
-use tldr_cli::commands::remaining::types::{
-    ChangeType, DiffGranularity, DiffReport, NodeKind,
-};
 use tldr_cli::commands::remaining::diff::DiffArgs;
+use tldr_cli::commands::remaining::types::{ChangeType, DiffGranularity, DiffReport, NodeKind};
 
 // =============================================================================
 // Helpers
@@ -61,7 +59,11 @@ fn assert_has_change(report: &DiffReport, change_type: ChangeType, context: &str
         "{}: expected at least one {:?} change, but found none. Changes: {:?}",
         context,
         change_type,
-        report.changes.iter().map(|c| format!("{:?}:{:?}", c.change_type, c.name)).collect::<Vec<_>>()
+        report
+            .changes
+            .iter()
+            .map(|c| format!("{:?}:{:?}", c.change_type, c.name))
+            .collect::<Vec<_>>()
     );
 }
 
@@ -83,7 +85,11 @@ fn assert_has_change_with_kind(
         context,
         change_type,
         node_kind,
-        report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+        report
+            .changes
+            .iter()
+            .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+            .collect::<Vec<_>>()
     );
 }
 
@@ -94,7 +100,11 @@ fn has_class_update_with_child_insert(report: &DiffReport) -> bool {
             && c.node_kind == NodeKind::Class
             && c.children
                 .as_ref()
-                .map(|children| children.iter().any(|ch| ch.change_type == ChangeType::Insert))
+                .map(|children| {
+                    children
+                        .iter()
+                        .any(|ch| ch.change_type == ChangeType::Insert)
+                })
                 .unwrap_or(false)
     })
 }
@@ -117,27 +127,34 @@ mod python {
             ".py",
         );
         let report = run_l4_diff(&a, &b);
-        assert!(!report.identical, "Python L4: files should not be identical");
+        assert!(
+            !report.identical,
+            "Python L4: files should not be identical"
+        );
         assert_has_change(&report, ChangeType::Update, "Python L4 (foo changed)");
         assert_has_change(&report, ChangeType::Insert, "Python L4 (baz added)");
     }
 
     #[test]
     fn l5_class_diff() {
-        let a = write_temp(
-            "class Foo:\n    def bar(self):\n        return 1\n",
-            ".py",
-        );
+        let a = write_temp("class Foo:\n    def bar(self):\n        return 1\n", ".py");
         let b = write_temp(
             "class Foo:\n    def bar(self):\n        return 1\n    def baz(self):\n        return 2\n",
             ".py",
         );
         let report = run_l5_diff(&a, &b);
-        assert!(!report.identical, "Python L5: files should not be identical");
+        assert!(
+            !report.identical,
+            "Python L5: files should not be identical"
+        );
         assert!(
             has_class_update_with_child_insert(&report),
             "Python L5: should detect class update with method insert as child. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -160,27 +177,34 @@ mod typescript {
             ".ts",
         );
         let report = run_l4_diff(&a, &b);
-        assert!(!report.identical, "TypeScript L4: files should not be identical");
+        assert!(
+            !report.identical,
+            "TypeScript L4: files should not be identical"
+        );
         assert_has_change(&report, ChangeType::Update, "TypeScript L4 (foo changed)");
         assert_has_change(&report, ChangeType::Insert, "TypeScript L4 (baz added)");
     }
 
     #[test]
     fn l5_class_diff() {
-        let a = write_temp(
-            "class Foo {\n    bar(): number { return 1; }\n}\n",
-            ".ts",
-        );
+        let a = write_temp("class Foo {\n    bar(): number { return 1; }\n}\n", ".ts");
         let b = write_temp(
             "class Foo {\n    bar(): number { return 1; }\n    baz(): number { return 2; }\n}\n",
             ".ts",
         );
         let report = run_l5_diff(&a, &b);
-        assert!(!report.identical, "TypeScript L5: files should not be identical");
+        assert!(
+            !report.identical,
+            "TypeScript L5: files should not be identical"
+        );
         assert!(
             has_class_update_with_child_insert(&report),
             "TypeScript L5: should detect class update with method insert. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -203,27 +227,34 @@ mod javascript {
             ".js",
         );
         let report = run_l4_diff(&a, &b);
-        assert!(!report.identical, "JavaScript L4: files should not be identical");
+        assert!(
+            !report.identical,
+            "JavaScript L4: files should not be identical"
+        );
         assert_has_change(&report, ChangeType::Update, "JavaScript L4 (foo changed)");
         assert_has_change(&report, ChangeType::Insert, "JavaScript L4 (baz added)");
     }
 
     #[test]
     fn l5_class_diff() {
-        let a = write_temp(
-            "class Foo {\n    bar() { return 1; }\n}\n",
-            ".js",
-        );
+        let a = write_temp("class Foo {\n    bar() { return 1; }\n}\n", ".js");
         let b = write_temp(
             "class Foo {\n    bar() { return 1; }\n    baz() { return 2; }\n}\n",
             ".js",
         );
         let report = run_l5_diff(&a, &b);
-        assert!(!report.identical, "JavaScript L5: files should not be identical");
+        assert!(
+            !report.identical,
+            "JavaScript L5: files should not be identical"
+        );
         assert!(
             has_class_update_with_child_insert(&report),
             "JavaScript L5: should detect class update with method insert. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -270,7 +301,11 @@ mod go {
         assert!(
             !report.changes.is_empty(),
             "Go L5: should detect at least some changes. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -314,7 +349,11 @@ mod rust_lang {
         assert!(
             !report.changes.is_empty(),
             "Rust L5: should detect at least some changes. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -357,7 +396,11 @@ mod java {
         assert!(
             has_class_update_with_child_insert(&report),
             "Java L5: should detect class update with method insert. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -424,7 +467,11 @@ mod cpp {
         assert!(
             !report.changes.is_empty(),
             "C++ L5: should detect at least some changes. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -454,10 +501,7 @@ mod ruby {
 
     #[test]
     fn l5_class_diff() {
-        let a = write_temp(
-            "class Foo\n  def bar\n    1\n  end\nend\n",
-            ".rb",
-        );
+        let a = write_temp("class Foo\n  def bar\n    1\n  end\nend\n", ".rb");
         let b = write_temp(
             "class Foo\n  def bar\n    1\n  end\n  def baz\n    2\n  end\nend\n",
             ".rb",
@@ -467,7 +511,11 @@ mod ruby {
         assert!(
             !report.changes.is_empty(),
             "Ruby L5: should detect at least some changes. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -490,7 +538,10 @@ mod kotlin {
             ".kt",
         );
         let report = run_l4_diff(&a, &b);
-        assert!(!report.identical, "Kotlin L4: files should not be identical");
+        assert!(
+            !report.identical,
+            "Kotlin L4: files should not be identical"
+        );
         assert_has_change(&report, ChangeType::Update, "Kotlin L4 (foo changed)");
         assert_has_change(&report, ChangeType::Insert, "Kotlin L4 (baz added)");
     }
@@ -506,11 +557,18 @@ mod kotlin {
             ".kt",
         );
         let report = run_l5_diff(&a, &b);
-        assert!(!report.identical, "Kotlin L5: files should not be identical");
+        assert!(
+            !report.identical,
+            "Kotlin L5: files should not be identical"
+        );
         assert!(
             !report.changes.is_empty(),
             "Kotlin L5: should detect at least some changes. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -553,7 +611,11 @@ mod swift {
         assert!(
             !report.changes.is_empty(),
             "Swift L5: should detect at least some changes. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -597,7 +659,11 @@ mod csharp {
         assert!(
             !report.changes.is_empty(),
             "C# L5: should detect at least some changes. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -627,10 +693,7 @@ mod scala {
 
     #[test]
     fn l5_class_diff() {
-        let a = write_temp(
-            "class Foo {\n  def bar: Int = 1\n}\n",
-            ".scala",
-        );
+        let a = write_temp("class Foo {\n  def bar: Int = 1\n}\n", ".scala");
         let b = write_temp(
             "class Foo {\n  def bar: Int = 1\n  def baz: Int = 2\n}\n",
             ".scala",
@@ -640,7 +703,11 @@ mod scala {
         assert!(
             !report.changes.is_empty(),
             "Scala L5: should detect at least some changes. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -683,7 +750,11 @@ mod php {
         assert!(
             !report.changes.is_empty(),
             "PHP L5: should detect at least some changes. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -754,12 +825,19 @@ mod elixir {
             ".ex",
         );
         let report = run_l4_diff(&a, &b);
-        assert!(!report.identical, "Elixir L4: files should not be identical");
+        assert!(
+            !report.identical,
+            "Elixir L4: files should not be identical"
+        );
         // Elixir functions are inside defmodule; the diff should detect changes
         assert!(
             !report.changes.is_empty(),
             "Elixir L4: should detect at least some changes. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }
@@ -773,10 +851,7 @@ mod ocaml {
 
     #[test]
     fn l4_function_diff() {
-        let a = write_temp(
-            "let foo x = x + 1\n\nlet bar x = x * 2\n",
-            ".ml",
-        );
+        let a = write_temp("let foo x = x + 1\n\nlet bar x = x * 2\n", ".ml");
         let b = write_temp(
             "let foo x = x + 99\n\nlet bar x = x * 2\n\nlet baz x = x - 1\n",
             ".ml",
@@ -787,7 +862,11 @@ mod ocaml {
         assert!(
             !report.changes.is_empty(),
             "OCaml L4: should detect at least some changes. Changes: {:?}",
-            report.changes.iter().map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name)).collect::<Vec<_>>()
+            report
+                .changes
+                .iter()
+                .map(|c| format!("{:?}:{:?}:{:?}", c.change_type, c.node_kind, c.name))
+                .collect::<Vec<_>>()
         );
     }
 }

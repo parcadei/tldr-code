@@ -174,7 +174,9 @@ fn extract_from_luau_file(
             continue;
         }
 
-        let exposed_name = module_export_name.clone().unwrap_or_else(|| func.name.clone());
+        let exposed_name = module_export_name
+            .clone()
+            .unwrap_or_else(|| func.name.clone());
 
         let params: Vec<Param> = func
             .params
@@ -269,8 +271,8 @@ fn compute_module_path(file_path: &Path, root_dir: &Path, package_name: &str) ->
 /// `local name = function(...)`.
 fn is_local_function(line: &str) -> bool {
     let trimmed = line.trim_start();
-    trimmed.starts_with("local function") || trimmed.starts_with("local ")
-        && trimmed.contains("function")
+    trimmed.starts_with("local function")
+        || trimmed.starts_with("local ") && trimmed.contains("function")
 }
 
 fn returned_module_table(source: &str) -> Option<String> {
@@ -529,7 +531,9 @@ mod tests {
             .filter(|api| matches!(api.kind, ApiKind::TypeAlias))
             .collect();
         assert!(
-            aliases.iter().any(|api| api.qualified_name.ends_with(".Point")),
+            aliases
+                .iter()
+                .any(|api| api.qualified_name.ends_with(".Point")),
             "expected Point to surface as TypeAlias; got: {:?}",
             surface
                 .apis
@@ -537,7 +541,9 @@ mod tests {
                 .map(|a| (a.qualified_name.as_str(), a.kind))
                 .collect::<Vec<_>>()
         );
-        assert!(aliases.iter().any(|api| api.qualified_name.ends_with(".Vec3")));
+        assert!(aliases
+            .iter()
+            .any(|api| api.qualified_name.ends_with(".Vec3")));
     }
 
     #[test]

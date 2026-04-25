@@ -27,10 +27,7 @@ pub fn parse_ktlint_output(stdout: &str) -> Result<Vec<L1Finding>, ParseError> {
         for err in errors {
             let line = err.get("line").and_then(|v| v.as_u64()).unwrap_or(0);
             let column = err.get("column").and_then(|v| v.as_u64()).unwrap_or(0);
-            let message = err
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let message = err.get("message").and_then(|v| v.as_str()).unwrap_or("");
             let rule = err.get("rule").and_then(|v| v.as_str()).unwrap_or("");
 
             findings.push(L1Finding {

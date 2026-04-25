@@ -626,7 +626,10 @@ fn test_alias_solver_solve_empty() {
 #[test]
 fn test_alias_solver_iteration_limit() {
     // MAX_ITERATIONS should be a reasonable value
-    assert_eq!(MAX_ITERATIONS, 100, "MAX_ITERATIONS should stay aligned with spec");
+    assert_eq!(
+        MAX_ITERATIONS, 100,
+        "MAX_ITERATIONS should stay aligned with spec"
+    );
 }
 
 // =============================================================================
@@ -1423,7 +1426,10 @@ fn test_unknown_variable_no_crash() {
 #[test]
 fn test_max_field_depth_constant() {
     // MAX_FIELD_DEPTH should be reasonable
-    assert_eq!(MAX_FIELD_DEPTH, 10, "MAX_FIELD_DEPTH should stay aligned with spec");
+    assert_eq!(
+        MAX_FIELD_DEPTH, 10,
+        "MAX_FIELD_DEPTH should stay aligned with spec"
+    );
 }
 
 #[test]

@@ -308,7 +308,7 @@ fn format_taint_text(result: &TaintInfo, verbose: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    
+
     use std::collections::HashMap;
     use std::io::Write;
     use tempfile::NamedTempFile;

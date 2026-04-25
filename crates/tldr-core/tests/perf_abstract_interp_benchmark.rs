@@ -128,7 +128,10 @@ fn perf_abstract_interp_corpus() {
     let corpus_root = match corpus_root.canonicalize() {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("ERROR: Cannot resolve corpus root at {:?}: {}", corpus_root, e);
+            eprintln!(
+                "ERROR: Cannot resolve corpus root at {:?}: {}",
+                corpus_root, e
+            );
             eprintln!("Test skipped (corpus not found).");
             return;
         }
@@ -234,7 +237,11 @@ fn perf_abstract_interp_corpus() {
                 let source_lines: Vec<&str> = source.lines().collect();
 
                 let n_blocks = cfg.blocks.len();
-                let n_defs = dfg.refs.iter().filter(|r| r.ref_type == tldr_core::RefType::Definition).count();
+                let n_defs = dfg
+                    .refs
+                    .iter()
+                    .filter(|r| r.ref_type == tldr_core::RefType::Definition)
+                    .count();
 
                 // Time ONLY compute_abstract_interp, not CFG/DFG construction
                 let start = Instant::now();
@@ -282,15 +289,30 @@ fn perf_abstract_interp_corpus() {
     eprintln!("  Total wall time:    {}", format_duration(overall_elapsed));
     eprintln!("  Sum of AI times:    {}", format_duration(sum));
     eprintln!("  Mean:               {}", format_duration(mean));
-    eprintln!("  p50 (median):       {}", format_duration(percentile(&durations, 50.0)));
-    eprintln!("  p90:                {}", format_duration(percentile(&durations, 90.0)));
-    eprintln!("  p95:                {}", format_duration(percentile(&durations, 95.0)));
-    eprintln!("  p99:                {}", format_duration(percentile(&durations, 99.0)));
-    eprintln!("  Max:                {}", format_duration(if durations.is_empty() {
-        Duration::ZERO
-    } else {
-        durations[durations.len() - 1]
-    }));
+    eprintln!(
+        "  p50 (median):       {}",
+        format_duration(percentile(&durations, 50.0))
+    );
+    eprintln!(
+        "  p90:                {}",
+        format_duration(percentile(&durations, 90.0))
+    );
+    eprintln!(
+        "  p95:                {}",
+        format_duration(percentile(&durations, 95.0))
+    );
+    eprintln!(
+        "  p99:                {}",
+        format_duration(percentile(&durations, 99.0))
+    );
+    eprintln!(
+        "  Max:                {}",
+        format_duration(if durations.is_empty() {
+            Duration::ZERO
+        } else {
+            durations[durations.len() - 1]
+        })
+    );
     eprintln!();
 
     // Budget check
@@ -304,17 +326,35 @@ fn perf_abstract_interp_corpus() {
     eprintln!(
         "  p50  {:>10} — {}",
         format_duration(percentile(&durations, 50.0)),
-        if p50_us <= budget_5ms { "WELL UNDER budget" } else if p50_us <= budget_50ms { "WITHIN budget" } else { "OVER budget" }
+        if p50_us <= budget_5ms {
+            "WELL UNDER budget"
+        } else if p50_us <= budget_50ms {
+            "WITHIN budget"
+        } else {
+            "OVER budget"
+        }
     );
     eprintln!(
         "  p95  {:>10} — {}",
         format_duration(percentile(&durations, 95.0)),
-        if p95_us <= budget_5ms { "WELL UNDER budget" } else if p95_us <= budget_50ms { "WITHIN budget" } else { "OVER budget" }
+        if p95_us <= budget_5ms {
+            "WELL UNDER budget"
+        } else if p95_us <= budget_50ms {
+            "WITHIN budget"
+        } else {
+            "OVER budget"
+        }
     );
     eprintln!(
         "  p99  {:>10} — {}",
         format_duration(percentile(&durations, 99.0)),
-        if p99_us <= budget_5ms { "WELL UNDER budget" } else if p99_us <= budget_50ms { "WITHIN budget" } else { "OVER budget" }
+        if p99_us <= budget_5ms {
+            "WELL UNDER budget"
+        } else if p99_us <= budget_50ms {
+            "WITHIN budget"
+        } else {
+            "OVER budget"
+        }
     );
     eprintln!();
 
@@ -327,7 +367,11 @@ fn perf_abstract_interp_corpus() {
         lang_durs.sort();
         let n = lang_durs.len();
         let lang_sum: Duration = lang_durs.iter().sum();
-        let lang_mean = if n > 0 { lang_sum / n as u32 } else { Duration::ZERO };
+        let lang_mean = if n > 0 {
+            lang_sum / n as u32
+        } else {
+            Duration::ZERO
+        };
         eprintln!(
             "  {:12}  n={:>4}  mean={:>10}  p50={:>10}  p95={:>10}  p99={:>10}  max={:>10}",
             lang,
@@ -336,7 +380,11 @@ fn perf_abstract_interp_corpus() {
             format_duration(percentile(&lang_durs, 50.0)),
             format_duration(percentile(&lang_durs, 95.0)),
             format_duration(percentile(&lang_durs, 99.0)),
-            format_duration(if lang_durs.is_empty() { Duration::ZERO } else { lang_durs[lang_durs.len() - 1] }),
+            format_duration(if lang_durs.is_empty() {
+                Duration::ZERO
+            } else {
+                lang_durs[lang_durs.len() - 1]
+            }),
         );
     }
     eprintln!();

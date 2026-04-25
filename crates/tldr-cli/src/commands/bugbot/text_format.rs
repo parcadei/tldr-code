@@ -97,12 +97,12 @@ pub fn format_bugbot_text(report: &BugbotCheckReport) -> String {
         writeln!(out, "tools:").unwrap();
         for result in &report.tool_results {
             let status = if result.success {
-                format!("ok ({} findings, {}ms)", result.finding_count, result.duration_ms)
+                format!(
+                    "ok ({} findings, {}ms)",
+                    result.finding_count, result.duration_ms
+                )
             } else {
-                let err_detail = result
-                    .error
-                    .as_deref()
-                    .unwrap_or("unknown error");
+                let err_detail = result.error.as_deref().unwrap_or("unknown error");
                 format!("failed ({})", err_detail)
             };
             writeln!(out, "  {} - {}", result.name, status).unwrap();
@@ -227,16 +227,27 @@ fn format_severity_breakdown(by_severity: &std::collections::HashMap<String, usi
 fn format_finding_evidence(out: &mut String, finding: &super::types::BugbotFinding) {
     match finding.finding_type.as_str() {
         "signature-regression" => {
-            if let Some(before) = finding.evidence.get("before_signature").and_then(|v| v.as_str())
+            if let Some(before) = finding
+                .evidence
+                .get("before_signature")
+                .and_then(|v| v.as_str())
             {
                 writeln!(out, "  Before: {}", before).unwrap();
             }
-            if let Some(after) = finding.evidence.get("after_signature").and_then(|v| v.as_str()) {
+            if let Some(after) = finding
+                .evidence
+                .get("after_signature")
+                .and_then(|v| v.as_str())
+            {
                 writeln!(out, "  After:  {}", after).unwrap();
             }
         }
         "secret-exposed" => {
-            if let Some(val) = finding.evidence.get("masked_value").and_then(|v| v.as_str()) {
+            if let Some(val) = finding
+                .evidence
+                .get("masked_value")
+                .and_then(|v| v.as_str())
+            {
                 writeln!(out, "  Value: {}", val).unwrap();
             }
         }
@@ -253,10 +264,7 @@ fn format_finding_evidence(out: &mut String, finding: &super::types::BugbotFindi
                 .get("sink_var")
                 .and_then(|v| v.as_str())
                 .or_else(|| finding.evidence.get("sink").and_then(|v| v.as_str()));
-            let source_type = finding
-                .evidence
-                .get("source_type")
-                .and_then(|v| v.as_str());
+            let source_type = finding.evidence.get("source_type").and_then(|v| v.as_str());
             let sink_type = finding.evidence.get("sink_type").and_then(|v| v.as_str());
 
             match (source_var, sink_var) {
@@ -336,8 +344,14 @@ fn format_finding_evidence(out: &mut String, finding: &super::types::BugbotFindi
             }
         }
         "temporal-violation" => {
-            let expected = finding.evidence.get("expected_order").and_then(|v| v.as_array());
-            let actual = finding.evidence.get("actual_order").and_then(|v| v.as_array());
+            let expected = finding
+                .evidence
+                .get("expected_order")
+                .and_then(|v| v.as_array());
+            let actual = finding
+                .evidence
+                .get("actual_order")
+                .and_then(|v| v.as_array());
             if let Some(exp) = expected {
                 let items: Vec<&str> = exp.iter().filter_map(|v| v.as_str()).collect();
                 if !items.is_empty() {
@@ -367,10 +381,7 @@ fn format_finding_evidence(out: &mut String, finding: &super::types::BugbotFindi
             }
         }
         "contract-regression" => {
-            let category = finding
-                .evidence
-                .get("category")
-                .and_then(|v| v.as_str());
+            let category = finding.evidence.get("category").and_then(|v| v.as_str());
             let variable = finding
                 .evidence
                 .get("removed_variable")
@@ -695,9 +706,9 @@ mod tests {
         medium_finding.file = PathBuf::from("src/mid.rs");
 
         report.findings = vec![
-            signature_finding(),   // high
-            medium_finding,        // medium
-            born_dead_finding(),   // low
+            signature_finding(), // high
+            medium_finding,      // medium
+            born_dead_finding(), // low
         ];
         report.summary = BugbotSummary {
             total_findings: 3,
@@ -1089,18 +1100,16 @@ mod tests {
         use crate::commands::bugbot::types::L2AnalyzerResult;
 
         let mut report = empty_report();
-        report.l2_engine_results = vec![
-            L2AnalyzerResult {
-                name: "TldrDifferentialEngine".to_string(),
-                success: true,
-                duration_ms: 23,
-                finding_count: 5,
-                functions_analyzed: 10,
-                functions_skipped: 0,
-                status: "Complete".to_string(),
-                errors: vec![],
-            },
-        ];
+        report.l2_engine_results = vec![L2AnalyzerResult {
+            name: "TldrDifferentialEngine".to_string(),
+            success: true,
+            duration_ms: 23,
+            finding_count: 5,
+            functions_analyzed: 10,
+            functions_skipped: 0,
+            status: "Complete".to_string(),
+            errors: vec![],
+        }];
 
         let output = format_bugbot_text(&report);
 
@@ -1122,18 +1131,16 @@ mod tests {
         use crate::commands::bugbot::types::L2AnalyzerResult;
 
         let mut report = empty_report();
-        report.l2_engine_results = vec![
-            L2AnalyzerResult {
-                name: "DeltaEngine".to_string(),
-                success: false,
-                duration_ms: 500,
-                finding_count: 2,
-                functions_analyzed: 5,
-                functions_skipped: 3,
-                status: "Partial: analysis incomplete".to_string(),
-                errors: vec!["Failed to read baseline for src/macro.rs".to_string()],
-            },
-        ];
+        report.l2_engine_results = vec![L2AnalyzerResult {
+            name: "DeltaEngine".to_string(),
+            success: false,
+            duration_ms: 500,
+            finding_count: 2,
+            functions_analyzed: 5,
+            functions_skipped: 3,
+            status: "Partial: analysis incomplete".to_string(),
+            errors: vec!["Failed to read baseline for src/macro.rs".to_string()],
+        }];
 
         let output = format_bugbot_text(&report);
 
@@ -1160,18 +1167,16 @@ mod tests {
         use crate::commands::bugbot::types::L2AnalyzerResult;
 
         let mut report = empty_report();
-        report.l2_engine_results = vec![
-            L2AnalyzerResult {
-                name: "DeltaEngine".to_string(),
-                success: true,
-                duration_ms: 23,
-                finding_count: 5,
-                functions_analyzed: 10,
-                functions_skipped: 0,
-                status: "Complete".to_string(),
-                errors: vec![],
-            },
-        ];
+        report.l2_engine_results = vec![L2AnalyzerResult {
+            name: "DeltaEngine".to_string(),
+            success: true,
+            duration_ms: 23,
+            finding_count: 5,
+            functions_analyzed: 10,
+            functions_skipped: 0,
+            status: "Complete".to_string(),
+            errors: vec![],
+        }];
 
         let output = format_bugbot_text(&report);
 

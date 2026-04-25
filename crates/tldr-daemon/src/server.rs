@@ -18,9 +18,9 @@ use std::time::Duration;
 use axum::{http::StatusCode, response::IntoResponse, routing::post, Json, Router};
 #[cfg(unix)]
 use tokio::net::UnixListener;
+use tracing::info;
 #[cfg(unix)]
 use tracing::{error, warn};
-use tracing::info;
 
 use crate::handlers;
 use crate::state::DaemonState;

@@ -125,9 +125,7 @@ impl L1Cache {
                 }
                 Value::Object(sorted)
             }
-            Value::Array(arr) => {
-                Value::Array(arr.iter().map(Self::sort_json_keys).collect())
-            }
+            Value::Array(arr) => Value::Array(arr.iter().map(Self::sort_json_keys).collect()),
             other => other.clone(),
         }
     }
@@ -250,7 +248,11 @@ mod tests {
         // Insert one more -- should evict the oldest (key_0)
         cache.insert("key_3".to_string(), make_result("result_3"));
 
-        assert_eq!(cache.len(), max, "cache should still be at capacity after eviction");
+        assert_eq!(
+            cache.len(),
+            max,
+            "cache should still be at capacity after eviction"
+        );
         assert!(
             cache.get("key_0").is_none(),
             "oldest entry (key_0) should have been evicted"
@@ -292,9 +294,18 @@ mod tests {
         cache.clear();
 
         assert_eq!(cache.len(), 0, "cache should be empty after clear");
-        assert!(cache.get("key_a").is_none(), "key_a should be gone after clear");
-        assert!(cache.get("key_b").is_none(), "key_b should be gone after clear");
-        assert!(cache.get("key_c").is_none(), "key_c should be gone after clear");
+        assert!(
+            cache.get("key_a").is_none(),
+            "key_a should be gone after clear"
+        );
+        assert!(
+            cache.get("key_b").is_none(),
+            "key_b should be gone after clear"
+        );
+        assert!(
+            cache.get("key_c").is_none(),
+            "key_c should be gone after clear"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -307,7 +318,10 @@ mod tests {
         let key1 = L1Cache::cache_key("tldr_structure", &args);
         let key2 = L1Cache::cache_key("tldr_structure", &args);
 
-        assert_eq!(key1, key2, "same tool + same args must produce the same cache key");
+        assert_eq!(
+            key1, key2,
+            "same tool + same args must produce the same cache key"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -320,7 +334,10 @@ mod tests {
         let key1 = L1Cache::cache_key("tldr_tree", &args);
         let key2 = L1Cache::cache_key("tldr_structure", &args);
 
-        assert_ne!(key1, key2, "different tool names must produce different cache keys");
+        assert_ne!(
+            key1, key2,
+            "different tool names must produce different cache keys"
+        );
     }
 
     #[test]
@@ -331,7 +348,10 @@ mod tests {
         let key1 = L1Cache::cache_key("tldr_tree", &args_a);
         let key2 = L1Cache::cache_key("tldr_tree", &args_b);
 
-        assert_ne!(key1, key2, "different args must produce different cache keys");
+        assert_ne!(
+            key1, key2,
+            "different args must produce different cache keys"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -340,7 +360,8 @@ mod tests {
     #[test]
     fn bench_cache_hit_latency() {
         let mut cache = L1Cache::new(Duration::from_secs(60), 200);
-        let result = make_result("cached structure output with realistic payload size for benchmarking");
+        let result =
+            make_result("cached structure output with realistic payload size for benchmarking");
         let key = L1Cache::cache_key(
             "tldr_structure",
             &json!({"path": "/test/file.rs", "language": "rust"}),

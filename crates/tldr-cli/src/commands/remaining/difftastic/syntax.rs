@@ -8,11 +8,7 @@ use line_numbers::SingleLineSpan;
 use typed_arena::Arena;
 
 use self::Syntax::*;
-use super::{
-    changes::ChangeKind,
-    changes::ChangeKind::*,
-    hash::DftHashMap,
-};
+use super::{changes::ChangeKind, changes::ChangeKind::*, hash::DftHashMap};
 
 /// Inline from difftastic's lines.rs -- split on \n or \r\n
 fn split_on_newlines(s: &str) -> impl Iterator<Item = &str> {

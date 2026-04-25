@@ -666,7 +666,8 @@ fn extract_nodes_recursive(
             if child.kind() == "let_binding" && ocaml_let_binding_is_function(child) {
                 if let Some(extracted) = extract_function_node(child, source, in_class, lang) {
                     // Skip anonymous `_` patterns and `()` unit bindings.
-                    if extracted.name != "_" && extracted.name != "()" && !extracted.name.is_empty() {
+                    if extracted.name != "_" && extracted.name != "()" && !extracted.name.is_empty()
+                    {
                         nodes.push(extracted);
                     }
                 }

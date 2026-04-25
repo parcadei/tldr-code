@@ -29,7 +29,7 @@ mod fixtures;
 
 mod loc_tests {
     use super::fixtures;
-    
+
     use tldr_core::metrics::loc::{analyze_loc, LocOptions};
 
     /// Test that a Python file with known line counts is counted correctly

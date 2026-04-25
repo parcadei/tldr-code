@@ -8,9 +8,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::Args;
 
-use tldr_core::analysis::{
-    detect_clones, CloneType, ClonesOptions, NormalizationMode,
-};
+use tldr_core::analysis::{detect_clones, CloneType, ClonesOptions, NormalizationMode};
 
 use crate::output::{
     format_clones_dot, format_clones_sarif, format_clones_text, OutputFormat, OutputWriter,

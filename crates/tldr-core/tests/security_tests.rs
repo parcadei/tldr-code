@@ -10,13 +10,11 @@ use std::collections::{HashMap, HashSet};
 use tempfile::TempDir;
 
 // Security module imports
-use tldr_core::security::ast_utils::{
-    assignment_node_kinds, call_node_kinds, string_node_kinds,
-};
+use tldr_core::security::ast_utils::{assignment_node_kinds, call_node_kinds, string_node_kinds};
 use tldr_core::security::taint::{
-    build_line_to_block, build_predecessors, build_successors, compute_taint,
-    detect_sanitizer, detect_sinks, detect_sources, validate_cfg, SanitizerType,
-    TaintInfo, TaintSink, TaintSinkType, TaintSourceType,
+    build_line_to_block, build_predecessors, build_successors, compute_taint, detect_sanitizer,
+    detect_sinks, detect_sources, validate_cfg, SanitizerType, TaintInfo, TaintSink, TaintSinkType,
+    TaintSourceType,
 };
 use tldr_core::security::{
     scan_secrets, scan_vulnerabilities, Severity as SecretSeverity, VulnType,
@@ -309,22 +307,26 @@ fn test_secrets_severity_ordering() {
 #[test]
 fn test_taint_source_type_variants() {
     // Verify all expected variants exist
-    let _variants = [TaintSourceType::UserInput,
+    let _variants = [
+        TaintSourceType::UserInput,
         TaintSourceType::Stdin,
         TaintSourceType::HttpParam,
         TaintSourceType::HttpBody,
         TaintSourceType::EnvVar,
-        TaintSourceType::FileRead];
+        TaintSourceType::FileRead,
+    ];
 }
 
 #[test]
 fn test_taint_sink_type_variants() {
-    let _variants = [TaintSinkType::SqlQuery,
+    let _variants = [
+        TaintSinkType::SqlQuery,
         TaintSinkType::CodeEval,
         TaintSinkType::CodeExec,
         TaintSinkType::CodeCompile,
         TaintSinkType::ShellExec,
-        TaintSinkType::FileWrite];
+        TaintSinkType::FileWrite,
+    ];
 }
 
 #[test]

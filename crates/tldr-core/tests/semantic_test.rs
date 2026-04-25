@@ -165,7 +165,8 @@ mod types_tests {
     #[test]
     fn semantic_search_result_ordering_by_score() {
         // GIVEN: Multiple search results with different scores
-        let mut results = [SemanticSearchResult {
+        let mut results = [
+            SemanticSearchResult {
                 file_path: PathBuf::from("a.rs"),
                 function_name: Some("a".to_string()),
                 class_name: None,
@@ -191,7 +192,8 @@ mod types_tests {
                 line_start: 1,
                 line_end: 10,
                 snippet: "fn c()".to_string(),
-            }];
+            },
+        ];
 
         // WHEN: We sort by score descending
         results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
@@ -506,6 +508,3 @@ mod similarity_tests {
         assert_eq!(results.len(), 2);
     }
 }
-
-
-

@@ -59,10 +59,7 @@ impl ApiSurfaceArgs {
     pub fn run(&self, format: OutputFormat, quiet: bool, lang: Option<Language>) -> Result<()> {
         let writer = OutputWriter::new(format, quiet);
 
-        writer.progress(&format!(
-            "Extracting API surface for '{}'...",
-            self.target
-        ));
+        writer.progress(&format!("Extracting API surface for '{}'...", self.target));
 
         // Convert Language enum to string for the surface module
         let lang_str = lang.map(language_to_string);
@@ -139,10 +136,7 @@ mod tests {
             limit: None,
             manifest_path: Some(PathBuf::from("./Cargo.toml")),
         };
-        assert_eq!(
-            args.manifest_path,
-            Some(PathBuf::from("./Cargo.toml"))
-        );
+        assert_eq!(args.manifest_path, Some(PathBuf::from("./Cargo.toml")));
     }
 
     #[test]

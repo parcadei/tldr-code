@@ -75,10 +75,7 @@ pub fn compose_signature_regression(
             }
 
             let severity = max_severity(&sig_changes);
-            let func_name = change
-                .name
-                .clone()
-                .unwrap_or_else(|| "unknown".to_string());
+            let func_name = change.name.clone().unwrap_or_else(|| "unknown".to_string());
             let relative_file = file.strip_prefix(project_root).unwrap_or(file);
 
             let evidence = SignatureRegressionEvidence {
@@ -122,11 +119,7 @@ fn is_update_function(change: &ASTChange) -> bool {
 /// Heuristic: if the visibility changed (pub ↔ non-pub) AND all signature
 /// changes are pure param additions or removals (no type changes or renames),
 /// the differ probably paired the wrong functions.
-fn is_likely_differ_mismatch(
-    old_sig: &str,
-    new_sig: &str,
-    changes: &[SignatureChange],
-) -> bool {
+fn is_likely_differ_mismatch(old_sig: &str, new_sig: &str, changes: &[SignatureChange]) -> bool {
     let old_is_pub = old_sig.trim_start().starts_with("pub ");
     let new_is_pub = new_sig.trim_start().starts_with("pub ");
 
@@ -136,9 +129,9 @@ fn is_likely_differ_mismatch(
     }
 
     // All changes must be pure param additions or removals
-    changes.iter().all(|c| {
-        c.change_type == "param_removed" || c.change_type == "param_added"
-    })
+    changes
+        .iter()
+        .all(|c| c.change_type == "param_removed" || c.change_type == "param_added")
 }
 
 /// Extract the function signature from the full function text.
@@ -223,9 +216,7 @@ pub fn diff_signatures(old_sig: &str, new_sig: &str) -> Vec<SignatureChange> {
                 change_type: "param_renamed".to_string(),
                 detail: format!(
                     "parameter renamed: {} -> {} (type unchanged: {})",
-                    old_name,
-                    new_name,
-                    old_type
+                    old_name, new_name, old_type
                 ),
             });
             old_matched[i] = true;
@@ -255,9 +246,11 @@ pub fn diff_signatures(old_sig: &str, new_sig: &str) -> Vec<SignatureChange> {
             continue;
         }
         let old_name = param_name(param);
-        if let Some(j) = new_params.iter().enumerate().position(|(j, p)| {
-            !new_matched[j] && param_name(p) == old_name
-        }) {
+        if let Some(j) = new_params
+            .iter()
+            .enumerate()
+            .position(|(j, p)| !new_matched[j] && param_name(p) == old_name)
+        {
             // Same name found elsewhere -- check if type changed
             new_matched[j] = true;
             old_matched[i] = true;
@@ -372,10 +365,7 @@ pub fn parse_params(sig: &str) -> Vec<String> {
 /// `&mut self`, `mut self`).
 fn is_self_param(param: &str) -> bool {
     let trimmed = param.trim();
-    matches!(
-        trimmed,
-        "self" | "&self" | "&mut self" | "mut self"
-    )
+    matches!(trimmed, "self" | "&self" | "&mut self" | "mut self")
 }
 
 /// Extract the content between the first `(` and its matching `)`.
@@ -545,9 +535,10 @@ fn split_top_level(text: &str, delimiter: char) -> Vec<String> {
 /// - `param_renamed` => "low" (not a breaking change in positional languages)
 /// - everything else => "low"
 fn max_severity(changes: &[SignatureChange]) -> &str {
-    if changes.iter().any(|c| {
-        c.change_type == "param_removed" || c.change_type == "return_type_changed"
-    }) {
+    if changes
+        .iter()
+        .any(|c| c.change_type == "param_removed" || c.change_type == "return_type_changed")
+    {
         "high"
     } else if changes.iter().any(|c| {
         c.change_type == "param_added"
@@ -570,7 +561,11 @@ fn format_message(changes: &[SignatureChange]) -> String {
         format!("Signature regression: {}", changes[0].detail)
     } else {
         let details: Vec<&str> = changes.iter().map(|c| c.detail.as_str()).collect();
-        format!("Signature regression ({} changes): {}", changes.len(), details.join("; "))
+        format!(
+            "Signature regression ({} changes): {}",
+            changes.len(),
+            details.join("; ")
+        )
     }
 }
 
@@ -637,7 +632,10 @@ mod tests {
         let evidence: SignatureRegressionEvidence =
             serde_json::from_value(findings[0].evidence.clone()).expect("valid evidence");
         assert!(
-            evidence.changes.iter().any(|c| c.change_type == "param_removed"),
+            evidence
+                .changes
+                .iter()
+                .any(|c| c.change_type == "param_removed"),
             "Should contain a param_removed change, got: {:?}",
             evidence.changes
         );
@@ -871,7 +869,10 @@ where
     #[test]
     fn test_parse_params_nested_generics() {
         let params = parse_params("fn foo(map: HashMap<String, Vec<i32>>, count: usize)");
-        assert_eq!(params, vec!["map: HashMap<String, Vec<i32>>", "count: usize"]);
+        assert_eq!(
+            params,
+            vec!["map: HashMap<String, Vec<i32>>", "count: usize"]
+        );
     }
 
     #[test]
@@ -1052,8 +1053,7 @@ where
 
         let mut file_diffs = HashMap::new();
         file_diffs.insert(PathBuf::from("/myproject/src/lib.rs"), vec![change]);
-        let findings =
-            compose_signature_regression(&file_diffs, Path::new("/myproject"));
+        let findings = compose_signature_regression(&file_diffs, Path::new("/myproject"));
 
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].file, PathBuf::from("src/lib.rs"));
@@ -1103,17 +1103,26 @@ where
         let evidence: SignatureRegressionEvidence =
             serde_json::from_value(findings[0].evidence.clone()).expect("valid evidence");
         assert!(
-            evidence.changes.iter().any(|c| c.change_type == "param_renamed"),
+            evidence
+                .changes
+                .iter()
+                .any(|c| c.change_type == "param_renamed"),
             "Should contain a param_renamed change, got: {:?}",
             evidence.changes
         );
         assert!(
-            !evidence.changes.iter().any(|c| c.change_type == "param_removed"),
+            !evidence
+                .changes
+                .iter()
+                .any(|c| c.change_type == "param_removed"),
             "Should NOT contain param_removed for a rename, got: {:?}",
             evidence.changes
         );
         assert!(
-            !evidence.changes.iter().any(|c| c.change_type == "param_added"),
+            !evidence
+                .changes
+                .iter()
+                .any(|c| c.change_type == "param_added"),
             "Should NOT contain param_added for a rename, got: {:?}",
             evidence.changes
         );
@@ -1143,12 +1152,18 @@ where
             serde_json::from_value(findings[0].evidence.clone()).expect("valid evidence");
         // Should have param_type_changed, not param_removed + param_added
         assert!(
-            evidence.changes.iter().any(|c| c.change_type == "param_type_changed"),
+            evidence
+                .changes
+                .iter()
+                .any(|c| c.change_type == "param_type_changed"),
             "Should contain param_type_changed, got: {:?}",
             evidence.changes
         );
         assert!(
-            !evidence.changes.iter().any(|c| c.change_type == "param_removed"),
+            !evidence
+                .changes
+                .iter()
+                .any(|c| c.change_type == "param_removed"),
             "Should NOT contain param_removed for positional type change, got: {:?}",
             evidence.changes
         );

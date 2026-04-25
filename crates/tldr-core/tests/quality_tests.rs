@@ -20,7 +20,8 @@ use tempfile::TempDir;
 
 use tldr_core::quality::{
     analyze_cohesion, analyze_complexity, analyze_coupling, analyze_dead_code,
-    compute_martin_metrics, detect_smells, find_similar, maintainability_index, parse_coverage, ComplexityOptions, CoverageFormat, CoverageOptions, SmellType, ThresholdPreset,
+    compute_martin_metrics, detect_smells, find_similar, maintainability_index, parse_coverage,
+    ComplexityOptions, CoverageFormat, CoverageOptions, SmellType, ThresholdPreset,
 };
 use tldr_core::types::Language;
 

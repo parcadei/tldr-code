@@ -317,7 +317,6 @@ pub struct CrossCalls {
     pub count: u32,
 }
 
-
 /// Coupling analysis between two modules.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CouplingReport {
@@ -590,7 +589,6 @@ pub struct ResourceSummary {
     /// Number of use-after-close issues
     pub use_after_closes_found: u32,
 }
-
 
 /// Full resource analysis report.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -64,6 +64,9 @@ pub fn parse_tool_output(parser_name: &str, stdout: &str) -> Result<Vec<L1Findin
         "rubocop" => rubocop::parse_rubocop_output(stdout),
         "ruff" => ruff::parse_ruff_output(stdout),
         "swiftlint" => swiftlint::parse_swiftlint_output(stdout),
-        _ => Err(ParseError::Format(format!("Unknown parser: {}", parser_name))),
+        _ => Err(ParseError::Format(format!(
+            "Unknown parser: {}",
+            parser_name
+        ))),
     }
 }

@@ -458,9 +458,7 @@ fn build_function_context(
                 || file.ends_with(&edge.src_file);
             let edge_func_matches = edge.src_func == func_info.name
                 || edge.src_func == func_name
-                || edge
-                    .src_func
-                    .ends_with(&format!(".{}", func_info.name));
+                || edge.src_func.ends_with(&format!(".{}", func_info.name));
             if edge_file_matches && edge_func_matches {
                 calls.push(edge.dst_func.clone());
             }

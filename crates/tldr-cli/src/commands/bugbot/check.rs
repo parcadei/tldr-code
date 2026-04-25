@@ -25,7 +25,9 @@ use super::runner::ToolRunner;
 use super::signature::compose_signature_regression;
 use super::text_format::format_bugbot_text;
 use super::tools::{L1Finding, ToolRegistry, ToolResult};
-use super::types::{BugbotCheckReport, BugbotExitError, BugbotFinding, BugbotSummary, L2AnalyzerResult};
+use super::types::{
+    BugbotCheckReport, BugbotExitError, BugbotFinding, BugbotSummary, L2AnalyzerResult,
+};
 
 /// Run bugbot check on uncommitted changes
 #[derive(Debug, Args)]
@@ -176,10 +178,7 @@ impl BugbotCheckArgs {
                 Ok(BaselineStatus::Exists(content)) => {
                     if file.exists() {
                         // Save baseline and current file contents for L2 engines
-                        let rel_path = file
-                            .strip_prefix(&project)
-                            .unwrap_or(file)
-                            .to_path_buf();
+                        let rel_path = file.strip_prefix(&project).unwrap_or(file).to_path_buf();
                         baseline_contents.insert(rel_path.clone(), content.clone());
                         if let Ok(current) = std::fs::read_to_string(file) {
                             current_contents.insert(rel_path, current);
@@ -218,20 +217,14 @@ impl BugbotCheckArgs {
                 Ok(BaselineStatus::NewFile) => {
                     if file.exists() {
                         // Save empty baseline and current file contents for L2 engines
-                        let rel_path = file
-                            .strip_prefix(&project)
-                            .unwrap_or(file)
-                            .to_path_buf();
+                        let rel_path = file.strip_prefix(&project).unwrap_or(file).to_path_buf();
                         baseline_contents.insert(rel_path.clone(), String::new());
                         if let Ok(current) = std::fs::read_to_string(file) {
                             current_contents.insert(rel_path, current);
                         }
 
                         // New file: diff against an empty baseline so all functions are Insert
-                        let extension = file
-                            .extension()
-                            .and_then(|e| e.to_str())
-                            .unwrap_or("txt");
+                        let extension = file.extension().and_then(|e| e.to_str()).unwrap_or("txt");
                         match tempfile::Builder::new()
                             .prefix("bugbot_empty_")
                             .suffix(&format!(".{}", extension))
@@ -265,11 +258,7 @@ impl BugbotCheckArgs {
                     }
                 }
                 Ok(BaselineStatus::GitShowFailed(msg)) => {
-                    errors.push(format!(
-                        "git show failed for {}: {}",
-                        file.display(),
-                        msg
-                    ));
+                    errors.push(format!("git show failed for {}: {}", file.display(), msg));
                 }
                 Err(e) => {
                     errors.push(format!("baseline error for {}: {}", file.display(), e));
@@ -304,14 +293,16 @@ impl BugbotCheckArgs {
                 .collect();
 
             // Build ast_changes with relative paths to match L2Context conventions.
-            let relative_diffs: HashMap<PathBuf, Vec<crate::commands::remaining::types::ASTChange>> =
-                all_diffs
-                    .iter()
-                    .map(|(path, changes)| {
-                        let rel = path.strip_prefix(&project).unwrap_or(path).to_path_buf();
-                        (rel, changes.clone())
-                    })
-                    .collect();
+            let relative_diffs: HashMap<
+                PathBuf,
+                Vec<crate::commands::remaining::types::ASTChange>,
+            > = all_diffs
+                .iter()
+                .map(|(path, changes)| {
+                    let rel = path.strip_prefix(&project).unwrap_or(path).to_path_buf();
+                    (rel, changes.clone())
+                })
+                .collect();
 
             // Create daemon client for this project. If a daemon is running,
             // deferred-tier engines will use cached IR artifacts.
@@ -390,12 +381,10 @@ impl BugbotCheckArgs {
         };
 
         // Join L2 thread -- graceful degradation if the thread panicked
-        let (l2_engine_findings, l2_engine_results) = l2_handle
-            .join()
-            .unwrap_or_else(|_| {
-                errors.push("L2 engine thread panicked".to_string());
-                (Vec::new(), Vec::new())
-            });
+        let (l2_engine_findings, l2_engine_results) = l2_handle.join().unwrap_or_else(|_| {
+            errors.push("L2 engine thread panicked".to_string());
+            (Vec::new(), Vec::new())
+        });
 
         // Step 7: Merge L1 + L2 findings (compose_ + engine findings)
         let compose_l2_count = sig_findings.len() + dead_findings.len();
@@ -561,7 +550,14 @@ fn build_summary(
     files_analyzed: usize,
     functions_analyzed: usize,
 ) -> BugbotSummary {
-    build_summary_with_l1(findings, 0, findings.len(), files_analyzed, functions_analyzed, &[])
+    build_summary_with_l1(
+        findings,
+        0,
+        findings.len(),
+        files_analyzed,
+        functions_analyzed,
+        &[],
+    )
 }
 
 /// Build summary statistics with separate L1 and L2 finding counts.
@@ -1177,7 +1173,11 @@ mod tests {
         // Should succeed with no_fail -- new file is treated as all-inserts
         // (born-dead findings may exist but no_fail suppresses exit error)
         let result = args.run(OutputFormat::Json, true, Some(Language::Rust));
-        assert!(result.is_ok(), "run() should succeed with no_fail: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "run() should succeed with no_fail: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -1228,7 +1228,10 @@ mod tests {
         };
 
         let result = args.run(OutputFormat::Json, true, Some(Language::Rust));
-        assert!(result.is_err(), "run() should return Err when findings exist");
+        assert!(
+            result.is_err(),
+            "run() should return Err when findings exist"
+        );
 
         // Verify the error is a BugbotExitError with exit code 1
         let err = result.unwrap_err();
@@ -1236,7 +1239,11 @@ mod tests {
         let bugbot_err = err
             .downcast_ref::<BugbotExitError>()
             .expect("error should be BugbotExitError");
-        assert_eq!(bugbot_err.exit_code(), 1, "exit code should be 1 for findings");
+        assert_eq!(
+            bugbot_err.exit_code(),
+            1,
+            "exit code should be 1 for findings"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -1329,14 +1336,16 @@ mod tests {
             },
         ];
 
-        let changed_files: Vec<PathBuf> = vec![
-            PathBuf::from("src/main.rs"),
-            PathBuf::from("src/lib.rs"),
-        ];
+        let changed_files: Vec<PathBuf> =
+            vec![PathBuf::from("src/main.rs"), PathBuf::from("src/lib.rs")];
 
         let filtered = filter_l1_findings(l1_findings, &changed_files);
 
-        assert_eq!(filtered.len(), 2, "should keep only 2 findings matching changed files");
+        assert_eq!(
+            filtered.len(),
+            2,
+            "should keep only 2 findings matching changed files"
+        );
         let untouched = std::path::Path::new("src/untouched.rs");
         assert!(
             filtered.iter().all(|f| f.file != untouched),
@@ -1376,25 +1385,27 @@ mod tests {
 
         let filtered = filter_l1_findings(l1_findings, &changed_files);
 
-        assert_eq!(filtered.len(), 2, "empty changed_files should keep all findings");
+        assert_eq!(
+            filtered.len(),
+            2,
+            "empty changed_files should keep all findings"
+        );
     }
 
     #[test]
     fn test_build_summary_with_l1_and_l2() {
         // build_summary_with_l1 should count L1 and L2 findings separately
-        let l2_findings = vec![
-            BugbotFinding {
-                finding_type: "signature-regression".to_string(),
-                severity: "high".to_string(),
-                file: PathBuf::from("a.rs"),
-                function: "foo".to_string(),
-                line: 10,
-                message: "param removed".to_string(),
-                evidence: serde_json::Value::Null,
-                confidence: None,
-                finding_id: None,
-            },
-        ];
+        let l2_findings = vec![BugbotFinding {
+            finding_type: "signature-regression".to_string(),
+            severity: "high".to_string(),
+            file: PathBuf::from("a.rs"),
+            function: "foo".to_string(),
+            line: 10,
+            message: "param removed".to_string(),
+            evidence: serde_json::Value::Null,
+            confidence: None,
+            finding_id: None,
+        }];
         let l1_findings = vec![
             BugbotFinding {
                 finding_type: "tool:clippy".to_string(),
@@ -1498,19 +1509,17 @@ mod tests {
         // When no L1 tools are available, the pipeline should work identically
         // to before: empty tool_results, empty tools_available/tools_missing,
         // and only L2 findings.
-        let l2_findings = vec![
-            BugbotFinding {
-                finding_type: "born-dead".to_string(),
-                severity: "low".to_string(),
-                file: PathBuf::from("src/lib.rs"),
-                function: "dead_fn".to_string(),
-                line: 10,
-                message: "no callers".to_string(),
-                evidence: serde_json::Value::Null,
-                confidence: None,
-                finding_id: None,
-            },
-        ];
+        let l2_findings = vec![BugbotFinding {
+            finding_type: "born-dead".to_string(),
+            severity: "low".to_string(),
+            file: PathBuf::from("src/lib.rs"),
+            function: "dead_fn".to_string(),
+            line: 10,
+            message: "no callers".to_string(),
+            evidence: serde_json::Value::Null,
+            confidence: None,
+            finding_id: None,
+        }];
 
         let summary = build_summary_with_l1(&l2_findings, 0, 1, 1, 5, &[]);
 
@@ -1594,7 +1603,11 @@ mod tests {
         // Run with JSON output, capture report via run_and_capture
         let result = args.run(OutputFormat::Json, true, Some(Language::Rust));
         // The pipeline should succeed even with no_tools
-        assert!(result.is_ok(), "run() should succeed with --no-tools: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "run() should succeed with --no-tools: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -1605,10 +1618,22 @@ mod tests {
         let (l1_findings, tool_results, available, missing) =
             run_l1_tools_opt(std::path::Path::new("/nonexistent"), "rust", true, 60);
 
-        assert!(l1_findings.is_empty(), "no_tools should produce empty L1 findings");
-        assert!(tool_results.is_empty(), "no_tools should produce empty tool_results");
-        assert!(available.is_empty(), "no_tools should produce empty tools_available");
-        assert!(missing.is_empty(), "no_tools should produce empty tools_missing");
+        assert!(
+            l1_findings.is_empty(),
+            "no_tools should produce empty L1 findings"
+        );
+        assert!(
+            tool_results.is_empty(),
+            "no_tools should produce empty tool_results"
+        );
+        assert!(
+            available.is_empty(),
+            "no_tools should produce empty tools_available"
+        );
+        assert!(
+            missing.is_empty(),
+            "no_tools should produce empty tools_missing"
+        );
     }
 
     #[test]
@@ -1639,7 +1664,11 @@ mod tests {
         };
 
         let result = args.run(OutputFormat::Json, true, Some(Language::Rust));
-        assert!(result.is_ok(), "no-tools + no-changes should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "no-tools + no-changes should succeed: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -1703,17 +1732,16 @@ mod tests {
         all_findings.truncate(4);
 
         // Count actual L1/L2 in the truncated list
-        let actual_l1 = all_findings.iter().filter(|f| f.finding_type.starts_with("tool:")).count();
-        let actual_l2 = all_findings.iter().filter(|f| !f.finding_type.starts_with("tool:")).count();
+        let actual_l1 = all_findings
+            .iter()
+            .filter(|f| f.finding_type.starts_with("tool:"))
+            .count();
+        let actual_l2 = all_findings
+            .iter()
+            .filter(|f| !f.finding_type.starts_with("tool:"))
+            .count();
 
-        let summary = build_summary_with_l1(
-            &all_findings,
-            actual_l1,
-            actual_l2,
-            3,
-            10,
-            &[],
-        );
+        let summary = build_summary_with_l1(&all_findings, actual_l1, actual_l2, 3, 10, &[]);
 
         // F14: total_findings should equal l1_findings + l2_findings
         assert_eq!(
@@ -1727,8 +1755,14 @@ mod tests {
 
         // And all should match the truncated list
         assert_eq!(summary.total_findings, 4, "should reflect truncated count");
-        assert_eq!(summary.l1_findings, actual_l1, "l1 should reflect post-truncation count");
-        assert_eq!(summary.l2_findings, actual_l2, "l2 should reflect post-truncation count");
+        assert_eq!(
+            summary.l1_findings, actual_l1,
+            "l1 should reflect post-truncation count"
+        );
+        assert_eq!(
+            summary.l2_findings, actual_l2,
+            "l2 should reflect post-truncation count"
+        );
     }
 
     #[test]
@@ -1775,18 +1809,17 @@ mod tests {
         all_findings.truncate(1);
 
         // Post-truncation counts from actual data
-        let _post_l1 = all_findings.iter().filter(|f| f.finding_type.starts_with("tool:")).count();
-        let _post_l2 = all_findings.iter().filter(|f| !f.finding_type.starts_with("tool:")).count();
+        let _post_l1 = all_findings
+            .iter()
+            .filter(|f| f.finding_type.starts_with("tool:"))
+            .count();
+        let _post_l2 = all_findings
+            .iter()
+            .filter(|f| !f.finding_type.starts_with("tool:"))
+            .count();
 
         // If we pass pre-truncation counts, the summary would be wrong
-        let bad_summary = build_summary_with_l1(
-            &all_findings,
-            pre_l1,
-            pre_l2,
-            3,
-            10,
-            &[],
-        );
+        let bad_summary = build_summary_with_l1(&all_findings, pre_l1, pre_l2, 3, 10, &[]);
 
         // This SHOULD fail before the fix: total=1 but l1+l2=20
         // After the fix, the function should use actual findings, not raw counts
@@ -1935,8 +1968,8 @@ fn main() {
     #[test]
     fn test_run_l2_engines_empty_context() {
         // run_l2_engines with empty context should produce engine results
-        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use crate::commands::bugbot::l2::context::FunctionDiff;
+        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use std::collections::HashMap;
 
         let engines = l2_engine_registry();
@@ -1965,10 +1998,7 @@ fn main() {
 
         // All engine results should have a name
         for result in &results {
-            assert!(
-                !result.name.is_empty(),
-                "Engine result should have a name"
-            );
+            assert!(!result.name.is_empty(), "Engine result should have a name");
         }
     }
 
@@ -1982,8 +2012,8 @@ fn main() {
         // produce findings independently. We create an empty context (no
         // functions to analyze) so DeltaEngine has nothing to diff against
         // (partial/skipped), but all engines should still run and report.
-        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use crate::commands::bugbot::l2::context::FunctionDiff;
+        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use std::collections::HashMap;
 
         let engines = l2_engine_registry();
@@ -2092,7 +2122,11 @@ fn main() {
         });
 
         // Verify total count
-        assert_eq!(all_findings.len(), 4, "merged list should contain all 4 findings");
+        assert_eq!(
+            all_findings.len(),
+            4,
+            "merged list should contain all 4 findings"
+        );
 
         // Verify sort order: high first, then medium, then lows
         assert_eq!(
@@ -2249,9 +2283,9 @@ fn main() {
         // FlowEngine's redundant-computation (GVN) is Python-only.
         // When running with language=Rust, run_l2_engines should not
         // produce any redundant-computation findings.
-        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use crate::commands::bugbot::l2::context::{FunctionDiff, InsertedFunction};
         use crate::commands::bugbot::l2::types::FunctionId;
+        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use std::collections::HashMap;
 
         // Create a context with a simple inserted function so FlowEngine
@@ -2334,9 +2368,9 @@ fn main() {
         // field. We create a minimal context with an inserted function to
         // trigger finding generation, then check that any findings produced
         // have confidence set.
-        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use crate::commands::bugbot::l2::context::{FunctionDiff, InsertedFunction};
         use crate::commands::bugbot::l2::types::FunctionId;
+        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use std::collections::HashMap;
 
         // Create a function that should trigger at least some findings
@@ -2392,8 +2426,8 @@ fn main() {
     fn test_l2_engines_sendable_to_thread() {
         // L2Engine: Send + Sync, so Vec<Box<dyn L2Engine>> must be Send.
         // This test verifies engines can be moved to a thread and run there.
-        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use crate::commands::bugbot::l2::context::FunctionDiff;
+        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use std::collections::HashMap;
 
         let engines = l2_engine_registry();
@@ -2412,9 +2446,7 @@ fn main() {
         );
 
         // Spawn L2 on a background thread (the parallel pattern from check pipeline)
-        let handle = std::thread::spawn(move || {
-            run_l2_engines(&ctx, &engines)
-        });
+        let handle = std::thread::spawn(move || run_l2_engines(&ctx, &engines));
 
         let (findings, results) = handle.join().expect("L2 thread should not panic");
 
@@ -2442,57 +2474,64 @@ fn main() {
             panic!("simulated L2 engine panic");
         });
 
-        let (findings, results) = handle.join()
-            .unwrap_or_else(|_| (Vec::new(), Vec::new()));
+        let (findings, results) = handle.join().unwrap_or_else(|_| (Vec::new(), Vec::new()));
 
-        assert!(findings.is_empty(), "Panicked thread should yield empty findings");
-        assert!(results.is_empty(), "Panicked thread should yield empty results");
+        assert!(
+            findings.is_empty(),
+            "Panicked thread should yield empty findings"
+        );
+        assert!(
+            results.is_empty(),
+            "Panicked thread should yield empty results"
+        );
     }
 
     #[test]
     fn test_l1_and_l2_parallel_both_contribute_to_report() {
         // Verify that when L1 and L2 both produce findings, they merge correctly.
         // This simulates the pipeline's merge step after parallel execution.
-        let l1_findings = vec![
-            BugbotFinding {
-                finding_type: "tool:clippy".to_string(),
-                severity: "medium".to_string(),
-                file: PathBuf::from("src/main.rs"),
-                function: String::new(),
-                line: 10,
-                message: "unused variable".to_string(),
-                evidence: serde_json::Value::Null,
-                confidence: None,
-                finding_id: None,
-            },
-        ];
+        let l1_findings = vec![BugbotFinding {
+            finding_type: "tool:clippy".to_string(),
+            severity: "medium".to_string(),
+            file: PathBuf::from("src/main.rs"),
+            function: String::new(),
+            line: 10,
+            message: "unused variable".to_string(),
+            evidence: serde_json::Value::Null,
+            confidence: None,
+            finding_id: None,
+        }];
 
-        let l2_findings = vec![
-            BugbotFinding {
-                finding_type: "signature-regression".to_string(),
-                severity: "high".to_string(),
-                file: PathBuf::from("src/lib.rs"),
-                function: "compute".to_string(),
-                line: 5,
-                message: "param removed".to_string(),
-                evidence: serde_json::Value::Null,
-                confidence: None,
-                finding_id: None,
-            },
-        ];
+        let l2_findings = vec![BugbotFinding {
+            finding_type: "signature-regression".to_string(),
+            severity: "high".to_string(),
+            file: PathBuf::from("src/lib.rs"),
+            function: "compute".to_string(),
+            line: 5,
+            message: "param removed".to_string(),
+            evidence: serde_json::Value::Null,
+            confidence: None,
+            finding_id: None,
+        }];
 
         // Merge (same as pipeline step 7)
         let mut findings: Vec<BugbotFinding> = Vec::new();
         findings.extend(l1_findings);
         findings.extend(l2_findings);
 
-        assert_eq!(findings.len(), 2, "Merged findings should contain both L1 and L2");
+        assert_eq!(
+            findings.len(),
+            2,
+            "Merged findings should contain both L1 and L2"
+        );
         assert!(
             findings.iter().any(|f| f.finding_type.starts_with("tool:")),
             "Should contain L1 finding"
         );
         assert!(
-            findings.iter().any(|f| f.finding_type == "signature-regression"),
+            findings
+                .iter()
+                .any(|f| f.finding_type == "signature-regression"),
             "Should contain L2 finding"
         );
     }
@@ -2501,8 +2540,8 @@ fn main() {
     fn test_parallel_execution_integration() {
         // Full integration: run L2 on a thread, L1 on main, join and merge.
         // This mirrors the exact pattern used in the pipeline.
-        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use crate::commands::bugbot::l2::context::FunctionDiff;
+        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use std::collections::HashMap;
 
         let engines = l2_engine_registry();
@@ -2521,16 +2560,15 @@ fn main() {
         );
 
         // Spawn L2 on background thread
-        let l2_handle = std::thread::spawn(move || {
-            run_l2_engines(&ctx, &engines)
-        });
+        let l2_handle = std::thread::spawn(move || run_l2_engines(&ctx, &engines));
 
         // L1 runs on main thread (simulated with run_l1_tools_opt)
         let (l1_raw, tool_results, tools_available, tools_missing) =
             run_l1_tools_opt(std::path::Path::new("/tmp/nonexistent"), "rust", false, 5);
 
         // Join L2
-        let (l2_engine_findings, l2_engine_results) = l2_handle.join()
+        let (l2_engine_findings, l2_engine_results) = l2_handle
+            .join()
             .unwrap_or_else(|_| (Vec::new(), Vec::new()));
 
         // Merge
@@ -2556,8 +2594,8 @@ fn main() {
     fn test_no_tools_flag_still_runs_l2_on_thread() {
         // When --no-tools is set, L1 is skipped but L2 should still run.
         // After parallelization, L2 runs on its own thread regardless of no_tools.
-        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use crate::commands::bugbot::l2::context::FunctionDiff;
+        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use std::collections::HashMap;
 
         let engines = l2_engine_registry();
@@ -2576,21 +2614,31 @@ fn main() {
         );
 
         // L2 on thread
-        let l2_handle = std::thread::spawn(move || {
-            run_l2_engines(&ctx, &engines)
-        });
+        let l2_handle = std::thread::spawn(move || run_l2_engines(&ctx, &engines));
 
         // L1 skipped (no_tools=true)
         let (l1_raw, tool_results, _, _) =
             run_l1_tools_opt(std::path::Path::new("/tmp/nonexistent"), "rust", true, 60);
 
         // Join L2
-        let (l2_findings, l2_results) = l2_handle.join()
+        let (l2_findings, l2_results) = l2_handle
+            .join()
             .unwrap_or_else(|_| (Vec::new(), Vec::new()));
 
-        assert!(l1_raw.is_empty(), "no_tools should produce empty L1 findings");
-        assert!(tool_results.is_empty(), "no_tools should produce empty tool_results");
-        assert_eq!(l2_results.len(), 1, "L2 should run 1 engine (DeltaEngine), got {}", l2_results.len());
+        assert!(
+            l1_raw.is_empty(),
+            "no_tools should produce empty L1 findings"
+        );
+        assert!(
+            tool_results.is_empty(),
+            "no_tools should produce empty tool_results"
+        );
+        assert_eq!(
+            l2_results.len(),
+            1,
+            "L2 should run 1 engine (DeltaEngine), got {}",
+            l2_results.len()
+        );
         let _ = l2_findings;
     }
 
@@ -2668,8 +2716,7 @@ fn main() {
                 current_src.push_str(&new_source);
                 current_src.push('\n');
 
-                let fid =
-                    FunctionId::new(file_path.clone(), func_name.clone(), def_line);
+                let fid = FunctionId::new(file_path.clone(), func_name.clone(), def_line);
 
                 changed_functions.push(FunctionChange {
                     id: fid,
@@ -2701,16 +2748,9 @@ fn main() {
                 // Every 10th function is also inserted (tests DeltaEngine handling)
                 if global_idx.is_multiple_of(10) {
                     let ins_name = format!("new_helper_{}", global_idx);
-                    let ins_source = format!(
-                        "fn {}(x: i32) -> i32 {{\n    x * 2\n}}\n",
-                        ins_name
-                    );
+                    let ins_source = format!("fn {}(x: i32) -> i32 {{\n    x * 2\n}}\n", ins_name);
                     inserted_functions.push(InsertedFunction {
-                        id: FunctionId::new(
-                            file_path.clone(),
-                            ins_name.clone(),
-                            def_line + 100,
-                        ),
+                        id: FunctionId::new(file_path.clone(), ins_name.clone(), def_line + 100),
                         name: ins_name,
                         source: ins_source,
                     });
@@ -2796,8 +2836,7 @@ fn main() {
         );
 
         // Verify no findings or results were silently dropped.
-        let total_finding_count: usize =
-            results.iter().map(|r| r.finding_count).sum();
+        let total_finding_count: usize = results.iter().map(|r| r.finding_count).sum();
         assert_eq!(
             findings.len(),
             total_finding_count,
@@ -2903,7 +2942,6 @@ fn main() {
                 );
                 (old, new)
             }),
-
             // Template 2: State machine with variable reassignment (exercises DFG/SSA)
             Box::new(|idx: usize| {
                 let old = format!(
@@ -2967,7 +3005,6 @@ fn main() {
                 );
                 (old, new)
             }),
-
             // Template 3: Resource-handling with early returns (exercises resource-leak)
             Box::new(|idx: usize| {
                 let old = format!(
@@ -3025,7 +3062,6 @@ fn main() {
                 );
                 (old, new)
             }),
-
             // Template 4: Arithmetic with conditional division (exercises abstract interp)
             Box::new(|idx: usize| {
                 let old = format!(
@@ -3072,7 +3108,6 @@ fn main() {
                 );
                 (old, new)
             }),
-
             // Template 5: Nested error chain (exercises taint / data flow)
             Box::new(|idx: usize| {
                 let old = format!(
@@ -3149,8 +3184,7 @@ fn main() {
                 current_src.push_str(&new_source);
                 current_src.push_str("\n\n");
 
-                let fid =
-                    FunctionId::new(file_path.clone(), func_name.clone(), def_line);
+                let fid = FunctionId::new(file_path.clone(), func_name.clone(), def_line);
 
                 changed_functions.push(FunctionChange {
                     id: fid,
@@ -3180,16 +3214,9 @@ fn main() {
 
                 if global_idx.is_multiple_of(10) {
                     let ins_name = format!("new_helper_{}", global_idx);
-                    let ins_source = format!(
-                        "fn {}(x: i32) -> i32 {{\n    x * 2\n}}\n",
-                        ins_name
-                    );
+                    let ins_source = format!("fn {}(x: i32) -> i32 {{\n    x * 2\n}}\n", ins_name);
                     inserted_functions.push(InsertedFunction {
-                        id: FunctionId::new(
-                            file_path.clone(),
-                            ins_name.clone(),
-                            def_line + 200,
-                        ),
+                        id: FunctionId::new(file_path.clone(), ins_name.clone(), def_line + 200),
                         name: ins_name,
                         source: ins_source,
                     });
@@ -3223,14 +3250,8 @@ fn main() {
         let elapsed = start.elapsed();
 
         // At least one engine must have run (not all skipped)
-        let engines_ran = results
-            .iter()
-            .filter(|r| r.functions_analyzed > 0)
-            .count();
-        assert!(
-            engines_ran > 0,
-            "All engines skipped on realistic workload"
-        );
+        let engines_ran = results.iter().filter(|r| r.functions_analyzed > 0).count();
+        assert!(engines_ran > 0, "All engines skipped on realistic workload");
 
         // Print timing and findings (visible with --nocapture)
         eprintln!(
@@ -3259,8 +3280,7 @@ fn main() {
         // undefined types) may not produce findings. We verify consistency only.
 
         // Verify no findings were silently dropped.
-        let total_finding_count: usize =
-            results.iter().map(|r| r.finding_count).sum();
+        let total_finding_count: usize = results.iter().map(|r| r.finding_count).sum();
         assert_eq!(
             findings.len(),
             total_finding_count,
@@ -3275,8 +3295,8 @@ fn main() {
     /// Verify all registered engines produce results in run_l2_engines.
     #[test]
     fn test_all_engines_produce_results() {
-        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use crate::commands::bugbot::l2::context::FunctionDiff;
+        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use std::collections::HashMap;
 
         let engines = l2_engine_registry();
@@ -3325,8 +3345,8 @@ fn main() {
     /// All engines should run synchronously when no daemon is available.
     #[test]
     fn test_engines_run_synchronously_without_daemon() {
-        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use crate::commands::bugbot::l2::context::FunctionDiff;
+        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use std::collections::HashMap;
 
         let engines = l2_engine_registry();
@@ -3368,19 +3388,38 @@ fn main() {
     /// Deferred engines should produce results when daemon provides cached data.
     #[test]
     fn test_deferred_engines_use_daemon_cache() {
-        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use crate::commands::bugbot::l2::context::FunctionDiff;
         use crate::commands::bugbot::l2::daemon_client::DaemonClient;
+        use crate::commands::bugbot::l2::{l2_engine_registry, L2Context};
         use std::collections::HashMap;
 
         // Mock daemon that is available (but returns None for individual queries)
         struct AvailableDaemon;
         impl DaemonClient for AvailableDaemon {
-            fn is_available(&self) -> bool { true }
-            fn query_call_graph(&self) -> Option<tldr_core::ProjectCallGraph> { None }
-            fn query_cfg(&self, _fid: &super::super::l2::types::FunctionId) -> Option<tldr_core::CfgInfo> { None }
-            fn query_dfg(&self, _fid: &super::super::l2::types::FunctionId) -> Option<tldr_core::DfgInfo> { None }
-            fn query_ssa(&self, _fid: &super::super::l2::types::FunctionId) -> Option<tldr_core::ssa::SsaFunction> { None }
+            fn is_available(&self) -> bool {
+                true
+            }
+            fn query_call_graph(&self) -> Option<tldr_core::ProjectCallGraph> {
+                None
+            }
+            fn query_cfg(
+                &self,
+                _fid: &super::super::l2::types::FunctionId,
+            ) -> Option<tldr_core::CfgInfo> {
+                None
+            }
+            fn query_dfg(
+                &self,
+                _fid: &super::super::l2::types::FunctionId,
+            ) -> Option<tldr_core::DfgInfo> {
+                None
+            }
+            fn query_ssa(
+                &self,
+                _fid: &super::super::l2::types::FunctionId,
+            ) -> Option<tldr_core::ssa::SsaFunction> {
+                None
+            }
             fn notify_changed_files(&self, _files: &[PathBuf]) {}
         }
 
@@ -3428,7 +3467,7 @@ fn main() {
 
     #[test]
     fn test_build_function_diff_from_ast_changes_insert() {
-        use crate::commands::remaining::types::{ASTChange, ChangeType, NodeKind, Location};
+        use crate::commands::remaining::types::{ASTChange, ChangeType, Location, NodeKind};
 
         let project = PathBuf::from("/project");
         let mut all_diffs: HashMap<PathBuf, Vec<ASTChange>> = HashMap::new();
@@ -3465,7 +3504,7 @@ fn main() {
 
     #[test]
     fn test_build_function_diff_from_ast_changes_update() {
-        use crate::commands::remaining::types::{ASTChange, ChangeType, NodeKind, Location};
+        use crate::commands::remaining::types::{ASTChange, ChangeType, Location, NodeKind};
 
         let project = PathBuf::from("/project");
         let mut all_diffs: HashMap<PathBuf, Vec<ASTChange>> = HashMap::new();
@@ -3502,7 +3541,7 @@ fn main() {
 
     #[test]
     fn test_build_function_diff_from_ast_changes_delete() {
-        use crate::commands::remaining::types::{ASTChange, ChangeType, NodeKind, Location};
+        use crate::commands::remaining::types::{ASTChange, ChangeType, Location, NodeKind};
 
         let project = PathBuf::from("/project");
         let mut all_diffs: HashMap<PathBuf, Vec<ASTChange>> = HashMap::new();
@@ -3537,7 +3576,7 @@ fn main() {
 
     #[test]
     fn test_build_function_diff_skips_non_function_nodes() {
-        use crate::commands::remaining::types::{ASTChange, ChangeType, NodeKind, Location};
+        use crate::commands::remaining::types::{ASTChange, ChangeType, Location, NodeKind};
 
         let project = PathBuf::from("/project");
         let mut all_diffs: HashMap<PathBuf, Vec<ASTChange>> = HashMap::new();
@@ -3598,7 +3637,7 @@ fn main() {
 
     #[test]
     fn test_build_function_diff_includes_method_nodes() {
-        use crate::commands::remaining::types::{ASTChange, ChangeType, NodeKind, Location};
+        use crate::commands::remaining::types::{ASTChange, ChangeType, Location, NodeKind};
 
         let project = PathBuf::from("/project");
         let mut all_diffs: HashMap<PathBuf, Vec<ASTChange>> = HashMap::new();
@@ -3626,7 +3665,7 @@ fn main() {
 
     #[test]
     fn test_build_function_diff_skips_unnamed_changes() {
-        use crate::commands::remaining::types::{ASTChange, ChangeType, NodeKind, Location};
+        use crate::commands::remaining::types::{ASTChange, ChangeType, Location, NodeKind};
 
         let project = PathBuf::from("/project");
         let mut all_diffs: HashMap<PathBuf, Vec<ASTChange>> = HashMap::new();
@@ -3657,7 +3696,7 @@ fn main() {
 
     #[test]
     fn test_build_function_diff_move_with_both_texts_becomes_update() {
-        use crate::commands::remaining::types::{ASTChange, ChangeType, NodeKind, Location};
+        use crate::commands::remaining::types::{ASTChange, ChangeType, Location, NodeKind};
 
         let project = PathBuf::from("/project");
         let mut all_diffs: HashMap<PathBuf, Vec<ASTChange>> = HashMap::new();
@@ -3691,7 +3730,7 @@ fn main() {
 
     #[test]
     fn test_build_function_diff_multiple_files() {
-        use crate::commands::remaining::types::{ASTChange, ChangeType, NodeKind, Location};
+        use crate::commands::remaining::types::{ASTChange, ChangeType, Location, NodeKind};
 
         let project = PathBuf::from("/project");
         let mut all_diffs: HashMap<PathBuf, Vec<ASTChange>> = HashMap::new();
@@ -3749,7 +3788,7 @@ fn main() {
 
     #[test]
     fn test_build_function_diff_path_already_relative() {
-        use crate::commands::remaining::types::{ASTChange, ChangeType, NodeKind, Location};
+        use crate::commands::remaining::types::{ASTChange, ChangeType, Location, NodeKind};
 
         // When path is already relative (no project prefix match),
         // strip_prefix returns the original path

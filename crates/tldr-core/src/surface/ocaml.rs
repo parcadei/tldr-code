@@ -548,7 +548,13 @@ fn extract_modules_and_types(
     relative_path: &Path,
 ) -> Vec<ApiEntry> {
     let mut out = Vec::new();
-    walk_for_modules_and_types(tree.root_node(), source, module_path, relative_path, &mut out);
+    walk_for_modules_and_types(
+        tree.root_node(),
+        source,
+        module_path,
+        relative_path,
+        &mut out,
+    );
     out
 }
 
@@ -911,8 +917,7 @@ mod tests {
         assert!(
             entries
                 .iter()
-                .any(|(name, kind)| name.ends_with(".color")
-                    && matches!(kind, ApiKind::TypeAlias)),
+                .any(|(name, kind)| name.ends_with(".color") && matches!(kind, ApiKind::TypeAlias)),
             "expected color type to surface as TypeAlias; got: {:?}",
             entries
         );

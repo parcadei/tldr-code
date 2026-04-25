@@ -565,7 +565,8 @@ fn test_semantic_index_search() {
 
 #[test]
 fn test_semantic_search_result_ordering() {
-    let mut results = [SemanticSearchResult {
+    let mut results = [
+        SemanticSearchResult {
             file_path: PathBuf::from("a.rs"),
             function_name: Some("a".to_string()),
             class_name: None,
@@ -582,7 +583,8 @@ fn test_semantic_search_result_ordering() {
             line_start: 1,
             line_end: 10,
             snippet: "fn b()".to_string(),
-        }];
+        },
+    ];
 
     results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
 

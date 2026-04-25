@@ -427,12 +427,7 @@ impl RubyHandler {
                 // the edge case).
                 if matches!(
                     text.as_str(),
-                    "require"
-                        | "require_relative"
-                        | "load"
-                        | "include"
-                        | "extend"
-                        | "prepend"
+                    "require" | "require_relative" | "load" | "include" | "extend" | "prepend"
                 ) {
                     continue;
                 }
@@ -561,7 +556,9 @@ fn collect_param_bindings(params: &Node, source: &[u8], bindings: &mut HashSet<S
         // Only count this identifier if its parent is a parameter shape —
         // not, e.g., a default-value expression like `def foo(x = bar)`
         // where `bar` should NOT be added as a binding.
-        let Some(parent) = node.parent() else { continue };
+        let Some(parent) = node.parent() else {
+            continue;
+        };
         if !is_param_shape(parent.kind()) {
             continue;
         }
@@ -629,8 +626,7 @@ fn collect_body_bindings(body: &Node, source: &[u8], bindings: &mut HashSet<Stri
                         if c.kind() == "exception_variable" {
                             for cc in walk_tree(c) {
                                 if cc.kind() == "identifier" {
-                                    bindings
-                                        .insert(get_node_text(&cc, source).to_string());
+                                    bindings.insert(get_node_text(&cc, source).to_string());
                                 }
                             }
                         }

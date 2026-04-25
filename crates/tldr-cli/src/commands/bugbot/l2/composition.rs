@@ -128,7 +128,9 @@ const COMPOSITION_RULES: &[CompositionRule] = &[
 /// Check if a finding has churn data in its evidence.
 fn has_churn_data(finding: &BugbotFinding) -> bool {
     if let Some(obj) = finding.evidence.as_object() {
-        obj.contains_key("churn") || obj.contains_key("churn_count") || obj.contains_key("git_churn")
+        obj.contains_key("churn")
+            || obj.contains_key("churn_count")
+            || obj.contains_key("git_churn")
     } else {
         false
     }
@@ -137,10 +139,7 @@ fn has_churn_data(finding: &BugbotFinding) -> bool {
 /// Try to match a pair of findings against the composition rules.
 ///
 /// Returns the matching rule if found, along with which finding is A and which is B.
-fn match_rule(
-    f1: &BugbotFinding,
-    f2: &BugbotFinding,
-) -> Option<&'static CompositionRule> {
+fn match_rule(f1: &BugbotFinding, f2: &BugbotFinding) -> Option<&'static CompositionRule> {
     for rule in COMPOSITION_RULES {
         if rule.b_is_churn_wildcard {
             // type_a must match one finding, and the other must have churn data
@@ -164,23 +163,12 @@ fn match_rule(
 }
 
 /// Compose a new finding from two constituents according to a composition rule.
-fn compose_finding(
-    rule: &CompositionRule,
-    a: &BugbotFinding,
-    b: &BugbotFinding,
-) -> BugbotFinding {
+fn compose_finding(rule: &CompositionRule, a: &BugbotFinding, b: &BugbotFinding) -> BugbotFinding {
     // Determine which is the "first" constituent (for file/function/line)
-    let first = if a.finding_type == rule.type_a {
-        a
-    } else {
-        b
-    };
+    let first = if a.finding_type == rule.type_a { a } else { b };
 
     // Severity: max of constituents or rule severity, whichever is higher
-    let constituent_max = std::cmp::max(
-        severity_rank(&a.severity),
-        severity_rank(&b.severity),
-    );
+    let constituent_max = std::cmp::max(severity_rank(&a.severity), severity_rank(&b.severity));
     let rule_sev = severity_rank(rule.composed_severity);
     let final_severity = severity_from_rank(std::cmp::max(constituent_max, rule_sev));
 
@@ -202,12 +190,8 @@ fn compose_finding(
         },
     });
 
-    let finding_id = compute_finding_id(
-        rule.composed_type,
-        &first.file,
-        &first.function,
-        first.line,
-    );
+    let finding_id =
+        compute_finding_id(rule.composed_type, &first.file, &first.function, first.line);
 
     BugbotFinding {
         finding_type: rule.composed_type.to_string(),
@@ -329,7 +313,11 @@ mod tests {
 
         let result = compose_findings(findings);
 
-        assert_eq!(result.len(), 1, "should produce exactly one composed finding");
+        assert_eq!(
+            result.len(),
+            1,
+            "should produce exactly one composed finding"
+        );
         assert_eq!(result[0].finding_type, "unguarded-injection-path");
         assert_eq!(result[0].severity, "critical");
         assert_eq!(result[0].confidence, Some("LIKELY".to_string()));
@@ -339,7 +327,13 @@ mod tests {
     #[test]
     fn test_compose_impact_plus_contract() {
         let findings = vec![
-            make_finding("impact-blast-radius", "medium", "src/core.rs", "process", 100),
+            make_finding(
+                "impact-blast-radius",
+                "medium",
+                "src/core.rs",
+                "process",
+                100,
+            ),
             make_finding("contract-regression", "high", "src/core.rs", "process", 102),
         ];
 
@@ -384,7 +378,9 @@ mod tests {
         assert!(!result.iter().any(|f| f.finding_type == "guard-removed"));
 
         // Composed finding and passthrough
-        assert!(result.iter().any(|f| f.finding_type == "unguarded-injection-path"));
+        assert!(result
+            .iter()
+            .any(|f| f.finding_type == "unguarded-injection-path"));
         assert!(result.iter().any(|f| f.finding_type == "dead-store"));
     }
 
@@ -418,7 +414,9 @@ mod tests {
         assert_eq!(result.len(), 3);
         assert!(result.iter().any(|f| f.finding_type == "dead-store"));
         assert!(result.iter().any(|f| f.finding_type == "null-deref"));
-        assert!(result.iter().any(|f| f.finding_type == "complexity-increase"));
+        assert!(result
+            .iter()
+            .any(|f| f.finding_type == "complexity-increase"));
     }
 
     /// PM-41.7: Constituent evidence is merged into composed finding.
@@ -436,17 +434,29 @@ mod tests {
         let evidence = &result[0].evidence;
 
         // Should have constituent_a and constituent_b
-        assert!(evidence.get("constituent_a").is_some(), "should have constituent_a");
-        assert!(evidence.get("constituent_b").is_some(), "should have constituent_b");
+        assert!(
+            evidence.get("constituent_a").is_some(),
+            "should have constituent_a"
+        );
+        assert!(
+            evidence.get("constituent_b").is_some(),
+            "should have constituent_b"
+        );
 
         // constituent_a should contain the taint-flow evidence
         let ca = evidence.get("constituent_a").unwrap();
-        assert_eq!(ca.get("finding_type").unwrap().as_str().unwrap(), "taint-flow");
+        assert_eq!(
+            ca.get("finding_type").unwrap().as_str().unwrap(),
+            "taint-flow"
+        );
         assert!(ca.get("evidence").is_some());
 
         // constituent_b should contain the guard-removed evidence
         let cb = evidence.get("constituent_b").unwrap();
-        assert_eq!(cb.get("finding_type").unwrap().as_str().unwrap(), "guard-removed");
+        assert_eq!(
+            cb.get("finding_type").unwrap().as_str().unwrap(),
+            "guard-removed"
+        );
         assert!(cb.get("evidence").is_some());
     }
 

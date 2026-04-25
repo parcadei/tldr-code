@@ -1222,9 +1222,7 @@ pub fn resolve_call_with_receiver(
     // standard receiver-lookup chain produces nothing. We bridge that gap
     // by looking up the receiver lower-cased as a func_index module key.
     if language == "ocaml" {
-        if let Some(resolved) =
-            resolve_ocaml_module_receiver(receiver, bare_target, func_index)
-        {
+        if let Some(resolved) = resolve_ocaml_module_receiver(receiver, bare_target, func_index) {
             return Some(resolved);
         }
     }

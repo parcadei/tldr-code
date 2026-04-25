@@ -30,9 +30,7 @@ use std::process::Command;
 
 use tempfile::TempDir;
 
-use tldr_core::analysis::{
-    change_impact, change_impact_extended, DetectionMethod,
-};
+use tldr_core::analysis::{change_impact, change_impact_extended, DetectionMethod};
 use tldr_core::quality::churn::{
     build_summary, get_author_stats, get_file_churn, get_recommendation, is_bot_author,
     is_git_repository, matches_exclude_pattern, ChurnError, FileChurn,
@@ -612,7 +610,9 @@ mod hotspots_tests {
     #[test]
     fn test_scoring_weights_default_sum_to_one() {
         let weights = ScoringWeights::default();
-        let sum = weights.churn + weights.complexity + weights.knowledge_fragmentation
+        let sum = weights.churn
+            + weights.complexity
+            + weights.knowledge_fragmentation
             + weights.temporal_coupling;
         assert!(
             (sum - 1.0).abs() < 0.01,
@@ -645,8 +645,10 @@ mod hotspots_tests {
             temporal_coupling: 0.0,
         };
         let renorm = weights.renormalize();
-        let sum =
-            renorm.churn + renorm.complexity + renorm.knowledge_fragmentation + renorm.temporal_coupling;
+        let sum = renorm.churn
+            + renorm.complexity
+            + renorm.knowledge_fragmentation
+            + renorm.temporal_coupling;
         assert!(
             (sum - 1.0).abs() < 0.01,
             "renormalized weights should sum to ~1.0, got {}",
@@ -809,10 +811,7 @@ def new_function(a, b):
 
         let options = HotspotsOptions::new();
         let result = analyze_hotspots(dir.path(), &options);
-        assert!(
-            result.is_err(),
-            "non-git directory should produce an error"
-        );
+        assert!(result.is_err(), "non-git directory should produce an error");
     }
 
     #[test]
@@ -947,7 +946,10 @@ def logout(session_id):
                 }
             }
             Err(e) => {
-                eprintln!("change_impact error (may be expected without git diff): {}", e);
+                eprintln!(
+                    "change_impact error (may be expected without git diff): {}",
+                    e
+                );
             }
         }
     }
@@ -1150,10 +1152,7 @@ def process_many(paths):
 
                 // Check metadata
                 let meta = &json["metadata"];
-                assert_eq!(
-                    meta["files_analyzed"], 1,
-                    "should analyze exactly 1 file"
-                );
+                assert_eq!(meta["files_analyzed"], 1, "should analyze exactly 1 file");
                 assert!(
                     meta["sequences_extracted"].as_u64().unwrap_or(0) > 0,
                     "should extract some sequences"
@@ -1188,10 +1187,7 @@ def process_many(paths):
                 }
             }
         } else {
-            eprintln!(
-                "temporal command returned code {}: stderr={}",
-                code, stderr
-            );
+            eprintln!("temporal command returned code {}: stderr={}", code, stderr);
         }
     }
 
@@ -1324,7 +1320,9 @@ def work():
         if code == 0 || code == 2 {
             // Text output should contain human-readable content
             assert!(
-                stdout.contains("Temporal") || stdout.contains("constraint") || stdout.contains("Metadata"),
+                stdout.contains("Temporal")
+                    || stdout.contains("constraint")
+                    || stdout.contains("Metadata"),
                 "text output should contain recognizable keywords, got: {}",
                 &stdout[..stdout.len().min(200)]
             );
@@ -1371,10 +1369,7 @@ def leaky_function(path):
             // Should detect the leak (early return without close)
             if let Some(report) = json.as_object() {
                 // The report should have content
-                assert!(
-                    !report.is_empty(),
-                    "resource report should have content"
-                );
+                assert!(!report.is_empty(), "resource report should have content");
                 // Should have a leaks or issues field for leak detection
                 let has_leak_field = report.contains_key("leaks") || report.contains_key("issues");
                 assert!(
@@ -1620,7 +1615,10 @@ fn read_safe(path: &str) -> std::io::Result<String> {
 
         if code == 0 {
             let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-            assert!(json.is_object(), "Rust resource analysis should produce JSON object");
+            assert!(
+                json.is_object(),
+                "Rust resource analysis should produce JSON object"
+            );
         }
     }
 
@@ -1638,19 +1636,12 @@ def example():
 "#,
         );
 
-        let (code, stdout, _) = run_tldr(&[
-            "resources",
-            file_path.to_str().unwrap(),
-            "--format",
-            "text",
-        ]);
+        let (code, stdout, _) =
+            run_tldr(&["resources", file_path.to_str().unwrap(), "--format", "text"]);
 
         if code == 0 {
             // Text format should produce human-readable output
-            assert!(
-                !stdout.is_empty(),
-                "text format should produce some output"
-            );
+            assert!(!stdout.is_empty(), "text format should produce some output");
         }
     }
 
@@ -1681,10 +1672,7 @@ def func_b():
 
         if code == 0 {
             let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
-            assert!(
-                json.is_object(),
-                "summary should produce a JSON object"
-            );
+            assert!(json.is_object(), "summary should produce a JSON object");
         }
     }
 }
@@ -1714,12 +1702,8 @@ def load_config(path):
 "#,
         );
 
-        let (code, stdout, stderr) = run_tldr(&[
-            "api-check",
-            file_path.to_str().unwrap(),
-            "--format",
-            "json",
-        ]);
+        let (code, stdout, stderr) =
+            run_tldr(&["api-check", file_path.to_str().unwrap(), "--format", "json"]);
 
         if code == 0 {
             let json: serde_json::Value =
@@ -1739,7 +1723,8 @@ def load_config(path):
                     "should detect bare except clause, findings: {:?}",
                     findings
                         .iter()
-                        .map(|f| f.get("rule")
+                        .map(|f| f
+                            .get("rule")
                             .and_then(|r| r.get("name"))
                             .and_then(|n| n.as_str())
                             .unwrap_or("?"))
@@ -1748,10 +1733,7 @@ def load_config(path):
             }
 
             // Summary should exist
-            assert!(
-                json.get("summary").is_some(),
-                "report should have summary"
-            );
+            assert!(json.get("summary").is_some(), "report should have summary");
         } else {
             eprintln!("api-check bare-except code {}: {}", code, stderr);
         }
@@ -1776,12 +1758,8 @@ def post_data(url, data):
 "#,
         );
 
-        let (code, stdout, _) = run_tldr(&[
-            "api-check",
-            file_path.to_str().unwrap(),
-            "--format",
-            "json",
-        ]);
+        let (code, stdout, _) =
+            run_tldr(&["api-check", file_path.to_str().unwrap(), "--format", "json"]);
 
         if code == 0 {
             let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
@@ -1818,12 +1796,8 @@ def hash_token(token):
 "#,
         );
 
-        let (code, stdout, _) = run_tldr(&[
-            "api-check",
-            file_path.to_str().unwrap(),
-            "--format",
-            "json",
-        ]);
+        let (code, stdout, _) =
+            run_tldr(&["api-check", file_path.to_str().unwrap(), "--format", "json"]);
 
         if code == 0 {
             let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
@@ -1835,10 +1809,7 @@ def hash_token(token):
                         .map(|name| name.contains("md5") || name.contains("sha1"))
                         .unwrap_or(false)
                 });
-                assert!(
-                    md5_found,
-                    "should detect weak crypto (MD5/SHA1) usage"
-                );
+                assert!(md5_found, "should detect weak crypto (MD5/SHA1) usage");
             }
         }
     }
@@ -1864,12 +1835,8 @@ def generate_session_id():
 "#,
         );
 
-        let (code, stdout, _) = run_tldr(&[
-            "api-check",
-            file_path.to_str().unwrap(),
-            "--format",
-            "json",
-        ]);
+        let (code, stdout, _) =
+            run_tldr(&["api-check", file_path.to_str().unwrap(), "--format", "json"]);
 
         if code == 0 {
             let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
@@ -1907,12 +1874,8 @@ def hash_data(data):
 "#,
         );
 
-        let (code, stdout, _) = run_tldr(&[
-            "api-check",
-            file_path.to_str().unwrap(),
-            "--format",
-            "json",
-        ]);
+        let (code, stdout, _) =
+            run_tldr(&["api-check", file_path.to_str().unwrap(), "--format", "json"]);
 
         if code == 0 {
             let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
@@ -1942,12 +1905,8 @@ fn bad_lock(m: &Mutex<i32>) -> i32 {
 "#,
         );
 
-        let (code, stdout, _) = run_tldr(&[
-            "api-check",
-            file_path.to_str().unwrap(),
-            "--format",
-            "json",
-        ]);
+        let (code, stdout, _) =
+            run_tldr(&["api-check", file_path.to_str().unwrap(), "--format", "json"]);
 
         if code == 0 {
             let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
@@ -1959,10 +1918,7 @@ fn bad_lock(m: &Mutex<i32>) -> i32 {
                         .map(|name| name.contains("mutex"))
                         .unwrap_or(false)
                 });
-                assert!(
-                    mutex_found,
-                    "should detect mutex lock unwrap pattern"
-                );
+                assert!(mutex_found, "should detect mutex lock unwrap pattern");
             }
         }
     }
@@ -1984,12 +1940,8 @@ def fetch(url):
 "#,
         );
 
-        let (code, stdout, _) = run_tldr(&[
-            "api-check",
-            file_path.to_str().unwrap(),
-            "--format",
-            "json",
-        ]);
+        let (code, stdout, _) =
+            run_tldr(&["api-check", file_path.to_str().unwrap(), "--format", "json"]);
 
         if code == 0 {
             let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();
@@ -2041,18 +1993,11 @@ def f():
 "#,
         );
 
-        let (code, stdout, _) = run_tldr(&[
-            "api-check",
-            file_path.to_str().unwrap(),
-            "--format",
-            "text",
-        ]);
+        let (code, stdout, _) =
+            run_tldr(&["api-check", file_path.to_str().unwrap(), "--format", "text"]);
 
         if code == 0 {
-            assert!(
-                !stdout.is_empty(),
-                "text format should produce output"
-            );
+            assert!(!stdout.is_empty(), "text format should produce output");
         }
     }
 
@@ -2064,19 +2009,11 @@ def f():
             "src/a.py",
             "import requests\ndef a():\n    requests.get('url')\n",
         );
-        create_temp_file(
-            &dir,
-            "src/b.py",
-            "try:\n    pass\nexcept:\n    pass\n",
-        );
+        create_temp_file(&dir, "src/b.py", "try:\n    pass\nexcept:\n    pass\n");
 
         let src_path = dir.path().join("src");
-        let (code, stdout, _) = run_tldr(&[
-            "api-check",
-            src_path.to_str().unwrap(),
-            "--format",
-            "json",
-        ]);
+        let (code, stdout, _) =
+            run_tldr(&["api-check", src_path.to_str().unwrap(), "--format", "json"]);
 
         if code == 0 {
             let json: serde_json::Value = serde_json::from_str(&stdout).unwrap();

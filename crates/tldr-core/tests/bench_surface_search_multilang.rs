@@ -99,7 +99,11 @@ class _PrivateClass:
             None,
         );
 
-        assert!(result.is_ok(), "surface extraction failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "surface extraction failed: {:?}",
+            result.err()
+        );
         let surface = result.unwrap();
 
         assert_eq!(surface.language, "python");
@@ -107,7 +111,11 @@ class _PrivateClass:
         assert_eq!(surface.total, surface.apis.len());
 
         // Collect all qualified names
-        let names: Vec<&str> = surface.apis.iter().map(|a| a.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|a| a.qualified_name.as_str())
+            .collect();
 
         // Public function must be present
         assert!(
@@ -143,7 +151,11 @@ class _PrivateClass:
         )
         .unwrap();
 
-        let names: Vec<&str> = surface.apis.iter().map(|a| a.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|a| a.qualified_name.as_str())
+            .collect();
 
         // Private items must NOT be present
         assert!(
@@ -175,7 +187,11 @@ class _PrivateClass:
         )
         .unwrap();
 
-        let names: Vec<&str> = surface.apis.iter().map(|a| a.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|a| a.qualified_name.as_str())
+            .collect();
 
         // Private items SHOULD be present when include_private is true
         assert!(
@@ -206,7 +222,10 @@ class _PrivateClass:
         assert_eq!(func_entry.unwrap().kind, ApiKind::Function);
 
         // Find the class entry
-        let class_entry = surface.apis.iter().find(|a| a.qualified_name.contains("MyClass"));
+        let class_entry = surface
+            .apis
+            .iter()
+            .find(|a| a.qualified_name.contains("MyClass"));
         assert!(class_entry.is_some(), "MyClass not found in surface");
         assert_eq!(class_entry.unwrap().kind, ApiKind::Class);
     }
@@ -230,7 +249,10 @@ class _PrivateClass:
             .expect("public_func not found");
 
         // Should have a signature
-        assert!(func_entry.signature.is_some(), "expected signature for public_func");
+        assert!(
+            func_entry.signature.is_some(),
+            "expected signature for public_func"
+        );
         let sig = func_entry.signature.as_ref().unwrap();
         assert!(!sig.params.is_empty(), "expected params in signature");
     }
@@ -254,9 +276,16 @@ class _PrivateClass:
             .expect("public_func not found");
 
         // Should have a location with non-zero line
-        assert!(func_entry.location.is_some(), "expected location for public_func");
+        assert!(
+            func_entry.location.is_some(),
+            "expected location for public_func"
+        );
         let loc = func_entry.location.as_ref().unwrap();
-        assert!(loc.line > 0, "expected positive line number, got {}", loc.line);
+        assert!(
+            loc.line > 0,
+            "expected positive line number, got {}",
+            loc.line
+        );
     }
 
     #[test]
@@ -339,13 +368,24 @@ pub enum MyEnum {
             None,
         );
 
-        assert!(result.is_ok(), "Rust surface extraction failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Rust surface extraction failed: {:?}",
+            result.err()
+        );
         let surface = result.unwrap();
 
         assert_eq!(surface.language, "rust");
-        assert!(!surface.apis.is_empty(), "expected non-empty Rust API surface");
+        assert!(
+            !surface.apis.is_empty(),
+            "expected non-empty Rust API surface"
+        );
 
-        let names: Vec<&str> = surface.apis.iter().map(|a| a.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|a| a.qualified_name.as_str())
+            .collect();
 
         // Public items
         assert!(
@@ -377,7 +417,11 @@ pub enum MyEnum {
         )
         .unwrap();
 
-        let names: Vec<&str> = surface.apis.iter().map(|a| a.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|a| a.qualified_name.as_str())
+            .collect();
 
         assert!(
             !names.iter().any(|n| n.contains("private_func")),
@@ -409,19 +453,31 @@ pub enum MyEnum {
         .unwrap();
 
         // Check kinds
-        let func = surface.apis.iter().find(|a| a.qualified_name.contains("public_func"));
+        let func = surface
+            .apis
+            .iter()
+            .find(|a| a.qualified_name.contains("public_func"));
         assert!(func.is_some());
         assert_eq!(func.unwrap().kind, ApiKind::Function);
 
-        let st = surface.apis.iter().find(|a| a.qualified_name.contains("MyStruct"));
+        let st = surface
+            .apis
+            .iter()
+            .find(|a| a.qualified_name.contains("MyStruct"));
         assert!(st.is_some());
         assert_eq!(st.unwrap().kind, ApiKind::Struct);
 
-        let tr = surface.apis.iter().find(|a| a.qualified_name.contains("MyTrait"));
+        let tr = surface
+            .apis
+            .iter()
+            .find(|a| a.qualified_name.contains("MyTrait"));
         assert!(tr.is_some());
         assert_eq!(tr.unwrap().kind, ApiKind::Trait);
 
-        let en = surface.apis.iter().find(|a| a.qualified_name.contains("MyEnum"));
+        let en = surface
+            .apis
+            .iter()
+            .find(|a| a.qualified_name.contains("MyEnum"));
         assert!(en.is_some());
         assert_eq!(en.unwrap().kind, ApiKind::Enum);
     }
@@ -469,21 +525,27 @@ type MyInterface interface {
     #[test]
     fn test_surface_go_extracts_exported() {
         let (dir, _) = go_fixture();
-        let result = extract_api_surface(
-            dir.path().to_str().unwrap(),
-            Some("go"),
-            false,
-            None,
-            None,
-        );
+        let result =
+            extract_api_surface(dir.path().to_str().unwrap(), Some("go"), false, None, None);
 
-        assert!(result.is_ok(), "Go surface extraction failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Go surface extraction failed: {:?}",
+            result.err()
+        );
         let surface = result.unwrap();
 
         assert_eq!(surface.language, "go");
-        assert!(!surface.apis.is_empty(), "expected non-empty Go API surface");
+        assert!(
+            !surface.apis.is_empty(),
+            "expected non-empty Go API surface"
+        );
 
-        let names: Vec<&str> = surface.apis.iter().map(|a| a.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|a| a.qualified_name.as_str())
+            .collect();
 
         // Exported (uppercase) items
         assert!(
@@ -501,16 +563,15 @@ type MyInterface interface {
     #[test]
     fn test_surface_go_excludes_unexported() {
         let (dir, _) = go_fixture();
-        let surface = extract_api_surface(
-            dir.path().to_str().unwrap(),
-            Some("go"),
-            false,
-            None,
-            None,
-        )
-        .unwrap();
+        let surface =
+            extract_api_surface(dir.path().to_str().unwrap(), Some("go"), false, None, None)
+                .unwrap();
 
-        let names: Vec<&str> = surface.apis.iter().map(|a| a.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|a| a.qualified_name.as_str())
+            .collect();
 
         // Unexported (lowercase) items must be excluded
         assert!(
@@ -528,20 +589,21 @@ type MyInterface interface {
     #[test]
     fn test_surface_go_api_kinds() {
         let (dir, _) = go_fixture();
-        let surface = extract_api_surface(
-            dir.path().to_str().unwrap(),
-            Some("go"),
-            false,
-            None,
-            None,
-        )
-        .unwrap();
+        let surface =
+            extract_api_surface(dir.path().to_str().unwrap(), Some("go"), false, None, None)
+                .unwrap();
 
-        let func = surface.apis.iter().find(|a| a.qualified_name.contains("PublicFunc"));
+        let func = surface
+            .apis
+            .iter()
+            .find(|a| a.qualified_name.contains("PublicFunc"));
         assert!(func.is_some(), "PublicFunc not found");
         assert_eq!(func.unwrap().kind, ApiKind::Function);
 
-        let st = surface.apis.iter().find(|a| a.qualified_name.contains("MyStruct"));
+        let st = surface
+            .apis
+            .iter()
+            .find(|a| a.qualified_name.contains("MyStruct"));
         assert!(st.is_some(), "MyStruct not found");
         assert_eq!(st.unwrap().kind, ApiKind::Struct);
     }
@@ -605,9 +667,16 @@ export const MY_CONST = 42;
         let surface = result.unwrap();
 
         assert_eq!(surface.language, "javascript");
-        assert!(!surface.apis.is_empty(), "expected non-empty JS API surface");
+        assert!(
+            !surface.apis.is_empty(),
+            "expected non-empty JS API surface"
+        );
 
-        let names: Vec<&str> = surface.apis.iter().map(|a| a.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|a| a.qualified_name.as_str())
+            .collect();
 
         assert!(
             names.iter().any(|n| n.contains("publicFunc")),
@@ -634,7 +703,11 @@ export const MY_CONST = 42;
         )
         .unwrap();
 
-        let names: Vec<&str> = surface.apis.iter().map(|a| a.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|a| a.qualified_name.as_str())
+            .collect();
 
         assert!(
             !names.iter().any(|n| n.contains("internalFunc")),
@@ -701,9 +774,16 @@ export const MY_CONST: number = 42;
         let surface = result.unwrap();
 
         assert_eq!(surface.language, "typescript");
-        assert!(!surface.apis.is_empty(), "expected non-empty TS API surface");
+        assert!(
+            !surface.apis.is_empty(),
+            "expected non-empty TS API surface"
+        );
 
-        let names: Vec<&str> = surface.apis.iter().map(|a| a.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|a| a.qualified_name.as_str())
+            .collect();
 
         assert!(
             names.iter().any(|n| n.contains("publicFunc")),
@@ -754,7 +834,11 @@ export const MY_CONST: number = 42;
         )
         .unwrap();
 
-        let names: Vec<&str> = surface.apis.iter().map(|a| a.qualified_name.as_str()).collect();
+        let names: Vec<&str> = surface
+            .apis
+            .iter()
+            .map(|a| a.qualified_name.as_str())
+            .collect();
 
         assert!(
             !names.iter().any(|n| n.contains("privateFunc")),
@@ -775,7 +859,10 @@ export const MY_CONST: number = 42;
         )
         .unwrap();
 
-        let type_entry = surface.apis.iter().find(|a| a.qualified_name.contains("MyType"));
+        let type_entry = surface
+            .apis
+            .iter()
+            .find(|a| a.qualified_name.contains("MyType"));
         assert!(type_entry.is_some(), "MyType not found in TS surface");
         assert_eq!(type_entry.unwrap().kind, ApiKind::TypeAlias);
     }
@@ -790,7 +877,13 @@ fn test_surface_unsupported_language_errors() {
     let dir = TempDir::new().unwrap();
     write_fixture(&dir, "lib.rb", "def hello; end");
 
-    let result = extract_api_surface(dir.path().to_str().unwrap(), Some("ruby"), false, None, None);
+    let result = extract_api_surface(
+        dir.path().to_str().unwrap(),
+        Some("ruby"),
+        false,
+        None,
+        None,
+    );
 
     assert!(
         result.is_err(),
@@ -827,7 +920,11 @@ def gamma():
     )
     .unwrap();
 
-    assert_eq!(surface.apis.len(), 1, "lookup should filter to exactly 1 entry");
+    assert_eq!(
+        surface.apis.len(),
+        1,
+        "lookup should filter to exactly 1 entry"
+    );
     assert!(surface.apis[0].qualified_name.contains("beta"));
 }
 
@@ -1011,10 +1108,21 @@ function process_data(input) {
     fn test_search_nonexistent_pattern_returns_empty() {
         let dir = search_fixture();
 
-        let results =
-            search("zzz_nonexistent_pattern_xyz", dir.path(), None, 0, 100, 100, None).unwrap();
+        let results = search(
+            "zzz_nonexistent_pattern_xyz",
+            dir.path(),
+            None,
+            0,
+            100,
+            100,
+            None,
+        )
+        .unwrap();
 
-        assert!(results.is_empty(), "expected no matches for nonexistent pattern");
+        assert!(
+            results.is_empty(),
+            "expected no matches for nonexistent pattern"
+        );
     }
 
     #[test]
@@ -1086,13 +1194,14 @@ def calculate(op, a, b):
             search_mode: SearchMode::Regex(r"def\s+(add|subtract|multiply)".to_string()),
         };
 
-        let result = enriched_search("add subtract multiply", dir.path(), Language::Python, options);
-
-        assert!(
-            result.is_ok(),
-            "enriched_search failed: {:?}",
-            result.err()
+        let result = enriched_search(
+            "add subtract multiply",
+            dir.path(),
+            Language::Python,
+            options,
         );
+
+        assert!(result.is_ok(), "enriched_search failed: {:?}", result.err());
         let report = result.unwrap();
         assert!(
             !report.results.is_empty(),
@@ -1102,9 +1211,20 @@ def calculate(op, a, b):
         // Each result should have a name, file, and signature
         for r in &report.results {
             assert!(!r.name.is_empty(), "expected non-empty name");
-            assert!(!r.file.to_string_lossy().is_empty(), "expected non-empty file path");
-            assert!(!r.signature.is_empty(), "expected non-empty signature for {}", r.name);
-            assert!(r.line_range.0 > 0, "expected positive start line for {}", r.name);
+            assert!(
+                !r.file.to_string_lossy().is_empty(),
+                "expected non-empty file path"
+            );
+            assert!(
+                !r.signature.is_empty(),
+                "expected non-empty signature for {}",
+                r.name
+            );
+            assert!(
+                r.line_range.0 > 0,
+                "expected positive start line for {}",
+                r.name
+            );
             assert!(
                 r.line_range.1 >= r.line_range.0,
                 "expected end >= start for {}",
@@ -1151,7 +1271,11 @@ def calculate(op, a, b):
 
         let result = enriched_search("add subtract", dir.path(), Language::Python, options);
 
-        assert!(result.is_ok(), "regex enriched search failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "regex enriched search failed: {:?}",
+            result.err()
+        );
         let report = result.unwrap();
         // Should find at least the add and subtract functions
         let names: Vec<&str> = report.results.iter().map(|r| r.name.as_str()).collect();
@@ -1704,7 +1828,11 @@ def transform(x):
             None,
         );
 
-        assert!(result.is_ok(), "get_relevant_context failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "get_relevant_context failed: {:?}",
+            result.err()
+        );
         let ctx = result.unwrap();
 
         assert_eq!(ctx.entry_point, "main");
@@ -1726,8 +1854,8 @@ def transform(x):
     fn test_context_includes_callees() {
         let dir = context_fixture();
 
-        let ctx = get_relevant_context(dir.path(), "main", 2, Language::Python, true, None)
-            .unwrap();
+        let ctx =
+            get_relevant_context(dir.path(), "main", 2, Language::Python, true, None).unwrap();
 
         let names: Vec<&str> = ctx.functions.iter().map(|f| f.name.as_str()).collect();
 
@@ -1748,8 +1876,8 @@ def transform(x):
     fn test_context_function_has_signature() {
         let dir = context_fixture();
 
-        let ctx = get_relevant_context(dir.path(), "main", 1, Language::Python, true, None)
-            .unwrap();
+        let ctx =
+            get_relevant_context(dir.path(), "main", 1, Language::Python, true, None).unwrap();
 
         for func in &ctx.functions {
             assert!(
@@ -1764,8 +1892,8 @@ def transform(x):
     fn test_context_includes_docstrings() {
         let dir = context_fixture();
 
-        let ctx = get_relevant_context(dir.path(), "main", 1, Language::Python, true, None)
-            .unwrap();
+        let ctx =
+            get_relevant_context(dir.path(), "main", 1, Language::Python, true, None).unwrap();
 
         let main_func = ctx.functions.iter().find(|f| f.name == "main");
         assert!(main_func.is_some(), "expected 'main' in context");
@@ -1781,8 +1909,8 @@ def transform(x):
     fn test_context_to_llm_string() {
         let dir = context_fixture();
 
-        let ctx = get_relevant_context(dir.path(), "main", 1, Language::Python, true, None)
-            .unwrap();
+        let ctx =
+            get_relevant_context(dir.path(), "main", 1, Language::Python, true, None).unwrap();
 
         let llm_str = ctx.to_llm_string();
 
@@ -1791,18 +1919,15 @@ def transform(x):
             llm_str.contains("Code Context"),
             "expected 'Code Context' header in LLM output"
         );
-        assert!(
-            llm_str.contains("main"),
-            "expected 'main' in LLM output"
-        );
+        assert!(llm_str.contains("main"), "expected 'main' in LLM output");
     }
 
     #[test]
     fn test_context_depth_zero_returns_entry_only() {
         let dir = context_fixture();
 
-        let ctx = get_relevant_context(dir.path(), "main", 0, Language::Python, true, None)
-            .unwrap();
+        let ctx =
+            get_relevant_context(dir.path(), "main", 0, Language::Python, true, None).unwrap();
 
         // With depth=0, only the entry point function should be included
         assert_eq!(
@@ -1916,7 +2041,10 @@ def simple_func(a, b):
 
         // May or may not have items depending on thresholds, but the report
         // structure should be correct
-        assert!(report.total_elapsed_ms >= 0.0, "expected non-negative total_elapsed_ms");
+        assert!(
+            report.total_elapsed_ms >= 0.0,
+            "expected non-negative total_elapsed_ms"
+        );
     }
 
     #[test]
@@ -2290,7 +2418,9 @@ module.exports = { handleRequest };
         let results = search("def handle", dir.path(), Some(&py_exts), 0, 100, 100, None).unwrap();
 
         assert!(!results.is_empty(), "expected Python search results");
-        assert!(results.iter().all(|m| m.file.to_string_lossy().ends_with(".py")));
+        assert!(results
+            .iter()
+            .all(|m| m.file.to_string_lossy().ends_with(".py")));
     }
 
     #[test]
@@ -2298,11 +2428,12 @@ module.exports = { handleRequest };
         let dir = multilang_search_fixture();
         let go_exts: HashSet<String> = [".go".to_string()].into_iter().collect();
 
-        let results =
-            search("func Handle", dir.path(), Some(&go_exts), 0, 100, 100, None).unwrap();
+        let results = search("func Handle", dir.path(), Some(&go_exts), 0, 100, 100, None).unwrap();
 
         assert!(!results.is_empty(), "expected Go search results");
-        assert!(results.iter().all(|m| m.file.to_string_lossy().ends_with(".go")));
+        assert!(results
+            .iter()
+            .all(|m| m.file.to_string_lossy().ends_with(".go")));
     }
 
     #[test]
@@ -2322,7 +2453,9 @@ module.exports = { handleRequest };
         .unwrap();
 
         assert!(!results.is_empty(), "expected TypeScript search results");
-        assert!(results.iter().all(|m| m.file.to_string_lossy().ends_with(".ts")));
+        assert!(results
+            .iter()
+            .all(|m| m.file.to_string_lossy().ends_with(".ts")));
     }
 
     #[test]
@@ -2330,10 +2463,20 @@ module.exports = { handleRequest };
         let dir = multilang_search_fixture();
         let rs_exts: HashSet<String> = [".rs".to_string()].into_iter().collect();
 
-        let results =
-            search("fn handle_request", dir.path(), Some(&rs_exts), 0, 100, 100, None).unwrap();
+        let results = search(
+            "fn handle_request",
+            dir.path(),
+            Some(&rs_exts),
+            0,
+            100,
+            100,
+            None,
+        )
+        .unwrap();
 
         assert!(!results.is_empty(), "expected Rust search results");
-        assert!(results.iter().all(|m| m.file.to_string_lossy().ends_with(".rs")));
+        assert!(results
+            .iter()
+            .all(|m| m.file.to_string_lossy().ends_with(".rs")));
     }
 }

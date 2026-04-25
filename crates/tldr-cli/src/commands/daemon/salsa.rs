@@ -204,10 +204,7 @@ impl QueryCache {
 
         // Track dependencies for invalidation
         for &hash in &input_hashes {
-            self.dependents
-                .entry(hash)
-                .or_default()
-                .insert(key.clone());
+            self.dependents.entry(hash).or_default().insert(key.clone());
         }
 
         // Track bytes: subtract old entry if replacing
@@ -852,7 +849,10 @@ mod tests {
         // Insert a value and check bytes increased
         cache.insert(QueryKey::new("q1", 1), &"hello", vec![]);
         let bytes_after_one = cache.total_bytes();
-        assert!(bytes_after_one > 0, "total_bytes should increase after insert");
+        assert!(
+            bytes_after_one > 0,
+            "total_bytes should increase after insert"
+        );
 
         // Insert another and check it increased further
         cache.insert(QueryKey::new("q2", 2), &"world", vec![]);
@@ -1038,7 +1038,11 @@ mod tests {
         /// Arbitrary cache operation
         #[derive(Debug, Clone)]
         enum CacheOp {
-            Insert { key_id: u8, payload_len: usize, input_hash: u64 },
+            Insert {
+                key_id: u8,
+                payload_len: usize,
+                input_hash: u64,
+            },
             InvalidateByInput(u64),
             InvalidateByKey(u8),
             Clear,
@@ -1046,12 +1050,11 @@ mod tests {
 
         fn arb_cache_op() -> impl Strategy<Value = CacheOp> {
             prop_oneof![
-                (any::<u8>(), 0..2000usize, any::<u64>())
-                    .prop_map(|(k, p, h)| CacheOp::Insert {
-                        key_id: k,
-                        payload_len: p,
-                        input_hash: h % 16, // cluster hashes for overlap
-                    }),
+                (any::<u8>(), 0..2000usize, any::<u64>()).prop_map(|(k, p, h)| CacheOp::Insert {
+                    key_id: k,
+                    payload_len: p,
+                    input_hash: h % 16, // cluster hashes for overlap
+                }),
                 (any::<u64>()).prop_map(|h| CacheOp::InvalidateByInput(h % 16)),
                 (any::<u8>()).prop_map(CacheOp::InvalidateByKey),
                 Just(CacheOp::Clear),

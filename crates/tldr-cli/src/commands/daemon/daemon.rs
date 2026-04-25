@@ -30,16 +30,17 @@ use super::types::{
     SalsaCacheStats, SessionStats, HOOK_FLUSH_THRESHOLD,
 };
 
+#[cfg(test)]
+use super::types::DEFAULT_REINDEX_THRESHOLD;
+#[cfg(feature = "semantic")]
+use tldr_core::semantic::{BuildOptions, CacheConfig, IndexSearchOptions, SemanticIndex};
 use tldr_core::{
     architecture_analysis, build_project_call_graph, change_impact, collect_all_functions,
     dead_code_analysis, detect_or_parse_language, extract_file, find_importers, get_cfg_context,
     get_code_structure, get_dfg_context, get_file_tree, get_imports, get_relevant_context,
-    get_slice, impact_analysis, search as tldr_search, FileTree, Language, NodeType, SliceDirection,
+    get_slice, impact_analysis, search as tldr_search, FileTree, Language, NodeType,
+    SliceDirection,
 };
-#[cfg(feature = "semantic")]
-use tldr_core::semantic::{BuildOptions, CacheConfig, IndexSearchOptions, SemanticIndex};
-#[cfg(test)]
-use super::types::DEFAULT_REINDEX_THRESHOLD;
 
 // =============================================================================
 // Helper Functions
@@ -357,10 +358,8 @@ impl TLDRDaemon {
                 let mut errors = Vec::new();
 
                 // 1. Warm call graph
-                let calls_key = QueryKey::new(
-                    "calls",
-                    hash_str_args(&[&self.project.to_string_lossy()]),
-                );
+                let calls_key =
+                    QueryKey::new("calls", hash_str_args(&[&self.project.to_string_lossy()]));
                 if self.cache.get::<serde_json::Value>(&calls_key).is_some() {
                     warmed.push("call_graph (cached)");
                 } else {
@@ -393,10 +392,8 @@ impl TLDRDaemon {
                 }
 
                 // 3. Warm file tree
-                let tree_key = QueryKey::new(
-                    "tree",
-                    hash_str_args(&[&self.project.to_string_lossy()]),
-                );
+                let tree_key =
+                    QueryKey::new("tree", hash_str_args(&[&self.project.to_string_lossy()]));
                 if self.cache.get::<serde_json::Value>(&tree_key).is_some() {
                     warmed.push("file_tree (cached)");
                 } else {
@@ -517,22 +514,11 @@ impl TLDRDaemon {
                 max_results,
             } => {
                 let max = max_results.unwrap_or(100);
-                let key = QueryKey::new(
-                    "search",
-                    hash_str_args(&[&pattern, &max.to_string()]),
-                );
+                let key = QueryKey::new("search", hash_str_args(&[&pattern, &max.to_string()]));
                 if let Some(cached) = self.cache.get::<serde_json::Value>(&key) {
                     return DaemonResponse::Result(cached);
                 }
-                match tldr_search(
-                    &pattern,
-                    &self.project,
-                    None,
-                    2,
-                    max,
-                    1000,
-                    None,
-                ) {
+                match tldr_search(&pattern, &self.project, None, 2, max, 1000, None) {
                     Ok(result) => {
                         let val = serde_json::to_value(&result).unwrap_or_default();
                         self.cache.insert(key, &val, vec![]);
@@ -588,10 +574,7 @@ impl TLDRDaemon {
             DaemonCommand::Structure { path, lang } => {
                 let path_str = path.to_string_lossy().to_string();
                 let lang_str = lang.as_deref().unwrap_or("");
-                let key = QueryKey::new(
-                    "structure",
-                    hash_str_args(&[&path_str, lang_str]),
-                );
+                let key = QueryKey::new("structure", hash_str_args(&[&path_str, lang_str]));
                 if let Some(cached) = self.cache.get::<serde_json::Value>(&key) {
                     return DaemonResponse::Result(cached);
                 }
@@ -619,21 +602,11 @@ impl TLDRDaemon {
 
             DaemonCommand::Context { entry, depth } => {
                 let d = depth.unwrap_or(2);
-                let key = QueryKey::new(
-                    "context",
-                    hash_str_args(&[&entry, &d.to_string()]),
-                );
+                let key = QueryKey::new("context", hash_str_args(&[&entry, &d.to_string()]));
                 if let Some(cached) = self.cache.get::<serde_json::Value>(&key) {
                     return DaemonResponse::Result(cached);
                 }
-                match get_relevant_context(
-                    &self.project,
-                    &entry,
-                    d,
-                    Language::Python,
-                    true,
-                    None,
-                ) {
+                match get_relevant_context(&self.project, &entry, d, Language::Python, true, None) {
                     Ok(result) => {
                         let val = serde_json::to_value(&result).unwrap_or_default();
                         self.cache.insert(key, &val, vec![]);
@@ -648,10 +621,7 @@ impl TLDRDaemon {
 
             DaemonCommand::Cfg { file, function } => {
                 let file_str = file.to_string_lossy().to_string();
-                let key = QueryKey::new(
-                    "cfg",
-                    hash_str_args(&[&file_str, &function]),
-                );
+                let key = QueryKey::new("cfg", hash_str_args(&[&file_str, &function]));
                 if let Some(cached) = self.cache.get::<serde_json::Value>(&key) {
                     return DaemonResponse::Result(cached);
                 }
@@ -680,10 +650,7 @@ impl TLDRDaemon {
 
             DaemonCommand::Dfg { file, function } => {
                 let file_str = file.to_string_lossy().to_string();
-                let key = QueryKey::new(
-                    "dfg",
-                    hash_str_args(&[&file_str, &function]),
-                );
+                let key = QueryKey::new("dfg", hash_str_args(&[&file_str, &function]));
                 if let Some(cached) = self.cache.get::<serde_json::Value>(&key) {
                     return DaemonResponse::Result(cached);
                 }
@@ -775,10 +742,7 @@ impl TLDRDaemon {
 
             DaemonCommand::Impact { func, depth } => {
                 let d = depth.unwrap_or(3);
-                let key = QueryKey::new(
-                    "impact",
-                    hash_str_args(&[&func, &d.to_string()]),
-                );
+                let key = QueryKey::new("impact", hash_str_args(&[&func, &d.to_string()]));
                 if let Some(cached) = self.cache.get::<serde_json::Value>(&key) {
                     return DaemonResponse::Result(cached);
                 }
@@ -808,30 +772,26 @@ impl TLDRDaemon {
             DaemonCommand::Dead { path, entry } => {
                 let root = path.unwrap_or_else(|| self.project.clone());
                 let root_str = root.to_string_lossy().to_string();
-                let entry_str = entry
-                    .as_ref()
-                    .map(|v| v.join(","))
-                    .unwrap_or_default();
-                let key = QueryKey::new(
-                    "dead",
-                    hash_str_args(&[&root_str, &entry_str]),
-                );
+                let entry_str = entry.as_ref().map(|v| v.join(",")).unwrap_or_default();
+                let key = QueryKey::new("dead", hash_str_args(&[&root_str, &entry_str]));
                 if let Some(cached) = self.cache.get::<serde_json::Value>(&key) {
                     return DaemonResponse::Result(cached);
                 }
-                let graph =
-                    match build_project_call_graph(&root, Language::Python, None, true) {
-                        Ok(g) => g,
-                        Err(e) => {
-                            return DaemonResponse::Error {
-                                status: "error".to_string(),
-                                error: e.to_string(),
-                            }
+                let graph = match build_project_call_graph(&root, Language::Python, None, true) {
+                    Ok(g) => g,
+                    Err(e) => {
+                        return DaemonResponse::Error {
+                            status: "error".to_string(),
+                            error: e.to_string(),
                         }
-                    };
+                    }
+                };
                 // Collect all functions from the project by extracting each file
-                let extensions: HashSet<String> =
-                    Language::Python.extensions().iter().map(|s| s.to_string()).collect();
+                let extensions: HashSet<String> = Language::Python
+                    .extensions()
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect();
                 let file_tree = match get_file_tree(&root, Some(&extensions), true, None) {
                     Ok(t) => t,
                     Err(e) => {
@@ -871,16 +831,15 @@ impl TLDRDaemon {
                 if let Some(cached) = self.cache.get::<serde_json::Value>(&key) {
                     return DaemonResponse::Result(cached);
                 }
-                let graph =
-                    match build_project_call_graph(&root, Language::Python, None, true) {
-                        Ok(g) => g,
-                        Err(e) => {
-                            return DaemonResponse::Error {
-                                status: "error".to_string(),
-                                error: e.to_string(),
-                            }
+                let graph = match build_project_call_graph(&root, Language::Python, None, true) {
+                    Ok(g) => g,
+                    Err(e) => {
+                        return DaemonResponse::Error {
+                            status: "error".to_string(),
+                            error: e.to_string(),
                         }
-                    };
+                    }
+                };
                 match architecture_analysis(&graph) {
                     Ok(result) => {
                         let val = serde_json::to_value(&result).unwrap_or_default();
@@ -926,10 +885,7 @@ impl TLDRDaemon {
             DaemonCommand::Importers { module, path } => {
                 let root = path.unwrap_or_else(|| self.project.clone());
                 let root_str = root.to_string_lossy().to_string();
-                let key = QueryKey::new(
-                    "importers",
-                    hash_str_args(&[&module, &root_str]),
-                );
+                let key = QueryKey::new("importers", hash_str_args(&[&module, &root_str]));
                 if let Some(cached) = self.cache.get::<serde_json::Value>(&key) {
                     return DaemonResponse::Result(cached);
                 }
@@ -946,16 +902,14 @@ impl TLDRDaemon {
                 }
             }
 
-            DaemonCommand::Diagnostics { path, project: _ } => {
-                DaemonResponse::Error {
-                    status: "error".to_string(),
-                    error: format!(
-                        "Diagnostics requires external tool orchestration; \
+            DaemonCommand::Diagnostics { path, project: _ } => DaemonResponse::Error {
+                status: "error".to_string(),
+                error: format!(
+                    "Diagnostics requires external tool orchestration; \
                          use CLI directly: tldr diagnostics {}",
-                        path.display()
-                    ),
-                }
-            }
+                    path.display()
+                ),
+            },
 
             DaemonCommand::ChangeImpact {
                 files,
@@ -971,19 +925,12 @@ impl TLDRDaemon {
                             .join(",")
                     })
                     .unwrap_or_default();
-                let key = QueryKey::new(
-                    "change_impact",
-                    hash_str_args(&[&files_str]),
-                );
+                let key = QueryKey::new("change_impact", hash_str_args(&[&files_str]));
                 if let Some(cached) = self.cache.get::<serde_json::Value>(&key) {
                     return DaemonResponse::Result(cached);
                 }
                 let changed: Option<Vec<PathBuf>> = files;
-                match change_impact(
-                    &self.project,
-                    changed.as_deref(),
-                    Language::Python,
-                ) {
+                match change_impact(&self.project, changed.as_deref(), Language::Python) {
                     Ok(result) => {
                         let val = serde_json::to_value(&result).unwrap_or_default();
                         self.cache.insert(key, &val, vec![]);
@@ -1325,7 +1272,8 @@ mod tests {
 
         match response {
             DaemonResponse::NotifyResponse {
-                reindex_triggered: _, ..
+                reindex_triggered: _,
+                ..
             } => {
                 // After threshold is hit, dirty set is cleared
                 // So reindex_triggered would have been true, but dirty_count is now 1
@@ -1433,7 +1381,10 @@ mod tests {
             DaemonResponse::Result(val) => {
                 assert!(val.is_array(), "Search should return an array of matches");
                 let arr = val.as_array().unwrap();
-                assert!(!arr.is_empty(), "Should find at least one match for 'def hello'");
+                assert!(
+                    !arr.is_empty(),
+                    "Should find at least one match for 'def hello'"
+                );
             }
             DaemonResponse::Error { error, .. } => {
                 panic!("Search returned error: {}", error);
@@ -1483,9 +1434,15 @@ mod tests {
 
         match response {
             DaemonResponse::Result(val) => {
-                assert!(val.is_object(), "Extract should return a module info object");
+                assert!(
+                    val.is_object(),
+                    "Extract should return a module info object"
+                );
                 // Should contain functions field
-                assert!(val.get("functions").is_some(), "Should have 'functions' field");
+                assert!(
+                    val.get("functions").is_some(),
+                    "Should have 'functions' field"
+                );
             }
             DaemonResponse::Error { error, .. } => {
                 panic!("Extract returned error: {}", error);
@@ -1554,7 +1511,10 @@ mod tests {
 
         match response {
             DaemonResponse::Result(val) => {
-                assert!(val.is_object(), "Structure should return a CodeStructure object");
+                assert!(
+                    val.is_object(),
+                    "Structure should return a CodeStructure object"
+                );
             }
             DaemonResponse::Error { error, .. } => {
                 panic!("Structure returned error: {}", error);
@@ -1603,7 +1563,10 @@ mod tests {
         match response {
             DaemonResponse::Result(val) => {
                 assert!(val.is_object(), "Cfg should return a CfgInfo object");
-                assert!(val.get("function").is_some(), "Should have 'function' field");
+                assert!(
+                    val.get("function").is_some(),
+                    "Should have 'function' field"
+                );
             }
             DaemonResponse::Error { error, .. } => {
                 panic!("Cfg returned error: {}", error);
@@ -1629,7 +1592,10 @@ mod tests {
         match response {
             DaemonResponse::Result(val) => {
                 assert!(val.is_object(), "Dfg should return a DfgInfo object");
-                assert!(val.get("function").is_some(), "Should have 'function' field");
+                assert!(
+                    val.get("function").is_some(),
+                    "Should have 'function' field"
+                );
             }
             DaemonResponse::Error { error, .. } => {
                 panic!("Dfg returned error: {}", error);
@@ -1650,7 +1616,10 @@ mod tests {
 
         match response {
             DaemonResponse::Result(val) => {
-                assert!(val.is_object(), "Calls should return a ProjectCallGraph object");
+                assert!(
+                    val.is_object(),
+                    "Calls should return a ProjectCallGraph object"
+                );
             }
             DaemonResponse::Error { error, .. } => {
                 panic!("Calls returned error: {}", error);
@@ -1671,7 +1640,10 @@ mod tests {
 
         match response {
             DaemonResponse::Result(val) => {
-                assert!(val.is_object(), "Arch should return an ArchitectureReport object");
+                assert!(
+                    val.is_object(),
+                    "Arch should return an ArchitectureReport object"
+                );
             }
             DaemonResponse::Error { error, .. } => {
                 panic!("Arch returned error: {}", error);
@@ -1725,7 +1697,10 @@ mod tests {
 
         match response {
             DaemonResponse::Result(val) => {
-                assert!(val.is_object(), "Importers should return an ImportersReport object");
+                assert!(
+                    val.is_object(),
+                    "Importers should return an ImportersReport object"
+                );
             }
             DaemonResponse::Error { error, .. } => {
                 panic!("Importers returned error: {}", error);
@@ -1749,7 +1724,10 @@ mod tests {
 
         match response {
             DaemonResponse::Result(val) => {
-                assert!(val.is_object(), "Dead should return a DeadCodeReport object");
+                assert!(
+                    val.is_object(),
+                    "Dead should return a DeadCodeReport object"
+                );
             }
             DaemonResponse::Error { error, .. } => {
                 panic!("Dead returned error: {}", error);
@@ -1841,7 +1819,10 @@ mod tests {
 
         match response {
             DaemonResponse::Result(val) => {
-                assert!(val.is_array(), "Slice should return an array of line numbers");
+                assert!(
+                    val.is_array(),
+                    "Slice should return an array of line numbers"
+                );
             }
             DaemonResponse::Error { error, .. } => {
                 panic!("Slice returned error: {}", error);
@@ -1867,7 +1848,10 @@ mod tests {
         // in the call graph. Both are valid outcomes for this test.
         match response {
             DaemonResponse::Result(val) => {
-                assert!(val.is_object(), "Context should return a RelevantContext object");
+                assert!(
+                    val.is_object(),
+                    "Context should return a RelevantContext object"
+                );
             }
             DaemonResponse::Error { .. } => {
                 // Function not found in call graph is acceptable
@@ -1892,7 +1876,10 @@ mod tests {
         // Impact may return Result or Error depending on call graph contents
         match response {
             DaemonResponse::Result(val) => {
-                assert!(val.is_object(), "Impact should return an ImpactReport object");
+                assert!(
+                    val.is_object(),
+                    "Impact should return an ImpactReport object"
+                );
             }
             DaemonResponse::Error { .. } => {
                 // Function not found in call graph is acceptable for small test projects
@@ -2058,9 +2045,7 @@ mod tests {
 
         // Any command should NOT update last_activity (only connections do),
         // but handle_command is what we can test. Verify the field exists and is accessible.
-        let _ = daemon
-            .handle_command(DaemonCommand::Ping)
-            .await;
+        let _ = daemon.handle_command(DaemonCommand::Ping).await;
 
         // last_activity is set at connection accept, not command handling,
         // so it should still be the initial value

@@ -14,10 +14,10 @@ use std::path::PathBuf;
 
 use tempfile::NamedTempFile;
 
+use tldr_cli::commands::remaining::diff::DiffArgs;
 use tldr_cli::commands::remaining::types::{
     ASTChange, ChangeType, DiffGranularity, DiffReport, DiffSummary, NodeKind,
 };
-use tldr_cli::commands::remaining::diff::DiffArgs;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -48,7 +48,8 @@ fn run_l3_diff(file_a: &NamedTempFile, file_b: &NamedTempFile) -> DiffReport {
         semantic_only: false,
         output: None,
     };
-    args.run_to_report().expect("L3 statement-level diff should succeed")
+    args.run_to_report()
+        .expect("L3 statement-level diff should succeed")
 }
 
 /// Find a change in the report by name and change_type.
@@ -110,7 +111,10 @@ def helper():
     let file_b = write_temp_py(source);
     let report = run_l3_diff(&file_a, &file_b);
 
-    assert!(report.identical, "Identical files should produce identical=true");
+    assert!(
+        report.identical,
+        "Identical files should produce identical=true"
+    );
     assert!(
         report.changes.is_empty(),
         "Identical files should have zero changes, got {}",

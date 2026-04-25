@@ -37,16 +37,15 @@ use tldr_core::Language;
 
 use tldr_cli::commands::remaining::{ApiCheckArgs, VulnArgs};
 use tldr_cli::commands::{
-    ApiSurfaceArgs, AvailableArgs, BugbotCheckArgs, CacheClearArgs,
-    CacheStatsArgs, CallsArgs, ChangeImpactArgs, ChopArgs, ChurnArgs, ClonesArgs, CognitiveArgs,
-    ComplexityArgs, ContractsArgs, ContextArgs, CoverageArgs, DaemonNotifyArgs, DaemonQueryArgs,
-    DaemonStartArgs, DaemonStatusArgs, DaemonStopArgs, DeadArgs, DeadStoresArgs, DebtArgs,
-    DefinitionArgs, DepsArgs, DiagnosticsArgs, DiceArgs, DiffArgs, DoctorArgs, ExplainArgs,
-    ExtractArgs, FixArgs, HalsteadArgs, HealthArgs, HotspotsArgs, HubsArgs, ImpactArgs,
-    ImportersArgs, ImportsArgs, InheritanceArgs, InvariantsArgs, LocArgs, PatternsArgs,
-    ReachingDefsArgs, ReferencesArgs, SecureArgs, SliceArgs, SmartSearchArgs, SmellsArgs,
-    SpecsArgs, StatsArgs, StructureArgs, TaintArgs, TodoArgs, TreeArgs, VerifyArgs, WarmArgs,
-    WhatbreaksArgs,
+    ApiSurfaceArgs, AvailableArgs, BugbotCheckArgs, CacheClearArgs, CacheStatsArgs, CallsArgs,
+    ChangeImpactArgs, ChopArgs, ChurnArgs, ClonesArgs, CognitiveArgs, ComplexityArgs, ContextArgs,
+    ContractsArgs, CoverageArgs, DaemonNotifyArgs, DaemonQueryArgs, DaemonStartArgs,
+    DaemonStatusArgs, DaemonStopArgs, DeadArgs, DeadStoresArgs, DebtArgs, DefinitionArgs, DepsArgs,
+    DiagnosticsArgs, DiceArgs, DiffArgs, DoctorArgs, ExplainArgs, ExtractArgs, FixArgs,
+    HalsteadArgs, HealthArgs, HotspotsArgs, HubsArgs, ImpactArgs, ImportersArgs, ImportsArgs,
+    InheritanceArgs, InvariantsArgs, LocArgs, PatternsArgs, ReachingDefsArgs, ReferencesArgs,
+    SecureArgs, SliceArgs, SmartSearchArgs, SmellsArgs, SpecsArgs, StatsArgs, StructureArgs,
+    TaintArgs, TodoArgs, TreeArgs, VerifyArgs, WarmArgs, WhatbreaksArgs,
 };
 // Pattern analysis commands
 use tldr_cli::commands::patterns::{

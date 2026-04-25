@@ -1296,8 +1296,7 @@ pub fn format_coupling_text(report: &CouplingReport) -> String {
     lines.push(String::new());
     lines.push(format!(
         "Score: {:.2} ({})",
-        report.coupling_score,
-        report.verdict
+        report.coupling_score, report.verdict
     ));
     lines.push(format!("Total cross-module calls: {}", report.total_calls));
     lines.push(String::new());

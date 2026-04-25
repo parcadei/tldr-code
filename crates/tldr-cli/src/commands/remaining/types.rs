@@ -41,18 +41,7 @@ impl std::fmt::Display for OutputFormat {
 // =============================================================================
 
 /// Severity level for findings.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    ValueEnum,
-    Default,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     Critical,
@@ -731,17 +720,7 @@ impl ExplainReport {
 // =============================================================================
 
 /// Symbol kind.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    ValueEnum,
-    Default,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SymbolKind {
     Function,

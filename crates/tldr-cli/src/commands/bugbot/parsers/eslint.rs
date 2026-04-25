@@ -78,12 +78,7 @@ pub fn parse_eslint_output(stdout: &str) -> Result<Vec<L1Finding>, ParseError> {
 /// Security-related rules (no-eval, no-implied-eval) get bumped to high.
 fn eslint_severity_to_bugbot(eslint_severity: u64, rule_id: &str) -> String {
     // Security-sensitive rules are always high
-    let security_rules = [
-        "no-eval",
-        "no-implied-eval",
-        "no-new-func",
-        "no-script-url",
-    ];
+    let security_rules = ["no-eval", "no-implied-eval", "no-new-func", "no-script-url"];
     if security_rules.contains(&rule_id) {
         return "high".to_string();
     }

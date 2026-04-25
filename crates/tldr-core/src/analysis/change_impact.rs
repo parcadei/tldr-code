@@ -1441,10 +1441,7 @@ func TestLogout(t *testing.T) {
                     reason
                 );
             }
-            other => panic!(
-                "expected NoBaseline for explicit-empty, got {:?}",
-                other
-            ),
+            other => panic!("expected NoBaseline for explicit-empty, got {:?}", other),
         }
     }
 

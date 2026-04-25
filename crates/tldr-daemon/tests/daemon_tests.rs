@@ -54,7 +54,6 @@ mod socket_tests {
 // =============================================================================
 
 mod message_tests {
-    
 
     #[test]
     fn ping_request_format() {
@@ -167,7 +166,6 @@ mod message_tests {
 // =============================================================================
 
 mod state_tests {
-    
 
     #[test]
     fn state_structure() {
@@ -207,7 +205,6 @@ mod state_tests {
 // =============================================================================
 
 mod daemon_performance_tests {
-    
 
     #[test]
     #[ignore] // Performance test

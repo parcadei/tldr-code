@@ -175,7 +175,10 @@ mod tests {
     #[test]
     fn test_parse_empty_output() {
         let findings = parse_cargo_output("");
-        assert!(findings.is_empty(), "empty input should produce no findings");
+        assert!(
+            findings.is_empty(),
+            "empty input should produce no findings"
+        );
     }
 
     #[test]
@@ -225,13 +228,19 @@ mod tests {
     #[test]
     fn test_skip_non_compiler_message() {
         let findings = parse_cargo_output(SAMPLE_BUILD_FINISHED);
-        assert!(findings.is_empty(), "build-finished should produce no findings");
+        assert!(
+            findings.is_empty(),
+            "build-finished should produce no findings"
+        );
     }
 
     #[test]
     fn test_skip_compiler_artifact() {
         let findings = parse_cargo_output(SAMPLE_COMPILER_ARTIFACT);
-        assert!(findings.is_empty(), "compiler-artifact should produce no findings");
+        assert!(
+            findings.is_empty(),
+            "compiler-artifact should produce no findings"
+        );
     }
 
     #[test]
@@ -302,10 +311,7 @@ mod tests {
 
     #[test]
     fn test_severity_mapping_ice() {
-        assert_eq!(
-            map_cargo_severity("error: internal compiler error"),
-            "high"
-        );
+        assert_eq!(map_cargo_severity("error: internal compiler error"), "high");
     }
 
     #[test]
@@ -337,20 +343,13 @@ mod tests {
     fn test_tool_name_is_empty_string() {
         let findings = parse_cargo_output(SAMPLE_WARNING);
         assert_eq!(findings.len(), 1);
-        assert_eq!(
-            findings[0].tool,
-            "",
-            "parser must NOT set tool name [PM-6]"
-        );
+        assert_eq!(findings[0].tool, "", "parser must NOT set tool name [PM-6]");
     }
 
     #[test]
     fn test_map_cargo_severity_all_levels() {
         assert_eq!(map_cargo_severity("error"), "high");
-        assert_eq!(
-            map_cargo_severity("error: internal compiler error"),
-            "high"
-        );
+        assert_eq!(map_cargo_severity("error: internal compiler error"), "high");
         assert_eq!(map_cargo_severity("warning"), "medium");
         assert_eq!(map_cargo_severity("note"), "info");
         assert_eq!(map_cargo_severity("help"), "info");

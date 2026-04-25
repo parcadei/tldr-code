@@ -98,11 +98,13 @@ fn test_severity_ordering() {
 
 #[test]
 fn test_severity_sorting() {
-    let mut severities = [Severity::Low,
+    let mut severities = [
+        Severity::Low,
         Severity::Critical,
         Severity::Info,
         Severity::High,
-        Severity::Medium];
+        Severity::Medium,
+    ];
     severities.sort();
 
     assert_eq!(severities[0], Severity::Info);

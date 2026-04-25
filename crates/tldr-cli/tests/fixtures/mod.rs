@@ -168,8 +168,8 @@ fn run_git(cwd: &Path, args: &[&str]) {
 fn comment_line(lang: &str, body: &str) -> String {
     match lang {
         // C-family line comment.
-        "typescript" | "javascript" | "go" | "rust" | "java" | "c"
-        | "cpp" | "kotlin" | "swift" | "csharp" | "scala" | "php" => {
+        "typescript" | "javascript" | "go" | "rust" | "java" | "c" | "cpp" | "kotlin" | "swift"
+        | "csharp" | "scala" | "php" => {
             format!("// {}\n", body)
         }
         // `#` comments.
@@ -217,7 +217,10 @@ pub fn build_git_fixture(lang: &str, root: &Path) {
 
     // Step 2: init repo + local-only identity config.
     run_git(root, &["init", "--quiet", "--initial-branch=main"]);
-    run_git(root, &["config", "--local", "user.email", "tldr-test@example.com"]);
+    run_git(
+        root,
+        &["config", "--local", "user.email", "tldr-test@example.com"],
+    );
     run_git(root, &["config", "--local", "user.name", "TldrTest"]);
     run_git(root, &["config", "--local", "commit.gpgsign", "false"]);
 
@@ -322,10 +325,7 @@ fn build_javascript(root: &Path) {
 // ============================================================================
 
 fn build_go(root: &Path) {
-    write_file(
-        &root.join("go.mod"),
-        "module example.com/x\n\ngo 1.21\n",
-    );
+    write_file(&root.join("go.mod"), "module example.com/x\n\ngo 1.21\n");
     write_file(
         &root.join("main.go"),
         "package main\n\nimport \"example.com/x/util\"\n\n\
@@ -355,10 +355,7 @@ fn build_rust(root: &Path) {
          fn main() {\n    let _ = helper();\n    let _ = util::b_util();\n}\n\n\
          fn dead_helper() -> i32 { 99 }\n",
     );
-    write_file(
-        &root.join("src/util.rs"),
-        "pub fn b_util() -> i32 { 2 }\n",
-    );
+    write_file(&root.join("src/util.rs"), "pub fn b_util() -> i32 { 2 }\n");
 }
 
 // ============================================================================
@@ -404,10 +401,7 @@ fn build_c(root: &Path) {
          int dead_helper(void) { return 99; }\n",
     );
     write_file(&root.join("util.h"), "int b_util(void);\n");
-    write_file(
-        &root.join("util.c"),
-        "int b_util(void) { return 2; }\n",
-    );
+    write_file(&root.join("util.c"), "int b_util(void) { return 2; }\n");
 }
 
 // ============================================================================
@@ -427,10 +421,7 @@ fn build_cpp(root: &Path) {
          int dead_helper() { return 99; }\n",
     );
     write_file(&root.join("util.hpp"), "int b_util();\n");
-    write_file(
-        &root.join("util.cpp"),
-        "int b_util() { return 2; }\n",
-    );
+    write_file(&root.join("util.cpp"), "int b_util() { return 2; }\n");
 }
 
 // ============================================================================
@@ -438,10 +429,7 @@ fn build_cpp(root: &Path) {
 // ============================================================================
 
 fn build_ruby(root: &Path) {
-    write_file(
-        &root.join("Gemfile"),
-        "source 'https://rubygems.org'\n",
-    );
+    write_file(&root.join("Gemfile"), "source 'https://rubygems.org'\n");
     // Idiomatic bareword Ruby method dispatch: `helper`/`b_util` (no parens).
     // VAL-012 ensures the Ruby callgraph handler resolves these
     // identifiers to method calls (not local variable reads).
@@ -452,10 +440,7 @@ fn build_ruby(root: &Path) {
          def main\n  helper\n  b_util\nend\n\n\
          def dead_helper\n  99\nend\n",
     );
-    write_file(
-        &root.join("util.rb"),
-        "def b_util\n  2\nend\n",
-    );
+    write_file(&root.join("util.rb"), "def b_util\n  2\nend\n");
 }
 
 // ============================================================================
@@ -471,10 +456,7 @@ fn build_kotlin(root: &Path) {
          fun main() {\n    helper()\n    bUtil()\n}\n\n\
          fun deadHelper(): Int = 99\n",
     );
-    write_file(
-        &root.join("Util.kt"),
-        "fun bUtil(): Int = 2\n",
-    );
+    write_file(&root.join("Util.kt"), "fun bUtil(): Int = 2\n");
 }
 
 // ============================================================================
@@ -482,10 +464,7 @@ fn build_kotlin(root: &Path) {
 // ============================================================================
 
 fn build_swift(root: &Path) {
-    write_file(
-        &root.join("Package.swift"),
-        "// swift-tools-version:5.5\n",
-    );
+    write_file(&root.join("Package.swift"), "// swift-tools-version:5.5\n");
     write_file(
         &root.join("Main.swift"),
         "func helper() -> Int { return 1 }\n\n\
@@ -630,10 +609,7 @@ fn build_luau(root: &Path) {
 // ============================================================================
 
 fn build_elixir(root: &Path) {
-    write_file(
-        &root.join("mix.exs"),
-        "defmodule X.MixProject do\nend\n",
-    );
+    write_file(&root.join("mix.exs"), "defmodule X.MixProject do\nend\n");
     write_file(
         &root.join("main.ex"),
         "defmodule Main do\n\
@@ -668,8 +644,5 @@ fn build_ocaml(root: &Path) {
          \x20 ()\n\n\
          let dead_helper () = 99\n",
     );
-    write_file(
-        &root.join("util.ml"),
-        "let b_util () = 2\n",
-    );
+    write_file(&root.join("util.ml"), "let b_util () = 2\n");
 }

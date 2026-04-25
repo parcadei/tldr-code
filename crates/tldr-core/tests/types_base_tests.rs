@@ -1469,11 +1469,13 @@ fn test_threshold_preset_variants() {
 
 #[test]
 fn test_smell_type_variants() {
-    let types = [SmellType::GodClass,
+    let types = [
+        SmellType::GodClass,
         SmellType::LongMethod,
         SmellType::FeatureEnvy,
         SmellType::DataClumps,
-        SmellType::LongParameterList];
+        SmellType::LongParameterList,
+    ];
 
     assert_eq!(types.len(), 5);
 }
@@ -1607,12 +1609,14 @@ fn test_secrets_summary_creation() {
 
 #[test]
 fn test_vuln_type_variants() {
-    let types = [VulnType::SqlInjection,
+    let types = [
+        VulnType::SqlInjection,
         VulnType::Xss,
         VulnType::CommandInjection,
         VulnType::PathTraversal,
         VulnType::Ssrf,
-        VulnType::Deserialization];
+        VulnType::Deserialization,
+    ];
 
     assert_eq!(types.len(), 6);
 }

@@ -224,10 +224,7 @@ impl TimingStats {
     }
 
     fn max_us(&self) -> f64 {
-        self.samples
-            .iter()
-            .copied()
-            .fold(0.0_f64, |a, b| a.max(b))
+        self.samples.iter().copied().fold(0.0_f64, |a, b| a.max(b))
     }
 
     fn count(&self) -> usize {
@@ -357,8 +354,16 @@ fn bench_call_graph_cache_large_payload() {
     println!("\n=== BENCHMARK: Call Graph Cache (Large Payload) ===");
     println!("  Edges: {}", call_graph.edges.len());
     println!("  Files: {}", call_graph.files.len());
-    println!("  Serialized size: {} bytes ({:.1} KB)", serialized_size, serialized_size as f64 / 1024.0);
-    println!("  Insert latency: {:.1}us ({:.3}ms)", insert_elapsed.as_nanos() as f64 / 1000.0, insert_elapsed.as_secs_f64() * 1000.0);
+    println!(
+        "  Serialized size: {} bytes ({:.1} KB)",
+        serialized_size,
+        serialized_size as f64 / 1024.0
+    );
+    println!(
+        "  Insert latency: {:.1}us ({:.3}ms)",
+        insert_elapsed.as_nanos() as f64 / 1000.0,
+        insert_elapsed.as_secs_f64() * 1000.0
+    );
 
     // Measure retrieve latency
     let mut stats = TimingStats::new();
@@ -423,11 +428,30 @@ fn bench_per_function_ir_cache_50_functions() {
     let populate_elapsed = populate_start.elapsed();
 
     println!("\n=== BENCHMARK: Per-Function IR Cache (50 functions, CFG+DFG) ===");
-    println!("  Cache entries: {} ({} CFGs + {} DFGs)", cache.len(), cfg_keys.len(), dfg_keys.len());
-    println!("  Total CFG bytes: {} ({:.1} KB)", total_cfg_bytes, total_cfg_bytes as f64 / 1024.0);
-    println!("  Total DFG bytes: {} ({:.1} KB)", total_dfg_bytes, total_dfg_bytes as f64 / 1024.0);
-    println!("  Total cached: {:.1} KB", (total_cfg_bytes + total_dfg_bytes) as f64 / 1024.0);
-    println!("  Populate time: {:.3}ms", populate_elapsed.as_secs_f64() * 1000.0);
+    println!(
+        "  Cache entries: {} ({} CFGs + {} DFGs)",
+        cache.len(),
+        cfg_keys.len(),
+        dfg_keys.len()
+    );
+    println!(
+        "  Total CFG bytes: {} ({:.1} KB)",
+        total_cfg_bytes,
+        total_cfg_bytes as f64 / 1024.0
+    );
+    println!(
+        "  Total DFG bytes: {} ({:.1} KB)",
+        total_dfg_bytes,
+        total_dfg_bytes as f64 / 1024.0
+    );
+    println!(
+        "  Total cached: {:.1} KB",
+        (total_cfg_bytes + total_dfg_bytes) as f64 / 1024.0
+    );
+    println!(
+        "  Populate time: {:.3}ms",
+        populate_elapsed.as_secs_f64() * 1000.0
+    );
 
     // Measure CFG lookup latency
     let mut cfg_stats = TimingStats::new();
@@ -497,12 +521,23 @@ fn bench_memory_footprint_50_functions() {
 
     println!("\n=== BENCHMARK: Memory Footprint (50 functions, CFG+DFG) ===");
     println!("  Cache entries: {}", cache.len());
-    println!("  Total serialized JSON bytes: {} ({:.1} KB)", total_serialized_bytes, total_serialized_bytes as f64 / 1024.0);
-    println!("  Average per function (CFG+DFG): {:.0} bytes", total_serialized_bytes as f64 / 50.0);
+    println!(
+        "  Total serialized JSON bytes: {} ({:.1} KB)",
+        total_serialized_bytes,
+        total_serialized_bytes as f64 / 1024.0
+    );
+    println!(
+        "  Average per function (CFG+DFG): {:.0} bytes",
+        total_serialized_bytes as f64 / 50.0
+    );
 
     // For a 245-file project, extrapolate
     let extrapolated_kb = (total_serialized_bytes as f64 / 50.0) * 245.0 / 1024.0;
-    println!("  Extrapolated for 245 files: {:.1} KB ({:.1} MB)", extrapolated_kb, extrapolated_kb / 1024.0);
+    println!(
+        "  Extrapolated for 245 files: {:.1} KB ({:.1} MB)",
+        extrapolated_kb,
+        extrapolated_kb / 1024.0
+    );
 
     // Memory should be reasonable - well under 100MB for a full project
     assert!(
@@ -564,7 +599,11 @@ fn bench_dirty_file_invalidation_speed() {
         let invalidated = cache.invalidate_by_input(file_hash);
         let elapsed = start.elapsed();
 
-        assert_eq!(invalidated, 3, "Expected 3 entries invalidated for file {}", i);
+        assert_eq!(
+            invalidated, 3,
+            "Expected 3 entries invalidated for file {}",
+            i
+        );
         single_stats.record(elapsed.as_nanos() as f64 / 1000.0);
     }
 
@@ -667,7 +706,10 @@ fn bench_persistence_round_trip() {
 
     // Verify data integrity after round-trip
     let result: Option<ProjectCallGraph> = loaded.get(&cg_key);
-    assert!(result.is_some(), "Call graph should survive persistence round-trip");
+    assert!(
+        result.is_some(),
+        "Call graph should survive persistence round-trip"
+    );
     let restored_cg = result.unwrap();
     assert_eq!(restored_cg.edges.len(), call_graph.edges.len());
 
@@ -749,7 +791,10 @@ fn bench_concurrent_access_latency() {
         handles.push(("writer", handle));
     }
 
-    println!("\n=== BENCHMARK: Concurrent Access ({} readers + 1 writer) ===", num_readers);
+    println!(
+        "\n=== BENCHMARK: Concurrent Access ({} readers + 1 writer) ===",
+        num_readers
+    );
 
     for (role, handle) in handles {
         let stats = handle.join().unwrap();
@@ -806,7 +851,10 @@ fn bench_l2_query_type_coverage() {
     // 4. Impact analysis (reverse call graph)
     let impact_data: HashMap<String, Vec<String>> = {
         let mut m = HashMap::new();
-        m.insert("target_func".to_string(), vec!["caller_1".to_string(), "caller_2".to_string()]);
+        m.insert(
+            "target_func".to_string(),
+            vec!["caller_1".to_string(), "caller_2".to_string()],
+        );
         m
     };
     let impact_key = QueryKey::new("impact", hash_args(&("target_func", 2)));
@@ -905,11 +953,18 @@ fn bench_invalidation_cascade_correctness() {
     let invalidated = cache.invalidate_by_input(hash_a);
     let elapsed = start.elapsed();
 
-    println!("  Invalidated {} entries in {:.1}us", invalidated, elapsed.as_nanos() as f64 / 1000.0);
+    println!(
+        "  Invalidated {} entries in {:.1}us",
+        invalidated,
+        elapsed.as_nanos() as f64 / 1000.0
+    );
     println!("  Cache entries after: {}", cache.len());
 
     // Should have invalidated: 3 CFGs (A) + 3 DFGs (A) + 1 call graph = 7
-    assert_eq!(invalidated, 7, "Expected 7 invalidated (6 function IR + 1 call graph)");
+    assert_eq!(
+        invalidated, 7,
+        "Expected 7 invalidated (6 function IR + 1 call graph)"
+    );
     assert_eq!(cache.len(), 6, "Expected 6 remaining (file B's 6 entries)");
 
     // File B entries should still be accessible
@@ -917,7 +972,11 @@ fn bench_invalidation_cascade_correctness() {
         let func = format!("func_b_{}", i);
         let cfg_key = QueryKey::new("cfg", hash_args(&(file_b, &func)));
         let result: Option<FunctionCfg> = cache.get(&cfg_key);
-        assert!(result.is_some(), "File B's func_{} CFG should survive invalidation", i);
+        assert!(
+            result.is_some(),
+            "File B's func_{} CFG should survive invalidation",
+            i
+        );
     }
 
     println!("  File B entries: all 6 intact (CORRECT)");
@@ -975,9 +1034,20 @@ fn bench_full_project_scale_245_files() {
     println!("\n=== BENCHMARK: Full Project Scale (245 files) ===");
     println!("  Files: {}", num_files);
     println!("  Functions: {}", num_files * funcs_per_file);
-    println!("  Cache entries: {} (expected {})", cache.len(), expected_entries);
-    println!("  Total serialized bytes: {:.1} KB ({:.1} MB)", total_bytes as f64 / 1024.0, total_bytes as f64 / (1024.0 * 1024.0));
-    println!("  Populate time: {:.1}ms", populate_elapsed.as_secs_f64() * 1000.0);
+    println!(
+        "  Cache entries: {} (expected {})",
+        cache.len(),
+        expected_entries
+    );
+    println!(
+        "  Total serialized bytes: {:.1} KB ({:.1} MB)",
+        total_bytes as f64 / 1024.0,
+        total_bytes as f64 / (1024.0 * 1024.0)
+    );
+    println!(
+        "  Populate time: {:.1}ms",
+        populate_elapsed.as_secs_f64() * 1000.0
+    );
 
     assert_eq!(cache.len(), expected_entries);
 
@@ -994,7 +1064,12 @@ fn bench_full_project_scale_245_files() {
         let result: Option<FunctionCfg> = cache.get(&cfg_key);
         let elapsed = start.elapsed();
 
-        assert!(result.is_some(), "Expected hit for file {} func {}", file_idx, func_idx);
+        assert!(
+            result.is_some(),
+            "Expected hit for file {} func {}",
+            file_idx,
+            func_idx
+        );
         lookup_stats.record(elapsed.as_nanos() as f64 / 1000.0);
     }
 
@@ -1052,8 +1127,16 @@ fn bench_cache_key_collision_safety() {
     assert!(cfg_result.is_some(), "CFG should be retrievable");
     assert!(dfg_result.is_some(), "DFG should be retrievable");
 
-    assert_eq!(cfg_result.unwrap().blocks.len(), 10, "CFG data should be correct");
-    assert_eq!(dfg_result.unwrap().facts.len(), 15, "DFG data should be correct");
+    assert_eq!(
+        cfg_result.unwrap().blocks.len(),
+        10,
+        "CFG data should be correct"
+    );
+    assert_eq!(
+        dfg_result.unwrap().facts.len(),
+        15,
+        "DFG data should be correct"
+    );
 
     println!("\n=== BENCHMARK: Cache Key Collision Safety ===");
     println!("  Different query types for same file/func: NO COLLISION (correct)");

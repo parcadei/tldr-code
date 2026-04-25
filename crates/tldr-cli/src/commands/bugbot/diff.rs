@@ -130,8 +130,7 @@ fn world() -> i32 {
         let baseline = write_temp_rs(code);
         let current = write_temp_rs(code);
 
-        let report =
-            diff_functions(baseline.path(), current.path()).expect("diff should succeed");
+        let report = diff_functions(baseline.path(), current.path()).expect("diff should succeed");
 
         assert!(
             report.identical,
@@ -163,8 +162,7 @@ fn brand_new() {
         let baseline = write_temp_rs(baseline_code);
         let current = write_temp_rs(current_code);
 
-        let report =
-            diff_functions(baseline.path(), current.path()).expect("diff should succeed");
+        let report = diff_functions(baseline.path(), current.path()).expect("diff should succeed");
 
         assert!(
             !report.identical,
@@ -179,10 +177,7 @@ fn brand_new() {
         );
 
         // Verify the inserted function has the expected name
-        let names: Vec<&str> = inserts
-            .iter()
-            .filter_map(|c| c.name.as_deref())
-            .collect();
+        let names: Vec<&str> = inserts.iter().filter_map(|c| c.name.as_deref()).collect();
         assert!(
             names.contains(&"brand_new"),
             "Inserted function should be named 'brand_new', got names: {:?}",
@@ -209,8 +204,7 @@ fn keeper() {
         let baseline = write_temp_rs(baseline_code);
         let current = write_temp_rs(current_code);
 
-        let report =
-            diff_functions(baseline.path(), current.path()).expect("diff should succeed");
+        let report = diff_functions(baseline.path(), current.path()).expect("diff should succeed");
 
         assert!(
             !report.identical,
@@ -224,10 +218,7 @@ fn keeper() {
             report.changes
         );
 
-        let names: Vec<&str> = deletes
-            .iter()
-            .filter_map(|c| c.name.as_deref())
-            .collect();
+        let names: Vec<&str> = deletes.iter().filter_map(|c| c.name.as_deref()).collect();
         assert!(
             names.contains(&"doomed"),
             "Deleted function should be named 'doomed', got names: {:?}",
@@ -254,8 +245,7 @@ fn compute() -> i32 {
         let baseline = write_temp_rs(baseline_code);
         let current = write_temp_rs(current_code);
 
-        let report =
-            diff_functions(baseline.path(), current.path()).expect("diff should succeed");
+        let report = diff_functions(baseline.path(), current.path()).expect("diff should succeed");
 
         assert!(
             !report.identical,
@@ -269,10 +259,7 @@ fn compute() -> i32 {
             report.changes
         );
 
-        let names: Vec<&str> = updates
-            .iter()
-            .filter_map(|c| c.name.as_deref())
-            .collect();
+        let names: Vec<&str> = updates.iter().filter_map(|c| c.name.as_deref()).collect();
         assert!(
             names.contains(&"compute"),
             "Updated function should be named 'compute', got names: {:?}",
@@ -290,8 +277,7 @@ fn compute() -> i32 {
 
         // With semantic_only=true (the default for diff_functions), whitespace
         // changes should either be absent or classified as Format.
-        let report =
-            diff_functions(baseline.path(), current.path()).expect("diff should succeed");
+        let report = diff_functions(baseline.path(), current.path()).expect("diff should succeed");
 
         let semantic: Vec<&ASTChange> = report
             .changes
@@ -329,8 +315,7 @@ fn gamma() {
         let baseline = write_temp_rs(baseline_code);
         let current = write_temp_rs(current_code);
 
-        let report =
-            diff_functions(baseline.path(), current.path()).expect("diff should succeed");
+        let report = diff_functions(baseline.path(), current.path()).expect("diff should succeed");
 
         let func_changes = all_function_changes(&report.changes);
         assert!(

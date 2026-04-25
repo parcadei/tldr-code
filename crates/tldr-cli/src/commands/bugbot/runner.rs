@@ -115,10 +115,7 @@ impl ToolRunner {
                         success: false,
                         duration_ms: start.elapsed().as_millis() as u64,
                         finding_count: 0,
-                        error: Some(format!(
-                            "Failed to spawn '{}': {}",
-                            tool.binary, e
-                        )),
+                        error: Some(format!("Failed to spawn '{}': {}", tool.binary, e)),
                         exit_code: None,
                     },
                     vec![],
@@ -292,25 +289,23 @@ impl ToolRunner {
             // instead of propagating the panic to the parent thread.
             handles
                 .into_iter()
-                .map(|(h, idx, name, category)| {
-                    match h.join() {
-                        Ok(result) => result,
-                        Err(_) => {
-                            eprintln!("bugbot: tool thread for '{}' panicked", name);
-                            (
-                                idx,
-                                ToolResult {
-                                    name: name.to_string(),
-                                    category,
-                                    success: false,
-                                    duration_ms: 0,
-                                    finding_count: 0,
-                                    error: Some("Tool thread panicked".to_string()),
-                                    exit_code: None,
-                                },
-                                vec![],
-                            )
-                        }
+                .map(|(h, idx, name, category)| match h.join() {
+                    Ok(result) => result,
+                    Err(_) => {
+                        eprintln!("bugbot: tool thread for '{}' panicked", name);
+                        (
+                            idx,
+                            ToolResult {
+                                name: name.to_string(),
+                                category,
+                                success: false,
+                                duration_ms: 0,
+                                finding_count: 0,
+                                error: Some("Tool thread panicked".to_string()),
+                                exit_code: None,
+                            },
+                            vec![],
+                        )
                     }
                 })
                 .collect()
@@ -389,10 +384,7 @@ mod tests {
         let (result, findings) = runner.run_tool(&tool, Path::new("."));
 
         assert!(!result.success, "should fail for missing binary");
-        assert!(
-            result.error.is_some(),
-            "should have error message"
-        );
+        assert!(result.error.is_some(), "should have error message");
         let err = result.error.as_ref().unwrap();
         assert!(
             err.contains("spawn") || err.contains("not found") || err.contains("No such file"),
@@ -475,7 +467,11 @@ mod tests {
 
         let (result, findings) = runner.run_tool(&tool, Path::new("."));
 
-        assert!(result.success, "tool should succeed, error: {:?}", result.error);
+        assert!(
+            result.success,
+            "tool should succeed, error: {:?}",
+            result.error
+        );
         assert_eq!(findings.len(), 1, "should have 1 finding");
         assert_eq!(
             findings[0].tool, "test-clippy",
@@ -521,13 +517,7 @@ mod tests {
         let runner = ToolRunner::new(10);
 
         // Tool A succeeds: echo empty string -> cargo parser returns Ok(vec![])
-        let tool_a = make_tool(
-            "tool-a",
-            "echo",
-            &[""],
-            "cargo",
-            ToolCategory::Linter,
-        );
+        let tool_a = make_tool("tool-a", "echo", &[""], "cargo", ToolCategory::Linter);
 
         // Tool B fails: nonexistent binary
         let tool_b = make_tool(
@@ -560,27 +550,9 @@ mod tests {
     fn test_run_tools_parallel_deterministic_order() {
         let runner = ToolRunner::new(10);
 
-        let tool_alpha = make_tool(
-            "alpha",
-            "echo",
-            &[""],
-            "cargo",
-            ToolCategory::Linter,
-        );
-        let tool_beta = make_tool(
-            "beta",
-            "echo",
-            &[""],
-            "cargo",
-            ToolCategory::Linter,
-        );
-        let tool_gamma = make_tool(
-            "gamma",
-            "echo",
-            &[""],
-            "cargo",
-            ToolCategory::Linter,
-        );
+        let tool_alpha = make_tool("alpha", "echo", &[""], "cargo", ToolCategory::Linter);
+        let tool_beta = make_tool("beta", "echo", &[""], "cargo", ToolCategory::Linter);
+        let tool_gamma = make_tool("gamma", "echo", &[""], "cargo", ToolCategory::Linter);
 
         let tools: Vec<&ToolConfig> = vec![&tool_alpha, &tool_beta, &tool_gamma];
         let (results, _findings) = runner.run_tools_parallel(&tools, Path::new("."));
@@ -610,13 +582,7 @@ mod tests {
     #[test]
     fn test_run_tools_sequential_for_single_tool() {
         let runner = ToolRunner::new(10);
-        let tool = make_tool(
-            "solo",
-            "echo",
-            &[""],
-            "cargo",
-            ToolCategory::Linter,
-        );
+        let tool = make_tool("solo", "echo", &[""], "cargo", ToolCategory::Linter);
 
         let tools: Vec<&ToolConfig> = vec![&tool];
         let (results, findings) = runner.run_tools_parallel(&tools, Path::new("."));
@@ -694,17 +660,15 @@ mod tests {
     fn test_run_tool_success_echo_empty_output() {
         // echo "" produces effectively empty output, cargo parser returns empty vec
         let runner = ToolRunner::new(10);
-        let tool = make_tool(
-            "echo-tool",
-            "echo",
-            &[""],
-            "cargo",
-            ToolCategory::Linter,
-        );
+        let tool = make_tool("echo-tool", "echo", &[""], "cargo", ToolCategory::Linter);
 
         let (result, findings) = runner.run_tool(&tool, Path::new("."));
 
-        assert!(result.success, "echo should succeed, error: {:?}", result.error);
+        assert!(
+            result.success,
+            "echo should succeed, error: {:?}",
+            result.error
+        );
         assert_eq!(result.finding_count, 0);
         assert!(findings.is_empty());
         assert!(result.error.is_none());
@@ -899,7 +863,11 @@ mod tests {
         let (result, _findings) = runner.run_tool(&tool, Path::new("."));
 
         // The tool should still succeed (output is truncated but parseable)
-        assert!(result.success, "should succeed even with truncated output, error: {:?}", result.error);
+        assert!(
+            result.success,
+            "should succeed even with truncated output, error: {:?}",
+            result.error
+        );
     }
 
     // =========================================================================
@@ -915,13 +883,7 @@ mod tests {
         // return results for all tools even if one has issues.
         let runner = ToolRunner::new(10);
 
-        let tool_a = make_tool(
-            "good-tool",
-            "echo",
-            &[""],
-            "cargo",
-            ToolCategory::Linter,
-        );
+        let tool_a = make_tool("good-tool", "echo", &[""], "cargo", ToolCategory::Linter);
 
         // Tool with a binary that will fail to spawn
         let tool_b = make_tool(
