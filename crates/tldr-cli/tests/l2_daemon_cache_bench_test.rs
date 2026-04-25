@@ -206,7 +206,7 @@ impl TimingStats {
         let mut sorted = self.samples.clone();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let mid = sorted.len() / 2;
-        if sorted.len() % 2 == 0 {
+        if sorted.len().is_multiple_of(2) {
             (sorted[mid - 1] + sorted[mid]) / 2.0
         } else {
             sorted[mid]
@@ -586,10 +586,9 @@ fn bench_dirty_file_invalidation_speed() {
 
     // Measure invalidation of a single file (should remove 3 entries)
     let mut single_stats = TimingStats::new();
-    for i in 0..50 {
+    for (i, &file_hash) in file_hashes.iter().enumerate().take(50) {
         // Re-populate entries for this file
         let file = format!("src/file_{}.rs", i);
-        let file_hash = file_hashes[i];
         for query_type in &["cfg", "dfg", "structure"] {
             let key = QueryKey::new(*query_type, hash_args(&(&file, query_type)));
             cache.insert(key, &format!("data_{}_{}", i, query_type), vec![file_hash]);
@@ -611,9 +610,8 @@ fn bench_dirty_file_invalidation_speed() {
 
     // Measure bulk invalidation (10 files at once)
     // Re-populate fully
-    for i in 0..100 {
+    for (i, &file_hash) in file_hashes.iter().enumerate().take(100) {
         let file = format!("src/file_{}.rs", i);
-        let file_hash = file_hashes[i];
         for query_type in &["cfg", "dfg", "structure"] {
             let key = QueryKey::new(*query_type, hash_args(&(&file, query_type)));
             cache.insert(key, &format!("data_{}_{}", i, query_type), vec![file_hash]);
@@ -622,8 +620,8 @@ fn bench_dirty_file_invalidation_speed() {
 
     let bulk_start = Instant::now();
     let mut total_invalidated = 0;
-    for i in 0..10 {
-        total_invalidated += cache.invalidate_by_input(file_hashes[i]);
+    for &file_hash in file_hashes.iter().take(10) {
+        total_invalidated += cache.invalidate_by_input(file_hash);
     }
     let bulk_elapsed = bulk_start.elapsed();
 

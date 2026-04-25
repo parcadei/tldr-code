@@ -58,7 +58,7 @@ fn test_percentile_rank_basic() {
     let values = vec![1.0, 2.0, 3.0, 4.0, 5.0];
     let result = percentile_ranks(&values);
     assert_eq!(result.len(), 5);
-    let expected = vec![0.0, 0.25, 0.5, 0.75, 1.0];
+    let expected = [0.0, 0.25, 0.5, 0.75, 1.0];
     for (got, exp) in result.iter().zip(expected.iter()) {
         assert!((got - exp).abs() < 0.001, "expected {}, got {}", exp, got);
     }
@@ -75,7 +75,7 @@ fn test_percentile_rank_ties() {
     let values = vec![1.0, 1.0, 2.0, 3.0];
     let result = percentile_ranks(&values);
     assert_eq!(result.len(), 4);
-    let expected = vec![0.5 / 3.0, 0.5 / 3.0, 2.0 / 3.0, 1.0];
+    let expected = [0.5 / 3.0, 0.5 / 3.0, 2.0 / 3.0, 1.0];
     for (got, exp) in result.iter().zip(expected.iter()) {
         assert!((got - exp).abs() < 0.001, "expected {}, got {}", exp, got);
     }
@@ -114,17 +114,17 @@ fn test_percentile_rank_power_law() {
 
     // All "1" values should have percentile 0.375, not near 0.0
     let expected_tied = (2.5 - 1.0) / 4.0; // 0.375
-    for i in 0..4 {
+    for &r in result.iter().take(4) {
         assert!(
-            result[i] > 0.3,
+            r > 0.3,
             "Power-law: value=1 should have percentile > 0.3, got {}",
-            result[i]
+            r
         );
         assert!(
-            (result[i] - expected_tied).abs() < 0.001,
+            (r - expected_tied).abs() < 0.001,
             "Expected {} for tied low values, got {}",
             expected_tied,
-            result[i]
+            r
         );
     }
     // Outlier should be 1.0
@@ -179,7 +179,7 @@ fn test_percentile_rank_preserves_order() {
     //   index 4 (value 4) -> rank 4 -> (4-1)/4 = 0.75
     let values = vec![5.0, 1.0, 3.0, 2.0, 4.0];
     let result = percentile_ranks(&values);
-    let expected = vec![1.0, 0.0, 0.5, 0.25, 0.75];
+    let expected = [1.0, 0.0, 0.5, 0.25, 0.75];
     for (i, (got, exp)) in result.iter().zip(expected.iter()).enumerate() {
         assert!(
             (got - exp).abs() < 0.001,

@@ -87,7 +87,6 @@ fn all_function_names(module: &ModuleInfo) -> Vec<String> {
 
 /// A single function timing measurement.
 struct FuncTiming {
-    repo: String,
     file: String,
     function: String,
     language: String,
@@ -250,7 +249,6 @@ fn perf_abstract_interp_corpus() {
 
                 if result.is_ok() {
                     all_timings.push(FuncTiming {
-                        repo: repo_cfg.name.to_string(),
                         file: short_path.clone(),
                         function: func_name.clone(),
                         language: lang_str.to_string(),

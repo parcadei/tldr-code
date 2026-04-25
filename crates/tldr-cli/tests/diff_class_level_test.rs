@@ -21,12 +21,10 @@ use std::path::PathBuf;
 use tempfile::NamedTempFile;
 
 // Existing types
-use tldr_cli::commands::remaining::types::{
-    ASTChange, ChangeType, DiffReport, DiffSummary, Location, NodeKind,
-};
+use tldr_cli::commands::remaining::types::{ASTChange, ChangeType, DiffReport, NodeKind};
 
 // New types that will be added for L5 (these imports will fail until implemented)
-use tldr_cli::commands::remaining::types::{BaseChanges, DiffGranularity};
+use tldr_cli::commands::remaining::types::DiffGranularity;
 
 // The class-level diff entry point (will be added to diff module)
 use tldr_cli::commands::remaining::diff::run_class_diff;
@@ -158,7 +156,7 @@ class Calculator:
     assert_eq!(calc_change.node_kind, NodeKind::Class);
 
     // Children: subtract method was inserted
-    let children = calc_change
+    calc_change
         .children
         .as_ref()
         .expect("Updated class should have children vec");

@@ -1204,7 +1204,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
             );
         }
         assert!(
-            result.findings.len() >= 1,
+            !result.findings.is_empty(),
             "Expected Go SQL injection finding, got {}",
             result.findings.len()
         );

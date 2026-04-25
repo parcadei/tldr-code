@@ -36,6 +36,13 @@
 //!
 //! See also: `language_autodetect_tests.rs` for VAL-008 autodetect coverage.
 
+#![allow(dead_code)]
+// Shared test fixture module. Not all helpers are used by every test
+// binary that imports `mod fixtures;` (e.g. build_git_fixture is only
+// used by exhaustive_matrix.rs, not language_command_matrix.rs).
+// Rust's per-binary dead-code analysis can't see cross-binary usage,
+// so module-level allow is the canonical idiom for shared fixtures.
+
 use std::fs;
 use std::path::Path;
 use std::process::Command;

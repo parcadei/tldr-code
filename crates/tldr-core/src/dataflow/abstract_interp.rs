@@ -30,6 +30,32 @@ use serde_json;
 use super::types::BlockId;
 
 // =============================================================================
+// Feature flags (status indicators consumed by gate2/gate3 corpus tests)
+// =============================================================================
+
+/// Whether guard narrowing is enabled in abstract interpretation.
+///
+/// Guard narrowing is a planned enhancement that uses control-flow guards
+/// (e.g. `if x != 0 { ... }`) to refine variable ranges along the guarded
+/// branch. This reduces false-positive div-zero / null-deref findings.
+///
+/// Currently `false` while the feature is being designed; the gate2 corpus
+/// scanner reads this constant for A/B reporting between the baseline run
+/// and a future enabled run.
+pub const ENABLE_GUARD_NARROWING: bool = false;
+
+/// Whether the octagon relational domain is enabled in abstract interpretation.
+///
+/// The octagon domain (Mine 2006) tracks relational invariants of the form
+/// `±x ± y ≤ c`, which is strictly more precise than independent intervals.
+/// The implementation lives in `crate::dataflow::octagon` but is not yet
+/// wired into the main abstract interpreter; this flag tracks that wiring.
+///
+/// Currently `false` while the integration is being designed; the gate3
+/// A/B corpus scanner reads this constant for reporting.
+pub const ENABLE_OCTAGON_DOMAIN: bool = false;
+
+// =============================================================================
 // CAP-AI-01: Nullability Enum
 // =============================================================================
 
@@ -3437,12 +3463,15 @@ mod tests {
     #[test]
     fn test_parse_rhs_abstract_float() {
         // CAP-AI-14: Float literal
+        // Use PI to avoid clippy::approx_constant; tests that arbitrary float literals
+        // round-trip correctly through parse_rhs_abstract.
+        let pi_literal = format!("x = {}", std::f64::consts::PI);
         let state = AbstractState::new();
-        let val = parse_rhs_abstract("x = 3.14", "x", &state, "python");
+        let val = parse_rhs_abstract(&pi_literal, "x", &state, "python");
 
         assert_eq!(val.type_, Some("float".to_string()));
         if let Some(ConstantValue::Float(f)) = val.constant {
-            assert_eq!(f, 3.14);
+            assert_eq!(f, std::f64::consts::PI);
         } else {
             panic!("Expected float constant");
         }

@@ -25,8 +25,7 @@ use tempfile::TempDir;
 // Until then, these cause compile errors -- which is the point of TDD.
 use tldr_cli::commands::remaining::diff::DiffArgs;
 use tldr_cli::commands::remaining::types::{
-    ArchChangeType, ArchDiffSummary, ArchLevelChange, ChangeType, DiffGranularity, DiffReport,
-    FileLevelChange, ImportEdge, ImportGraphSummary, ModuleLevelChange,
+    ArchChangeType, ArchLevelChange, ChangeType, DiffGranularity, DiffReport, FileLevelChange,
 };
 
 // =============================================================================
@@ -188,14 +187,6 @@ fn test_file_level_identical_dirs() {
     let file_changes = report
         .file_changes
         .expect("L6 report should have file_changes");
-    let non_identical: Vec<&FileLevelChange> = file_changes
-        .iter()
-        .filter(|fc| {
-            fc.change_type != ChangeType::Insert
-                && fc.change_type != ChangeType::Delete
-                && fc.change_type != ChangeType::Update
-        })
-        .collect();
     // If the implementation includes Identical entries, they should all be Identical-equivalent.
     // If it omits them, the list should be empty. Check there are no Insert/Delete/Update.
     let modifications: Vec<&FileLevelChange> = file_changes

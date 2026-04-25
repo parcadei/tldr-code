@@ -10,13 +10,12 @@
 //! Spec: thoughts/shared/plans/multi-level-diff-spec.md, Section 4.5
 
 use std::io::Write;
-use std::path::PathBuf;
 
 use tempfile::NamedTempFile;
 
 use tldr_cli::commands::remaining::diff::DiffArgs;
 use tldr_cli::commands::remaining::types::{
-    ASTChange, ChangeType, DiffGranularity, DiffReport, DiffSummary, NodeKind,
+    ASTChange, ChangeType, DiffGranularity, DiffReport, NodeKind,
 };
 
 // ---------------------------------------------------------------------------
@@ -61,33 +60,6 @@ fn find_change<'a>(
     changes
         .iter()
         .find(|c| c.change_type == change_type && c.name.as_deref() == Some(name))
-}
-
-/// Find a child change within a parent ASTChange by change_type and node_kind.
-fn find_child<'a>(
-    parent: &'a ASTChange,
-    change_type: ChangeType,
-    node_kind: NodeKind,
-) -> Option<&'a ASTChange> {
-    parent.children.as_ref().and_then(|children| {
-        children
-            .iter()
-            .find(|c| c.change_type == change_type && c.node_kind == node_kind)
-    })
-}
-
-/// Count statement-level children of a given change type within a parent.
-fn count_children(parent: &ASTChange, change_type: ChangeType) -> usize {
-    parent
-        .children
-        .as_ref()
-        .map(|ch| ch.iter().filter(|c| c.change_type == change_type).count())
-        .unwrap_or(0)
-}
-
-/// Count all statement-level children.
-fn count_all_children(parent: &ASTChange) -> usize {
-    parent.children.as_ref().map(|ch| ch.len()).unwrap_or(0)
 }
 
 // ===========================================================================
