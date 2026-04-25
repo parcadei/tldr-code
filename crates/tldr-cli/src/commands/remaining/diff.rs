@@ -632,14 +632,7 @@ fn extract_nodes(root: Node, source: &[u8], lang: Language) -> Vec<ExtractedNode
         class: get_class_node_kinds(lang),
         body: get_class_body_kinds(lang),
     };
-    extract_nodes_recursive(
-        root,
-        source,
-        &mut nodes,
-        false,
-        lang,
-        &kinds,
-    );
+    extract_nodes_recursive(root, source, &mut nodes, false, lang, &kinds);
     nodes
 }
 
@@ -658,6 +651,42 @@ fn extract_nodes_recursive(
     kinds: &NodeKindSets<'_>,
 ) {
     let kind = node.kind();
+
+    // OCaml-specific: function-kinds are `value_definition` AND
+    // `let_binding`. The tree-sitter shape is:
+    //   value_definition -> let_binding -> pattern: <name>
+    // Plus, `let_binding` ALSO appears nested inside expressions
+    // (`let _ = expr in body`), where it is NOT a function definition.
+    // VAL-018: filter to top-level value_definition only, and require a
+    // parameter (mirrors `extract_ocaml_functions` in
+    // crates/tldr-core/src/ast/extractor.rs:1132). Skip nested
+    // let_bindings inside function bodies and anonymous `_` bindings.
+    if lang == Language::Ocaml && kind == "value_definition" {
+        for child in node.children(&mut node.walk()) {
+            if child.kind() == "let_binding" && ocaml_let_binding_is_function(child) {
+                if let Some(extracted) = extract_function_node(child, source, in_class, lang) {
+                    // Skip anonymous `_` patterns and `()` unit bindings.
+                    if extracted.name != "_" && extracted.name != "()" && !extracted.name.is_empty() {
+                        nodes.push(extracted);
+                    }
+                }
+            }
+        }
+        // Don't recurse — we've already extracted the function. Inner
+        // let-bindings (e.g. `let _ = helper () in ...`) are body
+        // expressions, not functions.
+        return;
+    }
+    if lang == Language::Ocaml && kind == "let_binding" {
+        // Bare let_binding outside a value_definition: only valid as a
+        // top-level definition without a wrapping value_definition,
+        // which is not the canonical form. Don't extract; recurse normally.
+        // (Tree-sitter usually wraps top-level lets in value_definition.)
+        for child in node.children(&mut node.walk()) {
+            extract_nodes_recursive(child, source, nodes, in_class, lang, kinds);
+        }
+        return;
+    }
 
     // Check if this is a function node
     if kinds.func.contains(&kind) {
@@ -683,6 +712,19 @@ fn extract_nodes_recursive(
     for child in node.children(&mut node.walk()) {
         extract_nodes_recursive(child, source, nodes, in_class, lang, kinds);
     }
+}
+
+/// True if an OCaml `let_binding` node has at least one `parameter`
+/// child — i.e. it's a function definition rather than a value binding.
+/// Mirrors `ocaml_binding_has_params_simple` in
+/// `crates/tldr-core/src/ast/extractor.rs:1158`.
+fn ocaml_let_binding_is_function(node: Node) -> bool {
+    for child in node.children(&mut node.walk()) {
+        if child.kind() == "parameter" {
+            return true;
+        }
+    }
+    false
 }
 
 fn extract_function_node(
@@ -1625,11 +1667,7 @@ fn find_function_body(func_node: Node, lang: Language) -> Option<Node> {
 
 /// Count total nodes in a labeled tree.
 fn count_tree_nodes(tree: &LabeledTreeNode) -> usize {
-    1 + tree
-        .children
-        .iter()
-        .map(count_tree_nodes)
-        .sum::<usize>()
+    1 + tree.children.iter().map(count_tree_nodes).sum::<usize>()
 }
 
 // =============================================================================
@@ -2309,11 +2347,7 @@ struct FieldNode {
 ///
 /// This is the L5 diff algorithm. It extracts classes from both files,
 /// matches them by name, and then diffs their members (methods, fields, bases).
-pub fn run_class_diff(
-    file_a: &Path,
-    file_b: &Path,
-    semantic_only: bool,
-) -> Result<DiffReport> {
+pub fn run_class_diff(file_a: &Path, file_b: &Path, semantic_only: bool) -> Result<DiffReport> {
     // Validate files exist
     if !file_a.exists() {
         return Err(RemainingError::file_not_found(file_a).into());

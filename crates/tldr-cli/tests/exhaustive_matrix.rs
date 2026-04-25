@@ -1020,14 +1020,52 @@ fn check_diff(lang: &str) {
     let tmp = make_fixture(lang);
     let a = entry_file(lang, tmp.path());
     let b = util_file(lang, tmp.path());
-    let (json, stdout, stderr) = check_success(
+
+    // (1) Identical files: `diff a a` must report identical=true with an
+    // EMPTY `changes` array. VAL-018 tightening: previously this only
+    // checked the field was present.
+    let (json_id, stdout_id, stderr_id) = check_success(
         "diff", lang,
-        &["diff", a.to_str().unwrap(), b.to_str().unwrap(), "--format", "json", "--quiet"],
+        &["diff", a.to_str().unwrap(), a.to_str().unwrap(),
+          "--format", "json", "--quiet"],
     );
-    if !json.is_object() || (json.get("changes").is_none() && json.get("identical").is_none()) {
+    let identical_flag = json_id
+        .get("identical")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let identical_changes_len = json_id
+        .get("changes")
+        .and_then(Value::as_array)
+        .map(|a| a.len())
+        .unwrap_or(usize::MAX);
+    if !identical_flag || identical_changes_len != 0 {
         panic!(
-            "[diff × {lang}] SILENT_FAIL — missing `changes`/`identical` field\n--- stdout ---\n{}\n--- stderr ---\n{stderr}",
-            truncate(&stdout, 400)
+            "[diff × {lang}] SILENT_FAIL — diff(a,a) should report identical=true with empty changes; got identical={identical_flag} changes_len={identical_changes_len}\n--- stdout ---\n{}\n--- stderr ---\n{stderr_id}",
+            truncate(&stdout_id, 400)
+        );
+    }
+
+    // (2) Different files: `diff a b` (entry vs util) must report
+    // identical=false with at least one change record (helper/main/b_util
+    // are different functions across the two files).
+    let (json_diff, stdout_diff, stderr_diff) = check_success(
+        "diff", lang,
+        &["diff", a.to_str().unwrap(), b.to_str().unwrap(),
+          "--format", "json", "--quiet"],
+    );
+    let diff_identical = json_diff
+        .get("identical")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let changes_len = json_diff
+        .get("changes")
+        .and_then(Value::as_array)
+        .map(|a| a.len())
+        .unwrap_or(0);
+    if diff_identical || changes_len == 0 {
+        panic!(
+            "[diff × {lang}] SILENT_FAIL — diff(a,b) of fixture entry vs util must report identical=false with >= 1 change; got identical={diff_identical} changes_len={changes_len}\n--- stdout ---\n{}\n--- stderr ---\n{stderr_diff}",
+            truncate(&stdout_diff, 400)
         );
     }
 }
@@ -1036,14 +1074,42 @@ fn check_dice(lang: &str) {
     let tmp = make_fixture(lang);
     let a = entry_file(lang, tmp.path());
     let b = util_file(lang, tmp.path());
-    let (json, stdout, stderr) = check_success(
+
+    // (1) Identical files: dice(a,a) must yield coefficient ~= 1.0.
+    // VAL-018 tightening: previously only checked field presence. The
+    // dice CLI emits a "Comparing similarity..." progress line before
+    // the JSON; check_success / parse_json strip the leading non-JSON.
+    let (json_id, stdout_id, stderr_id) = check_success(
+        "dice", lang,
+        &["dice", a.to_str().unwrap(), a.to_str().unwrap()],
+    );
+    let coef_id = json_id
+        .get("dice_coefficient")
+        .and_then(Value::as_f64)
+        .unwrap_or(-1.0);
+    if !(coef_id >= 0.9 && coef_id <= 1.0) {
+        panic!(
+            "[dice × {lang}] SILENT_FAIL — dice(a,a) of identical files must be in [0.9, 1.0]; got {coef_id}\n--- stdout ---\n{}\n--- stderr ---\n{stderr_id}",
+            truncate(&stdout_id, 400)
+        );
+    }
+
+    // (2) Two different files: dice(a,b) must be a valid coefficient in
+    // [0.0, 1.0]. We don't assert <0.9 because some fixtures share
+    // tokens (`return`, function-keyword), but the value MUST be a
+    // bounded probability/similarity.
+    let (json_diff, stdout_diff, stderr_diff) = check_success(
         "dice", lang,
         &["dice", a.to_str().unwrap(), b.to_str().unwrap()],
     );
-    if !json.is_object() || json.get("dice_coefficient").is_none() {
+    let coef_diff = json_diff
+        .get("dice_coefficient")
+        .and_then(Value::as_f64)
+        .unwrap_or(-1.0);
+    if !(0.0..=1.0).contains(&coef_diff) {
         panic!(
-            "[dice × {lang}] SILENT_FAIL — missing `dice_coefficient` field\n--- stdout ---\n{}\n--- stderr ---\n{stderr}",
-            truncate(&stdout, 400)
+            "[dice × {lang}] SILENT_FAIL — dice(a,b) coefficient must be in [0.0, 1.0]; got {coef_diff}\n--- stdout ---\n{}\n--- stderr ---\n{stderr_diff}",
+            truncate(&stdout_diff, 400)
         );
     }
 }
