@@ -1022,21 +1022,25 @@ fn find_function_recursive<'a>(
                 if let Some(target) = child.child_by_field_name("target") {
                     let target_text = get_node_text(target, source);
                     if target_text == "def" || target_text == "defp" {
-                        // The function name is the first child of the arguments
-                        if let Some(args) = child.child_by_field_name("arguments") {
-                            if let Some(first_arg) = args.child(0) {
-                                let fname = if first_arg.kind() == "call" {
-                                    // def send_resp(conn, ...) parses as call -> identifier
-                                    first_arg
-                                        .child_by_field_name("target")
-                                        .map(|n| get_node_text(n, source))
-                                        .unwrap_or_default()
-                                } else {
-                                    get_node_text(first_arg, source)
-                                };
-                                if fname == function_name {
-                                    return Some(child);
-                                }
+                        // The function name is the first child of the arguments.
+                        // Two surface syntaxes are common:
+                        //   * `def name, do: expr` — args.child(0) is the
+                        //     identifier `name` (or a `call` node wrapping
+                        //     it when params are present).
+                        //   * `def name do ... end` — the WHOLE
+                        //     `name do ... end` is itself a `call` node
+                        //     whose target is `name` and whose body is a
+                        //     `do_block`. tree-sitter-elixir places this
+                        //     `call` as args.child(0), but field "arguments"
+                        //     may be absent on the outer `def` call when
+                        //     the body is a do-block; in that case the
+                        //     `do_block` is the `call`'s OWN child, not
+                        //     under "arguments". Fall back to scanning all
+                        //     children for any nested identifier/call.
+                        let extracted_name = extract_elixir_def_name(child, source);
+                        if let Some(name) = extracted_name {
+                            if name == function_name {
+                                return Some(child);
                             }
                         }
                     }
@@ -1192,6 +1196,59 @@ fn find_name_in_children(func_node: Node, function_name: &str, source: &[u8]) ->
         }
     }
     false
+}
+
+/// Extract the function name from an Elixir `def`/`defp` call node.
+///
+/// Handles both surface syntaxes:
+/// * `def name, do: expr` — args.child(0) is the bare identifier (or a
+///   `call` wrapping it when params are present).
+/// * `def name do ... end` — args.child(0) is the bare identifier `name`,
+///   and the `do_block` is a separate sibling of the outer `def` call
+///   (NOT under the `arguments` field). tree-sitter-elixir does not
+///   expose `arguments` as a named field on the outer `def` call, so we
+///   locate the arguments node by kind among direct children.
+fn extract_elixir_def_name(def_call: Node, source: &[u8]) -> Option<String> {
+    // tree-sitter-elixir does NOT expose "arguments" as a named field on
+    // the outer `def` call (only as a child of kind=arguments). Locate
+    // the arguments node by kind among direct children.
+    let mut args_node: Option<Node> = None;
+    let mut cursor = def_call.walk();
+    for c in def_call.children(&mut cursor) {
+        if c.kind() == "arguments" {
+            args_node = Some(c);
+            break;
+        }
+    }
+    if let Some(args) = args_node {
+        if let Some(first_arg) = args.child(0) {
+            // Bare identifier — common case for `def main do ... end`.
+            if first_arg.kind() == "identifier" {
+                return Some(get_node_text(first_arg, source).to_string());
+            }
+            // `call` wrapping it — `def name(arg1, arg2), do: ...`.
+            if first_arg.kind() == "call" {
+                if let Some(target) = first_arg.child_by_field_name("target") {
+                    return Some(get_node_text(target, source).to_string());
+                }
+            }
+            // Guard syntax: `def foo(x) when ..., do: ...` — args.child(0)
+            // is a `binary_operator` whose LHS holds the function name.
+            if first_arg.kind() == "binary_operator" {
+                if let Some(lhs) = first_arg.child(0) {
+                    if lhs.kind() == "identifier" {
+                        return Some(get_node_text(lhs, source).to_string());
+                    }
+                    if lhs.kind() == "call" {
+                        if let Some(target) = lhs.child_by_field_name("target") {
+                            return Some(get_node_text(target, source).to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Find the first identifier or name node among direct children.
