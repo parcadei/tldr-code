@@ -1,6 +1,6 @@
 [package]
 name = "tldr-core"
-version = "0.1.6"
+version = "0.2.0"
 edition = "2021"
 description = "Core analysis engine for TLDR code analysis tool"
 repository = "https://github.com/parcadei/tldr-code"
@@ -99,7 +99,7 @@ md5 = { workspace = true }
 fs2 = { workspace = true }
 
 [features]
-default = ["semantic"]
+default = []
 semantic = ["dep:fastembed"]
 # Experimental V2 call graph builder with parallel processing (Phase 14)
 experimental_callgraph = []

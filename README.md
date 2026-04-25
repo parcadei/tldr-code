@@ -8,25 +8,29 @@ LLMs waste context on raw source dumps. tldr extracts the signal: function signa
 
 **18 languages**: Python, TypeScript, JavaScript, Go, Rust, Java, C, C++, Ruby, Kotlin, Swift, C#, Scala, PHP, Lua, Luau, Elixir, OCaml.
 
-## Install
+## Installation
 
-### Binary (recommended)
-
-Download the latest binary for your platform from [GitHub Releases](https://github.com/parcadei/tldr-code/releases).
-
-> **Note:** Pre-built binaries do not include semantic search (`tldr semantic`, `tldr similar`). For those commands, install via cargo with `--features semantic` (see below).
-
-### Cargo
+### Standard install (recommended)
 
 ```bash
 cargo install tldr-cli
 ```
 
-With semantic search (natural language code search via embeddings):
+This gives you 60+ analysis commands — everything except natural-language semantic search.
+
+### With semantic search
 
 ```bash
 cargo install tldr-cli --features semantic
 ```
+
+Adds three commands:
+
+- `tldr semantic '<query>' <path>` — natural-language code search
+- `tldr embed <path>` — build embedding index
+- `tldr similar <file>` — find similar fragments
+
+This pulls in `fastembed` + ONNX Runtime. On first run it downloads the arctic-embed-m model (~110MB, cached). Builds reliably on Mac. Other platforms are unverified — if it doesn't compile for you, a PR with the fix is very welcome.
 
 ## Quick start
 
