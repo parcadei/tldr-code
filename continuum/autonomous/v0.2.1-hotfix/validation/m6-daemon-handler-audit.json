@@ -1,0 +1,135 @@
+{
+  "milestone": "daemon-handler-audit",
+  "assertion": "VAL-006",
+  "worker": "kraken (M6 VAL-006)",
+  "starting_head": "a573504",
+  "status": "passed",
+  "stop_condition_history": "7 unguarded handlers found triggered the literal '>6' STOP condition. Orchestrator authorized threshold override after reviewing audit nature (all 7 sites are the identical M1 is_absolute→accept pattern; no architectural redesign required). Bundled fix in single commit per orchestrator option 1.",
+  "audit_complete": true,
+  "vulnerabilities_found": 7,
+  "vulnerabilities_fixed": 7,
+  "audit_summary": {
+    "files_audited": [
+      "crates/tldr-daemon/src/handlers/ast.rs",
+      "crates/tldr-daemon/src/handlers/callgraph.rs",
+      "crates/tldr-daemon/src/handlers/flow.rs",
+      "crates/tldr-daemon/src/handlers/quality.rs",
+      "crates/tldr-daemon/src/handlers/search.rs"
+    ],
+    "handlers_total": 17,
+    "handlers_na_no_path_or_filter_only": 9,
+    "handlers_already_validated": 1,
+    "handlers_unguarded_pre_fix": 7,
+    "handlers_fixed": 7
+  },
+  "fixed_handlers": [
+    {
+      "file": "crates/tldr-daemon/src/handlers/ast.rs",
+      "function": "imports",
+      "pre_fix_vulnerable_lines": "175-179",
+      "fix_applied": "validate_file_path(&request.file, Some(&project)) with BAD_REQUEST map; mirrors M1 pattern from security.rs",
+      "reproduction_test": "imports_handler_rejects_absolute_path_outside_project",
+      "red_canary_substring_literally_present": true,
+      "red_evidence_field": "result[0].module = \"canary_xyz_42\""
+    },
+    {
+      "file": "crates/tldr-daemon/src/handlers/flow.rs",
+      "function": "cfg",
+      "pre_fix_vulnerable_lines": "40-44",
+      "fix_applied": "validate_file_path(&request.file, Some(&project)) with BAD_REQUEST map",
+      "reproduction_test": "cfg_handler_rejects_absolute_path_outside_project",
+      "red_canary_substring_literally_present": true,
+      "red_evidence_field": "result.function = \"canary_xyz_42\""
+    },
+    {
+      "file": "crates/tldr-daemon/src/handlers/flow.rs",
+      "function": "dfg",
+      "pre_fix_vulnerable_lines": "89-93",
+      "fix_applied": "validate_file_path(&request.file, Some(&project)) with BAD_REQUEST map",
+      "reproduction_test": "dfg_handler_rejects_absolute_path_outside_project",
+      "red_canary_substring_literally_present": true,
+      "red_evidence_field": "result.function = \"canary_xyz_42\""
+    },
+    {
+      "file": "crates/tldr-daemon/src/handlers/flow.rs",
+      "function": "slice",
+      "pre_fix_vulnerable_lines": "155-159",
+      "fix_applied": "validate_file_path(&request.file, Some(&project)) with BAD_REQUEST map",
+      "reproduction_test": "slice_handler_rejects_absolute_path_outside_project",
+      "red_canary_substring_literally_present": false,
+      "red_evidence_field": "panic message names 'leaked-content check'; Ok response with lines:[5] proves out-of-project file was walked"
+    },
+    {
+      "file": "crates/tldr-daemon/src/handlers/flow.rs",
+      "function": "complexity",
+      "pre_fix_vulnerable_lines": "229-233",
+      "fix_applied": "validate_file_path(&request.file, Some(&project)) with BAD_REQUEST map",
+      "reproduction_test": "complexity_handler_rejects_absolute_path_outside_project",
+      "red_canary_substring_literally_present": true,
+      "red_evidence_field": "result.function = \"canary_xyz_42\""
+    },
+    {
+      "file": "crates/tldr-daemon/src/handlers/quality.rs",
+      "function": "smells",
+      "pre_fix_vulnerable_lines": "45-53",
+      "fix_applied": "validate_file_path(p, Some(&project)) when request.path is Some, project root when None; preserves Optional path semantics",
+      "reproduction_test": "smells_handler_rejects_absolute_path_outside_project",
+      "red_canary_substring_literally_present": false,
+      "red_evidence_field": "panic message names 'leaked-content check'; Ok response with files_scanned:1 proves scanner walked victim path"
+    },
+    {
+      "file": "crates/tldr-daemon/src/handlers/quality.rs",
+      "function": "maintainability",
+      "pre_fix_vulnerable_lines": "118-126",
+      "fix_applied": "validate_file_path(p, Some(&project)) when request.path is Some, project root when None; preserves Optional path semantics",
+      "reproduction_test": "maintainability_handler_rejects_absolute_path_outside_project",
+      "red_canary_substring_literally_present": false,
+      "red_evidence_field": "panic message names 'leaked-content check'; Ok response with files:[{path: <victim_path>, mi: 71.6, grade: B, loc:6}] proves walker analyzed victim"
+    }
+  ],
+  "already_validated_handlers": [
+    {
+      "file": "crates/tldr-daemon/src/handlers/ast.rs",
+      "function": "extract",
+      "validation_mechanism": "transitive — calls extract_file(&file_path, Some(&project)) at L142; core function at crates/tldr-core/src/ast/extract.rs:36-45 enforces base_path via dunce::canonicalize + starts_with check, returns TldrError::PathTraversal"
+    }
+  ],
+  "na_handlers": [
+    {"file": "ast.rs", "function": "tree", "reason": "no path arg"},
+    {"file": "ast.rs", "function": "structure", "reason": "no path arg"},
+    {"file": "callgraph.rs", "function": "calls", "reason": "no path arg"},
+    {"file": "callgraph.rs", "function": "impact", "reason": "request.file used only as in-memory call-graph filter, never becomes fs operand"},
+    {"file": "callgraph.rs", "function": "dead", "reason": "no path arg"},
+    {"file": "callgraph.rs", "function": "importers", "reason": "takes module name string, no path"},
+    {"file": "callgraph.rs", "function": "arch", "reason": "no path arg"},
+    {"file": "search.rs", "function": "search", "reason": "no path arg"},
+    {"file": "search.rs", "function": "context", "reason": "request.file used only as in-memory call-graph filter (verified at crates/tldr-core/src/context/builder.rs:226-258), never becomes fs operand"}
+  ],
+  "files_modified_count": 4,
+  "files_modified": [
+    "crates/tldr-daemon/src/handlers/ast.rs",
+    "crates/tldr-daemon/src/handlers/flow.rs",
+    "crates/tldr-daemon/src/handlers/quality.rs",
+    "crates/tldr-daemon/tests/handler_path_traversal_audit_test.rs (NEW)"
+  ],
+  "tests_written": [
+    "imports_handler_rejects_absolute_path_outside_project",
+    "cfg_handler_rejects_absolute_path_outside_project",
+    "dfg_handler_rejects_absolute_path_outside_project",
+    "slice_handler_rejects_absolute_path_outside_project",
+    "complexity_handler_rejects_absolute_path_outside_project",
+    "smells_handler_rejects_absolute_path_outside_project",
+    "maintainability_handler_rejects_absolute_path_outside_project"
+  ],
+  "validation_gates": {
+    "audit_reproduction_tests": "7/7 GREEN",
+    "m1_path_traversal_no_regression": "2/2 GREEN",
+    "full_daemon_test_suite": "36/36 GREEN (10 lib + 17 daemon_tests + 7 audit + 2 path_traversal; 2 ignored perf tests)",
+    "exhaustive_matrix": "730/730 (cargo test -p tldr-cli --test exhaustive_matrix --features semantic --release)",
+    "language_command_matrix": "234/234 (cargo test -p tldr-cli --test language_command_matrix --features semantic --release)",
+    "total_matrix": "964/964 (unchanged at baseline)",
+    "workspace_clippy": "clean (cargo clippy --workspace --all-features --tests -- -D warnings)"
+  },
+  "commit_sha": "PENDING_COMMIT",
+  "report_path": "continuum/autonomous/v0.2.1-hotfix/reports/m6-daemon-handler-audit.md"
+}

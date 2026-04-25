@@ -14,7 +14,7 @@ use crate::state::DaemonState;
 
 use tldr_core::{
     detect_or_parse_language, extract_file, get_code_structure, get_file_tree, get_imports,
-    CodeStructure, FileTree, ImportInfo, Language, ModuleInfo,
+    validate_file_path, CodeStructure, FileTree, ImportInfo, Language, ModuleInfo,
 };
 
 // =============================================================================
@@ -172,11 +172,13 @@ pub async fn imports(
     state.touch();
 
     let project = state.project().clone();
-    let file_path = if PathBuf::from(&request.file).is_absolute() {
-        PathBuf::from(&request.file)
-    } else {
-        project.join(&request.file)
-    };
+    // VAL-006 / issue #5 (broader audit): validate caller-supplied path stays
+    // inside the project root before any filesystem read. `validate_file_path`
+    // resolves the path (absolute or relative) against `project` and returns
+    // `PathTraversal` if the canonical form escapes. Mirrors the M1 fix in
+    // `handlers/security.rs::secrets`.
+    let file_path = validate_file_path(&request.file, Some(&project))
+        .map_err(|e| HandlerError(axum::http::StatusCode::BAD_REQUEST, e.to_string()))?;
 
     // Detect language (using shared validator)
     let language = detect_or_parse_language(request.language.as_deref(), &file_path)

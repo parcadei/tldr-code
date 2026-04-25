@@ -2,7 +2,6 @@
 //!
 //! These handlers provide control flow, data flow, and program slicing analysis.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{extract::State, Json};
@@ -13,7 +12,7 @@ use crate::state::DaemonState;
 
 use tldr_core::{
     calculate_complexity, detect_or_parse_language, get_cfg_context, get_dfg_context, get_slice,
-    CfgInfo, ComplexityMetrics, DfgInfo, SliceDirection,
+    validate_file_path, CfgInfo, ComplexityMetrics, DfgInfo, SliceDirection,
 };
 
 // =============================================================================
@@ -37,11 +36,11 @@ pub async fn cfg(
     state.touch();
 
     let project = state.project().clone();
-    let file_path = if PathBuf::from(&request.file).is_absolute() {
-        PathBuf::from(&request.file)
-    } else {
-        project.join(&request.file)
-    };
+    // VAL-006 / issue #5 (broader audit): validate caller-supplied path stays
+    // inside the project root before any filesystem read. Mirrors the M1 fix
+    // pattern in `handlers/security.rs::secrets`.
+    let file_path = validate_file_path(&request.file, Some(&project))
+        .map_err(|e| HandlerError(axum::http::StatusCode::BAD_REQUEST, e.to_string()))?;
 
     // Detect language (using shared validator)
     let language = detect_or_parse_language(request.language.as_deref(), &file_path)
@@ -86,11 +85,11 @@ pub async fn dfg(
     state.touch();
 
     let project = state.project().clone();
-    let file_path = if PathBuf::from(&request.file).is_absolute() {
-        PathBuf::from(&request.file)
-    } else {
-        project.join(&request.file)
-    };
+    // VAL-006 / issue #5 (broader audit): validate caller-supplied path stays
+    // inside the project root before any filesystem read. Mirrors the M1 fix
+    // pattern in `handlers/security.rs::secrets`.
+    let file_path = validate_file_path(&request.file, Some(&project))
+        .map_err(|e| HandlerError(axum::http::StatusCode::BAD_REQUEST, e.to_string()))?;
 
     // Detect language (using shared validator)
     let language = detect_or_parse_language(request.language.as_deref(), &file_path)
@@ -152,11 +151,11 @@ pub async fn slice(
     state.touch();
 
     let project = state.project().clone();
-    let file_path = if PathBuf::from(&request.file).is_absolute() {
-        PathBuf::from(&request.file)
-    } else {
-        project.join(&request.file)
-    };
+    // VAL-006 / issue #5 (broader audit): validate caller-supplied path stays
+    // inside the project root before any filesystem read. Mirrors the M1 fix
+    // pattern in `handlers/security.rs::secrets`.
+    let file_path = validate_file_path(&request.file, Some(&project))
+        .map_err(|e| HandlerError(axum::http::StatusCode::BAD_REQUEST, e.to_string()))?;
 
     // Detect language (using shared validator)
     let language = detect_or_parse_language(request.language.as_deref(), &file_path)
@@ -226,11 +225,11 @@ pub async fn complexity(
     state.touch();
 
     let project = state.project().clone();
-    let file_path = if PathBuf::from(&request.file).is_absolute() {
-        PathBuf::from(&request.file)
-    } else {
-        project.join(&request.file)
-    };
+    // VAL-006 / issue #5 (broader audit): validate caller-supplied path stays
+    // inside the project root before any filesystem read. Mirrors the M1 fix
+    // pattern in `handlers/security.rs::secrets`.
+    let file_path = validate_file_path(&request.file, Some(&project))
+        .map_err(|e| HandlerError(axum::http::StatusCode::BAD_REQUEST, e.to_string()))?;
 
     // Detect language (using shared validator)
     let language = detect_or_parse_language(request.language.as_deref(), &file_path)

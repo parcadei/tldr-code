@@ -3,7 +3,6 @@
 //! These handlers provide code quality analysis including code smell detection
 //! and maintainability index calculation.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{extract::State, Json};
@@ -13,8 +12,8 @@ use crate::server::{DaemonResponse, HandlerError};
 use crate::state::DaemonState;
 
 use tldr_core::{
-    detect_smells, maintainability_index, Language, MaintainabilityReport, SmellType, SmellsReport,
-    ThresholdPreset,
+    detect_smells, maintainability_index, validate_file_path, Language, MaintainabilityReport,
+    SmellType, SmellsReport, ThresholdPreset,
 };
 
 // =============================================================================
@@ -42,12 +41,13 @@ pub async fn smells(
     state.touch();
 
     let project = state.project().clone();
+    // VAL-006 / issue #5 (broader audit): when the caller supplies an explicit
+    // path, validate it stays inside the project root before any filesystem
+    // walk. When no path is given, default to scanning the project root
+    // (already trusted). Mirrors the M1 fix in `handlers/security.rs::secrets`.
     let path = if let Some(p) = &request.path {
-        if PathBuf::from(p).is_absolute() {
-            PathBuf::from(p)
-        } else {
-            project.join(p)
-        }
+        validate_file_path(p, Some(&project))
+            .map_err(|e| HandlerError(axum::http::StatusCode::BAD_REQUEST, e.to_string()))?
     } else {
         project
     };
@@ -115,12 +115,13 @@ pub async fn maintainability(
     state.touch();
 
     let project = state.project().clone();
+    // VAL-006 / issue #5 (broader audit): when the caller supplies an explicit
+    // path, validate it stays inside the project root before any filesystem
+    // walk. When no path is given, default to scanning the project root
+    // (already trusted). Mirrors the M1 fix in `handlers/security.rs::secrets`.
     let path = if let Some(p) = &request.path {
-        if PathBuf::from(p).is_absolute() {
-            PathBuf::from(p)
-        } else {
-            project.join(p)
-        }
+        validate_file_path(p, Some(&project))
+            .map_err(|e| HandlerError(axum::http::StatusCode::BAD_REQUEST, e.to_string()))?
     } else {
         project
     };
