@@ -1128,7 +1128,7 @@ fn check_dice(lang: &str) {
         .get("dice_coefficient")
         .and_then(Value::as_f64)
         .unwrap_or(-1.0);
-    if !(coef_id >= 0.9 && coef_id <= 1.0) {
+    if !(0.9..=1.0).contains(&coef_id) {
         panic!(
             "[dice × {lang}] SILENT_FAIL — dice(a,a) of identical files must be in [0.9, 1.0]; got {coef_id}\n--- stdout ---\n{}\n--- stderr ---\n{stderr_id}",
             truncate(&stdout_id, 400)
