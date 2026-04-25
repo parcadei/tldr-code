@@ -1,0 +1,96 @@
+{
+  "task": "Ship v0.2.1 hotfix closing 4 GitHub issues filed against v0.2.0: #5 (daemon path traversal — Unix-side path-traversal portion only; Windows TCP unauthenticated listener deferred to v0.3.0 pending design decision), #11 (vuln SARIF Deserialization findings mislabeled as SqlInjection due to wildcard match arm), #12 (MCP lifecycle handshake fails: server rejects notifications/initialized because id is required and notifications never receive responses), #19 (MCP InitializeResult emits snake_case protocol_version/server_info breaking MCP 2024-11-05 spec-compliant clients incl. Claude Code). All four are confirmed present in HEAD f7cccff (v0.2.0). Sequence: M1 + M2 independent (different files, can parallelize), M3 before M4 (both touch crates/tldr-mcp/src/protocol.rs and server.rs).",
+  "complexity": "multi-feature",
+  "starting_head": "f7cccff",
+  "release_target": {
+    "version": "0.2.1",
+    "tag": "v0.2.1",
+    "crates": ["tldr-core", "tldr-cli", "tldr-daemon", "tldr-mcp"],
+    "publish": "manual (user runs cargo publish; orchestrator outputs commands but does NOT execute)"
+  },
+  "milestones": [
+    {
+      "name": "daemon-path-traversal",
+      "status": "pending",
+      "assertions": ["VAL-001"]
+    },
+    {
+      "name": "vuln-sarif-deserialization",
+      "status": "passed",
+      "assertions": ["VAL-002"]
+    },
+    {
+      "name": "mcp-lifecycle-handshake",
+      "status": "pending",
+      "assertions": ["VAL-003"]
+    },
+    {
+      "name": "mcp-initialize-camelcase",
+      "status": "pending",
+      "assertions": ["VAL-004"]
+    },
+    {
+      "name": "release-prep",
+      "status": "pending",
+      "assertions": ["VAL-005"]
+    }
+  ],
+  "assertions": [
+    {
+      "id": "VAL-001",
+      "type": "invariant",
+      "milestone": "daemon-path-traversal",
+      "status": "pending",
+      "depends": [],
+      "worker": null,
+      "evidence": null,
+      "issue": "parcadei/tldr-code#5 (path-traversal portion only; Windows TCP auth deferred)",
+      "text": "The tldr-daemon IPC handler validates every absolute path argument via tldr_core::validate_file_path before performing any filesystem read, and refuses traversal attempts (e.g. paths containing '..' segments resolving outside the project root, or paths absolute to system locations like /etc/passwd, /Users/<other>/.ssh/, %USERPROFILE%\\.ssh on Windows). Triage cited paths at crates/tldr-cli/src/daemon/security.rs:49-56,113-121 — the ACTUAL path is crates/tldr-daemon/src/handlers/security.rs. Worker MUST first verify the file path and locate the unguarded handler entry points (likely the same line region; if line numbers shifted, update them in the worker report). Fix: wire validate_file_path() (exported at tldr_core::validate_file_path per lib.rs:132) into every IPC handler in handlers/security.rs that accepts an absolute path argument. Reproduction test MUST: (1) drive the IPC handler in-process (NOT via shell — keep test deterministic; spawn the daemon in a test thread or invoke the handler function directly with a synthetic JSON request), (2) send a request with path = '/etc/passwd' (or on Windows, the equivalent: 'C:\\\\Windows\\\\System32\\\\drivers\\\\etc\\\\hosts'), (3) parse the JSON response, (4) assert the response is an error variant with a recognizable error code/message naming path validation, (5) assert NO field of the response (recursively walk the JSON) contains the string 'root:' or any other line content from the target file. On unfixed HEAD this test MUST fail because the handler returns the file content. RED-REASON GATE: worker MUST paste the literal RED stdout into the milestone report, and that stdout MUST contain either the substring 'root:' (proof the file content actually leaked) OR a panic/assertion failure naming the leaked-content check. If the RED failure is a parse error, harness setup error, or generic 'test failed' without the symptom keyword, the test does NOT exercise the bug — re-roll the test. Hold conditions: if reproduce test passes RED on HEAD before fix → STOP, the path was already validated upstream; if more than 3 distinct handler functions need touching → STOP, broader audit required (defer to v0.3.0). Acceptance: (1) reproduce test passes after fix; (2) cargo test -p tldr-daemon passes; (3) cargo test -p tldr-cli --test exhaustive_matrix --features semantic --release matrix unchanged at baseline (964/964 or whatever current); (4) cargo clippy --workspace --all-features --tests -- -D warnings clean."
+    },
+    {
+      "id": "VAL-002",
+      "type": "invariant",
+      "milestone": "vuln-sarif-deserialization",
+      "status": "passed",
+      "depends": [],
+      "worker": "kraken (M2 VAL-002)",
+      "evidence": "continuum/autonomous/v0.2.1-hotfix/validation/m2-vuln-sarif-deserialization.json",
+      "status_resolution": "Reproduction tests `vuln_json_labels_deserialization_correctly` and `vuln_sarif_labels_deserialization_correctly` (file: `crates/tldr-cli/tests/vuln_sarif_deserialization_test.rs`) passed RED on f7cccff with the expected symptoms — JSON test failed showing `left: \"sql_injection\" right: \"deserialization\"` and SARIF test failed showing `Got rule ids: [\"CWE-89\"]` (gate-required substrings `sql` and `deserialization` both present). Fix: replaced the wildcard match arm at `crates/tldr-cli/src/commands/remaining/vuln.rs:645-651` with an exhaustive `map_core_vuln_type` free function (vuln.rs:705-715) that maps all 6 `tldr_core::security::vuln::VulnType` variants — SqlInjection, Xss, CommandInjection, PathTraversal, Ssrf, Deserialization — with no `_` arm, so future tldr-core variant additions fail to compile until mapped. Pre-fix the wildcard mislabeled BOTH `Ssrf` AND `Deserialization` as SqlInjection. Both reproduction tests pass GREEN after fix. Full matrix unchanged (964/964: 730 exhaustive_matrix + 234 language_command_matrix). Clippy `--workspace --all-features --tests -- -D warnings` clean. 3 source files touched (vuln.rs + new test + new fixture). See `continuum/autonomous/v0.2.1-hotfix/reports/m2-issue-11-vuln-sarif-deserialization.md` for full RED→fix→GREEN narrative.",
+      "issue": "parcadei/tldr-code#11",
+      "text": "The `tldr vuln` command, when scanning a source file containing a deserialization sink (Java: ObjectInputStream.readObject() on user-controlled input; Python: pickle.loads on untrusted bytes; Ruby: Marshal.load — worker MUST first verify which language(s) the Deserialization variant fires on by reading crates/tldr-core/src/security/vuln.rs lines 629-712 and choose a fixture in a language that ACTUALLY triggers the rule — Java is suggested but verify), emits SARIF and JSON output in which the finding's vuln_type / SARIF ruleId correctly identifies it as deserialization — NOT as SqlInjection. Root cause confirmed at crates/tldr-cli/src/commands/remaining/vuln.rs:645-651: a match arm covers SqlInjection/CommandInjection/Xss/PathTraversal with a wildcard `_ => VulnType::SqlInjection` that silently mislabels any other VulnType variant from tldr_core::security::vuln (verified VulnType::Deserialization exists at vuln.rs:50; VulnType::Ssrf also exists at vuln.rs:60 and would be similarly mislabeled — worker SHOULD audit how many variants are mismapped and either map all of them or explicitly note in the report which remain). Fix: replace the wildcard match with an exhaustive From<tldr_core::security::vuln::VulnType> impl OR an exhaustive match (no wildcard) so the Rust compiler enforces completeness — when tldr_core adds a new VulnType variant, this code fails to compile until it's mapped. Reproduction test MUST: (1) create a fixture file (e.g. crates/tldr-cli/tests/fixtures/deserialize_<lang>/Vuln.<ext>) containing the deserialization sink in whichever language the rule fires on, (2) invoke the vuln command in-process (via the existing test harness pattern) with --format sarif, (3) parse the SARIF JSON, locate runs[0].results[0], (4) assert ruleId corresponds to deserialization (the canonical SARIF ruleId for deserialization in this codebase — worker determines by reading the SARIF emitter and matches its convention), (5) assert ruleId is NOT 'CWE-89' / 'sql-injection' / any sql-injection variant, (6) re-invoke with --format json, parse, assert top-level vuln_type field equals the canonical form for deserialization (e.g. 'deserialization' or 'Deserialization' — match the codebase's convention), and assert it does NOT equal 'sql_injection' / 'sqlinjection' / 'SqlInjection'. On unfixed HEAD this test MUST fail with a wrong ruleId / vuln_type. RED-REASON GATE: worker MUST paste the literal RED stdout into the milestone report, and that stdout MUST contain BOTH (a) the substring 'sql' (case-insensitive — proof the wrong label is being applied) AND (b) the substring matching the deserialization-related expected value (proof the assertion was checking the right thing). If the RED failure is from JSON parse error, fixture not found, vuln command panic on unrelated path, etc., the test is wrong — re-roll. Hold conditions: more than 2 source files touched (vuln.rs + the fixture file is expected; if a new module is needed, flag for review); if the deserialization rule does NOT fire on Java in current code, switch fixture language and document. Acceptance: (1) reproduce test passes after fix; (2) full matrix unchanged; (3) clippy clean; (4) the new exhaustive match would emit a compile-time error if a future tldr_core::security::vuln::VulnType variant is added without a mapping (verify by reading the fix shape — no wildcard arm)."
+    },
+    {
+      "id": "VAL-003",
+      "type": "invariant",
+      "milestone": "mcp-lifecycle-handshake",
+      "status": "pending",
+      "depends": [],
+      "worker": null,
+      "evidence": null,
+      "issue": "parcadei/tldr-code#12",
+      "text": "The tldr-mcp server speaks JSON-RPC 2.0 + MCP 2024-11-05 lifecycle correctly: (a) requests with id receive a response, (b) notifications (no id field) MUST NOT receive a response, (c) the canonical client notification 'notifications/initialized' is recognized as a valid (no-op or state-transition) notification rather than rejected as an unknown method or as a malformed request due to missing id. Root cause confirmed at crates/tldr-mcp/src/protocol.rs:31 (`pub id: Value` is non-optional, no #[serde(default)] — so frames without id fail to deserialize), and crates/tldr-mcp/src/server.rs:34-41 (handler always emits a response frame to stdout regardless of incoming id) and :65 (the handler routes the literal method name 'initialized' rather than the spec-correct 'notifications/initialized'). Fix: (a) protocol.rs change `pub id: Value` to `pub id: Option<Value>` with `#[serde(default, skip_serializing_if = \"Option::is_none\")]`; (b) server.rs route 'notifications/initialized' (in addition to or instead of 'initialized' — worker reads the MCP 2024-11-05 spec to confirm the canonical method name and removes the legacy alias if it was never spec-correct); (c) server.rs: when incoming request id is None, treat as notification — process side effects only, do NOT write any JSON-RPC response frame to stdout. Reproduction test MUST: (1) spawn the MCP server in-process (call into protocol::handle_request or server::dispatch directly with synthetic JSON input — DO NOT spawn the binary via Command::new; cargo test runs debug builds and the test should be portable across Linux/Mac/Windows in case CI eventually picks it up), (2) write three frames to its input in order: Frame A = `{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":1,\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1\"}}}`, Frame B = `{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}` (NO id), Frame C = `{\"jsonrpc\":\"2.0\",\"method\":\"tools/list\",\"id\":2}`; (3) collect ALL emitted output frames (parse each as JSON), (4) assert exactly one frame has `id == 1` (the initialize response), (5) assert NO frame is emitted in response to Frame B — count frames between sending Frame B and sending Frame C, must be zero new frames, (6) assert exactly one frame has `id == 2` (the tools/list response). On unfixed HEAD this test MUST fail at step 5 (or earlier — Frame B might cause a parse error response). RED-REASON GATE: worker MUST paste the literal RED stdout into the milestone report, and that stdout MUST contain at least ONE of: (a) substring 'missing field' / 'missing `id`' (proof step B was rejected as malformed), OR (b) an assertion failure showing more than zero frames emitted between B and C (proof the unwanted response was emitted), OR (c) substring 'unknown method' near 'notifications/initialized' (proof the routing failed). If RED is from compile error, panic in unrelated init, generic 'test failed' without naming the symptom — re-roll the test. Hold conditions: more than 2 files touched (protocol.rs + server.rs); fix accidentally breaks any existing in-tree mcp test (run cargo test -p tldr-mcp to verify); fix introduces a clippy warning. Coordination: M3 must commit BEFORE M4 starts. Both M3 and M4 touch protocol.rs (M3 changes the JsonRpcRequest struct; M4 changes the InitializeResult struct — different structs, but same file). M4 worker must base off M3's commit SHA. Acceptance: (1) reproduce test passes after fix; (2) cargo test -p tldr-mcp passes; (3) full matrix unchanged; (4) clippy clean."
+    },
+    {
+      "id": "VAL-004",
+      "type": "invariant",
+      "milestone": "mcp-initialize-camelcase",
+      "status": "pending",
+      "depends": ["VAL-003"],
+      "worker": null,
+      "evidence": null,
+      "issue": "parcadei/tldr-code#19 (the only human-filed bug — etal37, filed against v0.1.6 still present in v0.2.0)",
+      "text": "The tldr-mcp server's response to ALL standard MCP requests (initialize AND tools/list at minimum — these two are the day-1 handshake exchange that Claude Code performs immediately on connection) emit result-object top-level field names in camelCase per JSON-RPC 2.0 / MCP 2024-11-05 wire spec. Issue #19 was filed by the only human reporter on this run (etal37) and the user-facing failure is 'Claude Code cannot connect to tldr-mcp.' Confirming the literal triage line (renaming protocol_version + server_info on InitializeResult) without verifying the broader response surface risks shipping a half-fix that still leaves Claude Code blocked at the tools/list step. Root cause confirmed at crates/tldr-mcp/src/protocol.rs:151-175: the InitializeResult struct's fields `protocol_version` and `server_info` lack #[serde(rename = ...)] attributes (other peer fields like list_changed, is_error, input_schema were correctly renamed in v0.1.6 work — these two were missed). Fix: (a) add `#[serde(rename = \"protocolVersion\")]` to the protocol_version field and `#[serde(rename = \"serverInfo\")]` to the server_info field in InitializeResult; (b) BROADER AUDIT: worker MUST recursively walk the tools/list response (and any other response struct it discovers) and add #[serde(rename = ...)] to EVERY snake_case field — do NOT defer additional fields to a follow-up VAL; if the recursive scan finds snake_case in tools/list result, ToolsListResult, Tool, ServerInfo, ServerCapabilities, or ANY nested struct, fix them in this milestone. The shipping criterion is: ANY response Claude Code could receive during a normal session contains zero snake_case keys at any depth. Reproduction test MUST: (1) spawn the MCP server in-process (same harness pattern as VAL-003), (2) send TWO requests: Frame A = initialize (id=1), Frame B = tools/list (id=2), (3) capture both response frames, (4) parse each as JSON, (5) recursively walk the entire .result object of EACH response, collecting every key at every depth, (6) for both responses: assert NO key matches the regex `^[a-z]+_[a-z]+` (snake_case detector — must not match anywhere in the recursive walk), (7) for the initialize response specifically: assert .result.protocolVersion exists and .result.serverInfo exists. On unfixed HEAD this test MUST fail at step 6 because the initialize response (and likely tools/list response) contain snake_case keys. RED-REASON GATE: worker MUST paste the literal RED stdout into the milestone report, and that stdout MUST contain the substring 'protocol_version' OR 'server_info' OR a snake_case key name from the tools/list audit (proof the recursive walk found a real snake_case key, not a generic test failure). If RED is from JSON parse error, harness panic, or test-not-found, the test does not exercise the bug — re-roll. BROADER-AUDIT GATE: if the tools/list response has zero snake_case keys after fixing only protocol_version+server_info, that's fine and milestone closes. If the tools/list response has snake_case keys, the milestone does NOT close until those are also fixed in this commit (worker may touch additional structs — count those touches against the 5-file cap; if >5 files needed, STOP and escalate). Hold conditions: the new renames break any existing mcp test that asserts on snake_case (if so, that test was wrong — fix it as part of this milestone, do NOT weaken the new test). Coordination: depends on VAL-003 — must rebase on M3's commit. Acceptance: (1) reproduce test passes after fix; (2) the VAL-003 reproduce test still passes (we did not regress the lifecycle handshake); (3) cargo test -p tldr-mcp passes; (4) full matrix unchanged; (5) clippy clean; (6) recursive snake_case walk on initialize+tools/list responses returns zero matches."
+    },
+    {
+      "id": "VAL-005",
+      "type": "behavioral",
+      "milestone": "release-prep",
+      "status": "pending",
+      "depends": ["VAL-001", "VAL-002", "VAL-003", "VAL-004"],
+      "worker": null,
+      "evidence": null,
+      "issue": null,
+      "text": "v0.2.1 release shipped: (R1) workspace + 4 crate Cargo.toml versions bumped 0.2.0 → 0.2.1, (R2) CHANGELOG.md updated with ## [0.2.1] section dated today (or next day if work spans midnight) listing the 4 fixes by issue number with one-line descriptions, (R3) single chore commit `chore: prep v0.2.1 release`, (R4) push to main, (R5) tag v0.2.1, push tag — cargo-dist via .github/workflows/release.yml builds 4 platform binaries automatically. (R6) STOP — DO NOT cargo publish. Output 4 `cargo publish -p <crate>` commands as plain text for the user to run manually (matches v0.2.0 process per handoff). (R7) Draft 4 issue-closing comments (one per #5 #11 #12 #19) — each links the milestone-fix commit SHA, the milestone report, and the v0.2.1 release URL — output as plain text for user to paste, do NOT auto-post. Acceptance: (1) git tag v0.2.1 exists and points to the chore commit; (2) git push --tags succeeded; (3) the 4 publish commands output to user; (4) the 4 issue comment drafts output to user; (5) handoff written at thoughts/shared/handoffs/v0.2.1-shipped/{timestamp}_v0.2.1-released.yaml mirroring the v0.2.0 handoff structure with a next_session_prompt referencing Run 2 (v0.2.2 quality release covering issues #6, #8, #9, #10, #13, #14, #15, #16, #18)."
+    }
+  ]
+}

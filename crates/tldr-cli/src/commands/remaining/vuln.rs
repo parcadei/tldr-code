@@ -642,13 +642,7 @@ fn analyze_file(path: &Path) -> Result<Vec<VulnFinding>, RemainingError> {
         Ok(report) => {
             let mut findings = Vec::new();
             for f in report.findings {
-                let vuln_type = match format!("{:?}", f.vuln_type).as_str() {
-                    "SqlInjection" => VulnType::SqlInjection,
-                    "CommandInjection" => VulnType::CommandInjection,
-                    "Xss" => VulnType::Xss,
-                    "PathTraversal" => VulnType::PathTraversal,
-                    _ => VulnType::SqlInjection,
-                };
+                let vuln_type = map_core_vuln_type(f.vuln_type);
                 let severity = match f.severity.to_uppercase().as_str() {
                     "CRITICAL" => Severity::Critical,
                     "HIGH" => Severity::High,
@@ -689,6 +683,34 @@ fn analyze_file(path: &Path) -> Result<Vec<VulnFinding>, RemainingError> {
             Ok(findings)
         }
         Err(_) => Ok(Vec::new()),
+    }
+}
+
+/// Map a `tldr_core::security::vuln::VulnType` to the CLI-side `VulnType`.
+///
+/// Pre-VAL-002 (issue #11), this site used a wildcard match arm that
+/// silently relabeled every variant outside {SqlInjection, CommandInjection,
+/// Xss, PathTraversal} as `SqlInjection`. That mislabeled `Deserialization`
+/// and `Ssrf` findings — the user-facing symptom in #11 was Java
+/// `ObjectInputStream.readObject()` findings being emitted as
+/// `vuln_type: "sql_injection"` in JSON, and the SARIF rules array
+/// disagreeing with `results[].ruleId` (rules: `CWE-89` from local
+/// vuln_type, results.ruleId: `CWE-502` from the unmodified `cwe_id`),
+/// producing an internally inconsistent SARIF document.
+///
+/// This match is deliberately exhaustive (no `_` arm). When tldr-core
+/// adds a new `VulnType` variant in the future, this function fails
+/// to compile until the new variant is mapped — preventing a
+/// reintroduction of the wildcard mislabel.
+fn map_core_vuln_type(core_ty: tldr_core::security::vuln::VulnType) -> VulnType {
+    use tldr_core::security::vuln::VulnType as CoreVulnType;
+    match core_ty {
+        CoreVulnType::SqlInjection => VulnType::SqlInjection,
+        CoreVulnType::Xss => VulnType::Xss,
+        CoreVulnType::CommandInjection => VulnType::CommandInjection,
+        CoreVulnType::PathTraversal => VulnType::PathTraversal,
+        CoreVulnType::Ssrf => VulnType::Ssrf,
+        CoreVulnType::Deserialization => VulnType::Deserialization,
     }
 }
 

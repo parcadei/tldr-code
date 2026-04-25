@@ -1,0 +1,54 @@
+{
+  "milestone": "M2",
+  "assertion": "VAL-002",
+  "issue": "parcadei/tldr-code#11",
+  "status": "passed",
+  "worker": "kraken (M2 VAL-002)",
+  "starting_head": "f7cccff",
+  "test_file": "crates/tldr-cli/tests/vuln_sarif_deserialization_test.rs",
+  "test_names": [
+    "vuln_json_labels_deserialization_correctly",
+    "vuln_sarif_labels_deserialization_correctly"
+  ],
+  "fixture_file": "crates/tldr-cli/tests/fixtures/deserialize_java/Vuln.java",
+  "fix_file": "crates/tldr-cli/src/commands/remaining/vuln.rs",
+  "fix_summary": "Replaced wildcard match arm at vuln.rs:645-651 with exhaustive map_core_vuln_type fn (no _ arm). Maps all 6 tldr-core VulnType variants: SqlInjection, Xss, CommandInjection, PathTraversal, Ssrf, Deserialization.",
+  "variants_mapped": [
+    "SqlInjection",
+    "Xss",
+    "CommandInjection",
+    "PathTraversal",
+    "Ssrf",
+    "Deserialization"
+  ],
+  "previously_mismapped": [
+    "Ssrf",
+    "Deserialization"
+  ],
+  "red_reason_gate": {
+    "checked_substring_sql": true,
+    "checked_substring_deserialization": true,
+    "passed": true,
+    "red_stdout_excerpt_json": "left: \"sql_injection\" right: \"deserialization\"",
+    "red_stdout_excerpt_sarif": "Got rule ids: [\"CWE-89\"]"
+  },
+  "gates": {
+    "reproduction_test_red_on_head": "PASS (2 failures with documented symptoms)",
+    "reproduction_test_green_after_fix": "PASS (2/2)",
+    "exhaustive_matrix": "PASS (730/730)",
+    "language_command_matrix": "PASS (234/234)",
+    "matrix_total_964": "PASS (730 + 234 = 964)",
+    "clippy_workspace_all_features_tests": "PASS (clean)",
+    "exhaustive_match_no_wildcard": "PASS (compile-time enforcement)",
+    "files_touched_le_5": "PASS (3 source files)"
+  },
+  "files_modified": [
+    "crates/tldr-cli/src/commands/remaining/vuln.rs",
+    "crates/tldr-cli/tests/vuln_sarif_deserialization_test.rs",
+    "crates/tldr-cli/tests/fixtures/deserialize_java/Vuln.java"
+  ],
+  "artifacts": [
+    "continuum/autonomous/v0.2.1-hotfix/reports/m2-issue-11-vuln-sarif-deserialization.md",
+    "continuum/autonomous/v0.2.1-hotfix/validation/m2-vuln-sarif-deserialization.json"
+  ]
+}
