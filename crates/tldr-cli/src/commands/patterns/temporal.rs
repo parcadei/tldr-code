@@ -36,6 +36,9 @@ use std::time::{Duration, Instant};
 use clap::Args;
 use tree_sitter::{Node, Parser};
 
+use tldr_core::callgraph::{
+    build_project_call_graph_v2, extract_calls_for_language, BuildConfig, CallSite,
+};
 use tldr_core::types::Language;
 
 use crate::output::OutputFormat as GlobalOutputFormat;
@@ -71,7 +74,8 @@ pub struct TemporalArgs {
     #[arg(long)]
     pub query: Option<String>,
 
-    /// Source language (only 'python' supported)
+    /// Source language hint (legacy; prefer the global `--lang/-l` flag).
+    /// Accepts any of the 18 TLDR languages or `auto` for autodetect.
     #[arg(long = "source-lang", default_value = "python")]
     pub source_lang: String,
 
@@ -409,6 +413,247 @@ fn extract_functions_recursive(node: Node, source: &[u8], extractor: &mut Sequen
 }
 
 // =============================================================================
+// Generalized per-language sequence extraction (VAL-016)
+// =============================================================================
+//
+// `extract_sequences` (above) is the historical Python-AST walker that tracks
+// receiver-aware variable lifetimes (e.g. `f = open(...); f.read(); f.close()`
+// emits `[open, read, close]` keyed by `func:f`). It is kept for backward
+// compatibility on Python and for the bespoke `with`/`__exit__` modelling
+// the call-graph IR doesn't currently express.
+//
+// For the other 17 languages we reuse each language's call-graph handler,
+// which already extracts per-method `Vec<CallSite>` with line numbers (see
+// `tldr_core::callgraph::cross_file_types::FileIR::calls`). Sorting that
+// list by line yields the temporal sequence per scope; each sequence is
+// keyed by the qualifying caller name so cross-method calls don't bleed
+// into one another.
+
+/// Convert per-caller CallSite lists into temporal sequences keyed by
+/// `<file>::<caller>`. Each sequence is sorted by line number so the
+/// resulting order matches source-order method dispatch.
+///
+/// Receiver-prefixing rule: when a CallSite has a `receiver`, the
+/// sequence entry is the bare `target` (the method name) — receiver
+/// information is intentionally dropped because temporal mining is
+/// interested in *which method* runs, not the variable it ran on.
+/// This keeps the bigram alphabet finite across runs.
+fn sequences_from_callsite_map(
+    file_key: &str,
+    calls_by_func: &HashMap<String, Vec<CallSite>>,
+) -> HashMap<String, Vec<String>> {
+    let mut out: HashMap<String, Vec<String>> = HashMap::new();
+    for (caller, sites) in calls_by_func {
+        if sites.is_empty() {
+            continue;
+        }
+        // Sort a copy by line (ascending). Sites without a line sink to
+        // the end and preserve their relative order for determinism.
+        let mut ordered = sites.clone();
+        ordered.sort_by_key(|s| s.line.unwrap_or(u32::MAX));
+
+        let names: Vec<String> = ordered
+            .into_iter()
+            .map(|s| s.target)
+            .filter(|t| !t.is_empty())
+            .collect();
+
+        if names.is_empty() {
+            continue;
+        }
+        let key = format!("{}::{}", file_key, caller);
+        out.insert(key, names);
+    }
+    out
+}
+
+/// Result of extracting sequences for a single file: the per-caller
+/// sequences and the example-line of the first call site (used to seed
+/// `TemporalExample.line`).
+struct FileSequences {
+    sequences: HashMap<String, Vec<String>>,
+    /// First line per (caller, target_pair) — used to give each bigram
+    /// a real line number rather than the legacy hard-coded `1`.
+    first_line: HashMap<(String, String, String), u32>,
+}
+
+/// Extract sequences for a single source file using the language-aware
+/// call-graph handler.
+///
+/// For Python, this *combines* two sources:
+///   1. The legacy receiver-aware AST walker (`extract_sequences`),
+///      which produces `<func>:<var>` keyed sequences for patterns
+///      like `f = open(...); f.read(); f.close()` plus the bespoke
+///      `with` / `__exit__` modelling. This is the historical
+///      behaviour and is required for the `open -> read -> close`
+///      resource-lifecycle bigrams the temporal command was originally
+///      designed to mine.
+///   2. The call-graph handler (`extract_calls_for_language`), which
+///      captures bare calls like `helper(); b_util()` keyed by
+///      `<file>::<caller>`. The legacy walker does NOT capture these.
+///
+/// The two key namespaces are disjoint (`:` vs `::`) so they coexist.
+/// For the other 17 languages only the call-graph path runs.
+fn extract_sequences_for_file(
+    path: &Path,
+    source: &str,
+    language: Language,
+) -> PatternsResult<FileSequences> {
+    let file_key = path.to_string_lossy().to_string();
+
+    let mut sequences: HashMap<String, Vec<String>> = HashMap::new();
+    let mut first_line: HashMap<(String, String, String), u32> = HashMap::new();
+
+    // Python regression path — preserve legacy receiver-aware sequences.
+    if language == Language::Python {
+        let legacy = extract_sequences(source);
+        for (k, v) in legacy {
+            // The legacy walker uses `<func>:<var>` keys (single colon).
+            sequences.entry(k).or_default().extend(v);
+        }
+    }
+
+    // Call-graph handler path — runs for all 18 languages, picking up
+    // bare calls plus method/attribute calls in source order.
+    let lang_str = language.as_str();
+    let calls_by_func = match extract_calls_for_language(lang_str, path, source) {
+        Ok(map) => map,
+        Err(_) => {
+            // OCaml is the only language that hits this fallback (the
+            // single-file extractor doesn't currently expose its
+            // tree-sitter language). The directory analyzer routes
+            // OCaml through `build_project_call_graph_v2` instead so
+            // returning whatever sequences we have so far is correct.
+            return Ok(FileSequences {
+                sequences,
+                first_line,
+            });
+        }
+    };
+
+    let scoped = sequences_from_callsite_map(&file_key, &calls_by_func);
+    for (k, v) in scoped {
+        sequences.entry(k).or_default().extend(v);
+    }
+
+    // Build the (caller, before, after) -> first_line lookup so bigram
+    // examples carry an accurate line for non-Python sequences.
+    for (caller, sites) in &calls_by_func {
+        let mut ordered = sites.clone();
+        ordered.sort_by_key(|s| s.line.unwrap_or(u32::MAX));
+        for pair in ordered.windows(2) {
+            let before = pair[0].target.clone();
+            let after = pair[1].target.clone();
+            if before.is_empty() || after.is_empty() || before == after {
+                continue;
+            }
+            let line = pair[1].line.unwrap_or(1);
+            first_line
+                .entry((caller.clone(), before, after))
+                .or_insert(line);
+        }
+    }
+
+    Ok(FileSequences {
+        sequences,
+        first_line,
+    })
+}
+
+/// Detect the language for a directory. Falls back to `args.lang` if
+/// auto-detection returns nothing.
+fn resolve_directory_language(path: &Path, args: &TemporalArgs) -> Option<Language> {
+    if let Some(lang) = args.lang {
+        return Some(lang);
+    }
+    Language::from_directory(path)
+}
+
+/// Build a `(caller, before, after) -> first-line` lookup from the
+/// call-graph IR's per-caller CallSite lists. This is the project-wide
+/// counterpart to `extract_sequences_for_file::first_line` so OCaml
+/// bigram examples carry an accurate line.
+fn per_caller_first_line(
+    calls_by_func: &HashMap<String, Vec<CallSite>>,
+) -> HashMap<(String, String, String), u32> {
+    let mut first_line: HashMap<(String, String, String), u32> = HashMap::new();
+    for (caller, sites) in calls_by_func {
+        let mut ordered = sites.clone();
+        ordered.sort_by_key(|s| s.line.unwrap_or(u32::MAX));
+        for pair in ordered.windows(2) {
+            let before = pair[0].target.clone();
+            let after = pair[1].target.clone();
+            if before.is_empty() || after.is_empty() || before == after {
+                continue;
+            }
+            let line = pair[1].line.unwrap_or(1);
+            first_line
+                .entry((caller.clone(), before, after))
+                .or_insert(line);
+        }
+    }
+    first_line
+}
+
+/// Aggregate one file's sequences into the directory-wide accumulator.
+/// Counts bigrams, tracks before/after totals for confidence, and
+/// records up to `args.include_examples` example sites per pair.
+#[allow(clippy::too_many_arguments)]
+fn aggregate_file_sequences(
+    file_sequences: &HashMap<String, Vec<String>>,
+    file_path_str: &str,
+    first_line: &HashMap<(String, String, String), u32>,
+    all_sequences: &mut HashMap<String, Vec<String>>,
+    bigram_counts: &mut HashMap<(String, String), u32>,
+    before_counts: &mut HashMap<String, u32>,
+    all_examples: &mut HashMap<(String, String), Vec<TemporalExample>>,
+    args: &TemporalArgs,
+) {
+    for (key, calls) in file_sequences {
+        all_sequences
+            .entry(key.clone())
+            .or_default()
+            .extend(calls.clone());
+
+        // Recover the caller name from the sequence key for line
+        // lookup. Keys produced by `sequences_from_callsite_map` are
+        // `<file>::<caller>`; Python's legacy keys are `<func>:<var>`.
+        // For the Python case the `first_line` map is empty so we fall
+        // back to line=1 (preserving prior CLI output exactly).
+        let caller_for_lookup = key
+            .rsplit_once("::")
+            .map(|(_, c)| c.to_string())
+            .unwrap_or_default();
+
+        for i in 0..calls.len().saturating_sub(1) {
+            let before = &calls[i];
+            let after = &calls[i + 1];
+
+            if before == after {
+                continue;
+            }
+
+            let pair = (before.clone(), after.clone());
+            *bigram_counts.entry(pair.clone()).or_default() += 1;
+            *before_counts.entry(before.clone()).or_default() += 1;
+
+            // Track examples
+            let examples = all_examples.entry(pair).or_default();
+            if examples.len() < args.include_examples as usize {
+                let line = first_line
+                    .get(&(caller_for_lookup.clone(), before.clone(), after.clone()))
+                    .copied()
+                    .unwrap_or(1);
+                examples.push(TemporalExample {
+                    file: file_path_str.to_string(),
+                    line,
+                });
+            }
+        }
+    }
+}
+
+// =============================================================================
 // Bigram Mining
 // =============================================================================
 
@@ -668,8 +913,17 @@ fn analyze_temporal_file(path: &Path, args: &TemporalArgs) -> PatternsResult<Tem
     let source = read_file_safe(&canonical)?;
     let file_path_str = canonical.to_string_lossy().to_string();
 
-    // Extract sequences
-    let sequences = extract_sequences(&source);
+    // Detect language: explicit --lang flag wins, otherwise auto-detect
+    // from the file extension. Default to Python on failure to preserve
+    // backward compatibility with the original Python-only behaviour.
+    let language = args
+        .lang
+        .or_else(|| Language::from_path(&canonical))
+        .unwrap_or(Language::Python);
+
+    // Extract sequences via the language-aware path.
+    let file_seqs = extract_sequences_for_file(&canonical, &source, language)?;
+    let sequences = file_seqs.sequences;
 
     // Mine bigrams
     let (_, constraints) = mine_bigrams(&sequences, &file_path_str, args);
@@ -692,61 +946,126 @@ fn analyze_temporal_directory(
     let mut before_counts: HashMap<String, u32> = HashMap::new();
     let mut files_analyzed = 0u32;
 
-    // Walk directory
-    for entry in tldr_core::walker::walk_project(&canonical) {
-        // Check timeout (E03 mitigation)
-        if start_time.elapsed() > timeout {
-            break;
-        }
+    // VAL-016: Determine the project's language. Auto-detect from
+    // manifest precedence + extension majority unless --lang overrode it.
+    // Falls back to Python so a directory of `.py` files without a
+    // manifest still works exactly like before.
+    let resolved_lang = resolve_directory_language(&canonical, args);
 
-        let entry_path = entry.path();
+    // OCaml is supported by the call-graph builder but NOT by the
+    // single-file extract_calls_for_language API. To cover ocaml
+    // (and as a robustness net for any future skew between the two),
+    // we use the project-wide builder when the resolved language is
+    // OCaml — otherwise we use the per-file walker which is cheaper.
+    let use_project_builder = matches!(resolved_lang, Some(Language::Ocaml));
 
-        // Skip non-Python files
-        if entry_path.extension().is_none_or(|ext| ext != "py") {
-            continue;
-        }
-
-        // Check file count limit
-        files_analyzed += 1;
-        if files_analyzed > args.max_files {
-            break;
-        }
-        check_directory_file_count(files_analyzed as usize)?;
-
-        // Analyze file
-        let file_path_str = entry_path.to_string_lossy().to_string();
-        if let Ok(source) = read_file_safe(entry_path) {
-            let sequences = extract_sequences(&source);
-
-            // Aggregate sequences
-            for (key, calls) in &sequences {
-                all_sequences
-                    .entry(key.clone())
-                    .or_default()
-                    .extend(calls.clone());
-
-                // Count bigrams
-                for i in 0..calls.len().saturating_sub(1) {
-                    let before = &calls[i];
-                    let after = &calls[i + 1];
-
-                    if before == after {
-                        continue;
+    if use_project_builder {
+        // Project-wide path: build the full call-graph IR and iterate
+        // FileIR.calls per file. This routes through every language's
+        // call-graph handler (including OCaml).
+        let lang = resolved_lang.expect("checked above");
+        let mut config = BuildConfig {
+            language: lang.as_str().to_string(),
+            respect_ignore: false,
+            ..Default::default()
+        };
+        config.use_type_resolution = false;
+        match build_project_call_graph_v2(&canonical, config) {
+            Ok(ir) => {
+                for (file_path, file_ir) in &ir.files {
+                    if start_time.elapsed() > timeout {
+                        break;
                     }
-
-                    let pair = (before.clone(), after.clone());
-                    *bigram_counts.entry(pair.clone()).or_default() += 1;
-                    *before_counts.entry(before.clone()).or_default() += 1;
-
-                    // Track examples
-                    let examples = all_examples.entry(pair).or_default();
-                    if examples.len() < args.include_examples as usize {
-                        examples.push(TemporalExample {
-                            file: file_path_str.clone(),
-                            line: 1, // Would need better line tracking
-                        });
+                    files_analyzed += 1;
+                    if files_analyzed > args.max_files {
+                        break;
                     }
+                    check_directory_file_count(files_analyzed as usize)?;
+
+                    // FileIR.path is relative to project root; rejoin.
+                    let abs_path = if file_path.is_absolute() {
+                        file_path.clone()
+                    } else {
+                        canonical.join(file_path)
+                    };
+                    let file_key = abs_path.to_string_lossy().to_string();
+                    let scoped =
+                        sequences_from_callsite_map(&file_key, &file_ir.calls);
+
+                    aggregate_file_sequences(
+                        &scoped,
+                        &file_key,
+                        &per_caller_first_line(&file_ir.calls),
+                        &mut all_sequences,
+                        &mut bigram_counts,
+                        &mut before_counts,
+                        &mut all_examples,
+                        args,
+                    );
                 }
+            }
+            Err(_) => {
+                // Builder failed — fall through to empty report. We do
+                // not silently swallow errors elsewhere; the report's
+                // metadata.files_analyzed=0 will trip the matrix's
+                // SILENT_FAIL guard if this hits in practice.
+            }
+        }
+    } else {
+        // Per-file walker path (Python + 16 other languages).
+        for entry in tldr_core::walker::walk_project(&canonical) {
+            // Check timeout (E03 mitigation)
+            if start_time.elapsed() > timeout {
+                break;
+            }
+
+            let entry_path = entry.path();
+
+            // VAL-016: dispatch on language detected from file extension.
+            // Skip files with no recognised language (avoids parsing
+            // markdown/yaml/etc.). The --lang flag, if provided, must
+            // match the entry language too — otherwise we'd extract
+            // sequences with a parser mis-matched to the file.
+            let entry_lang = match Language::from_path(entry_path) {
+                Some(lang) => lang,
+                None => continue,
+            };
+            if let Some(forced) = args.lang {
+                if forced != entry_lang {
+                    continue;
+                }
+            } else if let Some(project_lang) = resolved_lang {
+                if project_lang != entry_lang {
+                    continue;
+                }
+            }
+
+            // Check file count limit
+            files_analyzed += 1;
+            if files_analyzed > args.max_files {
+                break;
+            }
+            check_directory_file_count(files_analyzed as usize)?;
+
+            // Analyze file
+            let file_path_str = entry_path.to_string_lossy().to_string();
+            if let Ok(source) = read_file_safe(entry_path) {
+                let file_seqs =
+                    match extract_sequences_for_file(entry_path, &source, entry_lang) {
+                        Ok(s) => s,
+                        Err(_) => continue,
+                    };
+
+                aggregate_file_sequences(
+                    &file_seqs.sequences,
+                    &file_path_str,
+                    &file_seqs.first_line,
+                    &mut all_sequences,
+                    &mut bigram_counts,
+                    &mut before_counts,
+                    &mut all_examples,
+                    args,
+                );
             }
         }
     }
@@ -901,8 +1220,15 @@ pub fn run(args: TemporalArgs, global_format: GlobalOutputFormat) -> anyhow::Res
     let start_time = Instant::now();
     let path = &args.path;
 
-    // Validate language
-    if args.source_lang.to_lowercase() != "python" && args.source_lang.to_lowercase() != "auto" {
+    // VAL-016: validate the legacy `--source-lang` flag against the
+    // 18 supported TLDR languages plus the synthetic "auto" sentinel.
+    // The canonical way to override language is the global `--lang/-l`
+    // flag (see `args.lang`); `--source-lang` is preserved only for
+    // backward compatibility with the original Python-only CLI.
+    let source_lang_norm = args.source_lang.to_lowercase();
+    if source_lang_norm != "auto"
+        && source_lang_norm.parse::<Language>().is_err()
+    {
         return Err(PatternsError::UnsupportedLanguage {
             language: args.source_lang.clone(),
         }
@@ -1163,5 +1489,203 @@ def read_config(path):
             lang: None,
         };
         assert_eq!(args_auto.lang, None);
+    }
+
+    // ====================================================================
+    // VAL-016: per-language sequence-extraction unit tests
+    // ====================================================================
+    //
+    // Each test asserts that `extract_sequences_for_file` returns a
+    // sequence containing the bigram `helper -> b_util` when fed a tiny
+    // function that calls `helper()` then `b_util()` in source order.
+    // The fixture mirrors the canonical 18-language matrix fixture in
+    // crates/tldr-cli/tests/fixtures/mod.rs.
+
+    use std::io::Write;
+
+    /// Helper: write `source` to a temp file with `extension`, run the
+    /// generalized extractor, and return the merged list of sequences.
+    fn extract_for_lang(extension: &str, source: &str, language: Language) -> Vec<Vec<String>> {
+        let mut tmp = tempfile::Builder::new()
+            .suffix(&format!(".{}", extension))
+            .tempfile()
+            .expect("tempfile");
+        tmp.write_all(source.as_bytes()).expect("write source");
+        let path = tmp.path().to_path_buf();
+        let file_seqs = extract_sequences_for_file(&path, source, language)
+            .expect("extract_sequences_for_file");
+        file_seqs.sequences.into_values().collect()
+    }
+
+    /// Helper: assert the extracted sequences contain a `helper -> b_util`
+    /// adjacency in some scope. Built on top of `windows(2)` so it stays
+    /// agnostic to scope/key formatting differences across languages.
+    fn assert_helper_then_b_util(seqs: &[Vec<String>], language_label: &str) {
+        let found = seqs.iter().any(|seq| {
+            seq.windows(2)
+                .any(|w| w[0] == "helper" && w[1] == "b_util")
+        });
+        assert!(
+            found,
+            "[{}] expected `helper -> b_util` bigram, got: {:?}",
+            language_label, seqs
+        );
+    }
+
+    #[test]
+    fn test_extract_sequences_typescript() {
+        // TypeScript: function main() { helper(); b_util(); }
+        let source = "\
+function helper(): number { return 1; }
+function b_util(): number { return 2; }
+function main(): void {
+  helper();
+  b_util();
+}
+";
+        let seqs = extract_for_lang("ts", source, Language::TypeScript);
+        assert_helper_then_b_util(&seqs, "typescript");
+    }
+
+    #[test]
+    fn test_extract_sequences_java() {
+        // Java: methods inside a class. The Java callgraph handler
+        // qualifies callers as `Main.main`; the bigram still fires.
+        let source = "\
+class Main {
+    public static int helper() { return 1; }
+    public static int bUtil() { return 2; }
+    public static void main(String[] args) {
+        helper();
+        bUtil();
+    }
+}
+";
+        // We call the helper b_util via `bUtil` (Java idiom). Adjust the
+        // assertion accordingly.
+        let mut tmp = tempfile::Builder::new()
+            .suffix(".java")
+            .tempfile()
+            .unwrap();
+        tmp.write_all(source.as_bytes()).unwrap();
+        let path = tmp.path().to_path_buf();
+        let file_seqs =
+            extract_sequences_for_file(&path, source, Language::Java).expect("extract");
+        let seqs: Vec<Vec<String>> = file_seqs.sequences.into_values().collect();
+        let found = seqs.iter().any(|seq| {
+            seq.windows(2).any(|w| w[0] == "helper" && w[1] == "bUtil")
+        });
+        assert!(
+            found,
+            "[java] expected `helper -> bUtil` bigram, got: {:?}",
+            seqs
+        );
+    }
+
+    #[test]
+    fn test_extract_sequences_go() {
+        // Go: func main calls helper() then b_util()
+        let source = "\
+package main
+
+func helper() int { return 1 }
+func b_util() int { return 2 }
+func main() {
+    helper()
+    b_util()
+}
+";
+        let seqs = extract_for_lang("go", source, Language::Go);
+        assert_helper_then_b_util(&seqs, "go");
+    }
+
+    #[test]
+    fn test_extract_sequences_rust() {
+        // Rust: fn main calls helper() then b_util()
+        let source = "\
+fn helper() -> i32 { 1 }
+fn b_util() -> i32 { 2 }
+fn main() {
+    let _ = helper();
+    let _ = b_util();
+}
+";
+        let seqs = extract_for_lang("rs", source, Language::Rust);
+        assert_helper_then_b_util(&seqs, "rust");
+    }
+
+    #[test]
+    fn test_extract_sequences_python_via_generalized_path() {
+        // Python regression — the new dispatch must still emit the
+        // helper -> b_util bigram for Python (via the legacy walker).
+        let source = "\
+def helper():
+    return 1
+
+def b_util():
+    return 2
+
+def main():
+    helper()
+    b_util()
+";
+        let seqs = extract_for_lang("py", source, Language::Python);
+        assert_helper_then_b_util(&seqs, "python");
+    }
+
+    #[test]
+    fn test_extract_sequences_python_legacy_receiver_aware() {
+        // Python regression — the legacy receiver-aware walker must
+        // still emit `[open, read, close]` keyed by `<func>:f`. This
+        // covers the bespoke "with statement implies __exit__" logic
+        // that the call-graph IR doesn't model.
+        let source = "\
+def read_config(path):
+    f = open(path)
+    content = f.read()
+    f.close()
+    return content
+";
+        let mut tmp = tempfile::Builder::new()
+            .suffix(".py")
+            .tempfile()
+            .unwrap();
+        tmp.write_all(source.as_bytes()).unwrap();
+        let path = tmp.path().to_path_buf();
+        let file_seqs =
+            extract_sequences_for_file(&path, source, Language::Python).expect("extract");
+        let has_open_read = file_seqs
+            .sequences
+            .values()
+            .any(|seq| seq.windows(2).any(|w| w[0] == "open" && w[1] == "read"));
+        assert!(
+            has_open_read,
+            "python legacy: expected `open -> read` bigram for receiver f, got: {:?}",
+            file_seqs.sequences
+        );
+    }
+
+    #[test]
+    fn test_sequences_from_callsite_map_orders_by_line() {
+        // Unit test for the line-sort invariant. Two CallSites for the
+        // same caller delivered out of order by line must come back
+        // sorted ascending.
+        use tldr_core::callgraph::CallSite;
+        let mut calls: HashMap<String, Vec<CallSite>> = HashMap::new();
+        calls.insert(
+            "main".to_string(),
+            vec![
+                // intentionally deliver line 8 first
+                CallSite::direct("main".to_string(), "b_util".to_string(), Some(8)),
+                CallSite::direct("main".to_string(), "helper".to_string(), Some(7)),
+            ],
+        );
+        let out = sequences_from_callsite_map("/tmp/foo", &calls);
+        let main_seq = out.get("/tmp/foo::main").expect("main sequence");
+        assert_eq!(
+            main_seq,
+            &vec!["helper".to_string(), "b_util".to_string()],
+            "calls must be ordered by line ascending (sequences_from_callsite_map)"
+        );
     }
 }

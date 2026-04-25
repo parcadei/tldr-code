@@ -1750,45 +1750,45 @@ fn test_context_on_ocaml() { check_context("ocaml"); }
 
 // ---------------------------------------------------------------- temporal
 //
-// temporal hard-codes Python-only file walking — see
-// crates/tldr-cli/src/commands/patterns/temporal.rs:705 which skips any
-// file whose extension is not "py". The other 17 cells are #[ignore]-d
-// with that citation; future milestone should generalize.
+// VAL-016: temporal mines method-call sequences for all 18 supported
+// languages by reusing the per-language callgraph handlers' call extraction
+// (see commands/patterns/temporal.rs analyze_temporal_directory which now
+// dispatches via Language::from_path + build_project_call_graph_v2).
 #[test]
 fn test_temporal_on_python() { check_temporal("python"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_typescript() { check_temporal("typescript"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_javascript() { check_temporal("javascript"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_go() { check_temporal("go"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_rust() { check_temporal("rust"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_java() { check_temporal("java"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_c() { check_temporal("c"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_cpp() { check_temporal("cpp"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_ruby() { check_temporal("ruby"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_kotlin() { check_temporal("kotlin"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_swift() { check_temporal("swift"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_csharp() { check_temporal("csharp"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_scala() { check_temporal("scala"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_php() { check_temporal("php"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_lua() { check_temporal("lua"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_luau() { check_temporal("luau"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_elixir() { check_temporal("elixir"); }
-#[test] #[ignore = "temporal walks .py files only (temporal.rs:705)"]
+#[test]
 fn test_temporal_on_ocaml() { check_temporal("ocaml"); }
 
 // ---------------------------------------------------------------- diagnostics
