@@ -1,0 +1,73 @@
+{
+  "assertion_id": "VAL-013",
+  "status": "PASS",
+  "milestone": "m13-exhaustive-matrix",
+  "date": "2026-04-25",
+  "commit_base": "e3d9916 (post-VAL-012 Ruby bareword fix)",
+  "fix_commits": [
+    "4afae82 fix(contracts): locate Elixir def with do-block body (VAL-013)"
+  ],
+  "files_modified": [
+    "crates/tldr-cli/src/commands/contracts/contracts.rs",
+    "crates/tldr-cli/tests/exhaustive_matrix.rs",
+    "continuum/autonomous/issue-1-bug-fixes/reports/m13-exhaustive-matrix.md",
+    "continuum/autonomous/issue-1-bug-fixes/reports/m13-exhaustive-matrix.json"
+  ],
+  "diff_stat": {
+    "files_changed": 2,
+    "insertions": 2643,
+    "deletions": 15,
+    "notes": "exhaustive_matrix.rs is new (2571 lines); contracts.rs is +72/-15"
+  },
+  "tests_added": 694,
+  "cells_passed": 658,
+  "cells_ignored_with_citation": 36,
+  "cells_fixed": 1,
+  "languages": 18,
+  "commands_per_language": 38,
+  "excluded_orchestrator_commands": 9,
+  "summary": "Exhaustive matrix audit: 38 language-applicable commands × 18 languages = 684 cells, plus 10 sanity-only orchestrator tests. 658 cells PASS, 36 IGNORE with file:line citation, 0 FAILED. Discovered and fixed an Elixir contracts bug where `def name do...end` was not located because tree-sitter-elixir doesn't expose `arguments` as a named field. VAL-010/VAL-011's 234 cells unchanged. Pre-existing surface::typescript test failure in tldr-core is unrelated.",
+  "documented_capability_gaps": [
+    {
+      "command": "definition",
+      "scope": "non-Python (17 cells)",
+      "citation": "crates/tldr-cli/src/commands/remaining/definition.rs:317, :377",
+      "rationale": "explicit Language::Python guard rejects all other languages with UnsupportedLanguage"
+    },
+    {
+      "command": "temporal",
+      "scope": "non-Python (17 cells)",
+      "citation": "crates/tldr-cli/src/commands/patterns/temporal.rs:705",
+      "rationale": "walker filters for .py extension only, all other extensions skipped"
+    },
+    {
+      "command": "surface",
+      "scope": "luau, ocaml (2 cells)",
+      "citation": "crates/tldr-core/src/surface/mod.rs:88-115",
+      "rationale": "dispatch match has no arms for these languages; fall-through to UnsupportedLanguage"
+    }
+  ],
+  "harness_features": [
+    "30s wall-clock per-cell timeout via mpsc::recv_timeout",
+    "panic detection scans stderr for `panicked at` / `Stack backtrace:` / negative exit codes",
+    "documented exit-code scheme [0..=99] (per error.rs:286-340 plus diagnostics 60/61)",
+    "embedding_mutex serializes embed/semantic/similar to avoid fastembed cache races",
+    "per-language entry_function() picks `Main` for csharp, `main` for others",
+    "command-first test naming for visible failure clusters"
+  ],
+  "verification": {
+    "exhaustive_matrix": "658 passed; 0 failed; 36 ignored",
+    "language_command_matrix": "234 passed; 0 failed; 0 ignored",
+    "tldr_core_lib": "4740 passed; 1 failed (pre-existing surface::typescript test, unrelated)",
+    "clippy_workspace": "0 warnings on changed files"
+  },
+  "preexisting_breakage_observed_but_not_caused": [
+    {
+      "test": "surface::typescript::tests::test_extract_exported_interfaces",
+      "crate": "tldr-core",
+      "evidence": "git status crates/tldr-core/src/surface/ — unchanged in this milestone",
+      "note": "Among the 90 pre-VAL-013 uncommitted files; not investigated as part of VAL-013"
+    }
+  ],
+  "runtime_seconds": 20.1
+}
