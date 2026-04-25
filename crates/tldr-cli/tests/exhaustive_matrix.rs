@@ -2549,11 +2549,11 @@ fn test_surface_on_scala() { check_surface("scala"); }
 fn test_surface_on_php() { check_surface("php"); }
 #[test]
 fn test_surface_on_lua() { check_surface("lua"); }
-#[test] #[ignore = "luau not supported by surface backend (crates/tldr-core/src/surface/mod.rs:109-114 falls through to UnsupportedLanguage)"]
+#[test]
 fn test_surface_on_luau() { check_surface("luau"); }
 #[test]
 fn test_surface_on_elixir() { check_surface("elixir"); }
-#[test] #[ignore = "ocaml not supported by surface backend (crates/tldr-core/src/surface/mod.rs:109-114 falls through to UnsupportedLanguage)"]
+#[test]
 fn test_surface_on_ocaml() { check_surface("ocaml"); }
 
 // ============================================================================

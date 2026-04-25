@@ -36,6 +36,8 @@ pub mod javascript;
 pub mod kotlin;
 pub mod language_profile;
 pub mod lua;
+pub mod luau;
+pub mod ocaml;
 pub mod php;
 pub mod python;
 pub mod resolve;
@@ -102,6 +104,8 @@ pub fn extract_api_surface(
         }
         "kotlin" => kotlin::extract_kotlin_api_surface(&resolved, include_private, limit)?,
         "lua" => lua::extract_lua_api_surface(&resolved, include_private, limit)?,
+        "luau" => luau::extract_luau_api_surface(&resolved, include_private, limit)?,
+        "ocaml" => ocaml::extract_ocaml_api_surface(&resolved, include_private, limit)?,
         "php" => php::extract_php_api_surface(&resolved, include_private, limit)?,
         "scala" => scala::extract_scala_api_surface(&resolved, include_private, limit)?,
         "swift" => swift::extract_swift_api_surface(&resolved, include_private, limit)?,
@@ -215,6 +219,8 @@ fn detect_lang_from_filename(target: &str) -> Option<&'static str> {
         "cs" => Some("csharp"),
         "kt" | "kts" => Some("kotlin"),
         "lua" => Some("lua"),
+        "luau" => Some("luau"),
+        "ml" | "mli" => Some("ocaml"),
         "php" => Some("php"),
         "scala" => Some("scala"),
         "swift" => Some("swift"),
