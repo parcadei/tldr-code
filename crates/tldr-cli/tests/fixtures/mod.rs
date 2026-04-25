@@ -25,6 +25,7 @@
 
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 /// Write a file, creating parent directories as needed.
 pub fn write_file(path: &Path, contents: &str) {
@@ -63,6 +64,187 @@ pub fn build_fixture(lang: &str, root: &Path) {
         "ocaml" => build_ocaml(root),
         other => panic!("unknown language for fixture: {:?}", other),
     }
+}
+
+// ============================================================================
+// Git-wrapped fixture (VAL-017)
+// ============================================================================
+//
+// `tldr churn` and `tldr hotspots` consume `git log` output and require a
+// real repository with commit history. The bare canonical fixture writes
+// only files; this helper wraps it in `git init` + 3 commits so churn
+// sees `commit_count >= 3` (default `min_commits` for hotspots, see
+// `crates/tldr-core/src/quality/hotspots.rs:387`).
+
+/// Path to the entry file (the one defining `helper` and `main`) within
+/// a fixture root, by language. Mirrors `entry_file` in
+/// `exhaustive_matrix.rs`. Kept duplicated here so `build_git_fixture`
+/// can be self-contained at the fixtures layer.
+fn fixture_entry_relpath(lang: &str) -> &'static str {
+    match lang {
+        "python" => "main.py",
+        "typescript" => "main.ts",
+        "javascript" => "main.js",
+        "go" => "main.go",
+        "rust" => "src/main.rs",
+        "java" => "Main.java",
+        "c" => "main.c",
+        "cpp" => "main.cpp",
+        "ruby" => "main.rb",
+        "kotlin" => "Main.kt",
+        "swift" => "Main.swift",
+        "csharp" => "Program.cs",
+        "scala" => "Main.scala",
+        "php" => "main.php",
+        "lua" => "main.lua",
+        "luau" => "main.luau",
+        "elixir" => "main.ex",
+        "ocaml" => "main.ml",
+        other => panic!("unknown language for fixture entry: {:?}", other),
+    }
+}
+
+/// Run a git command with deterministic test environment, panicking
+/// (with a clear message naming the command + stderr) if it fails.
+///
+/// All `user.*` config is set per-repo so we never touch the user's
+/// global git config, and `commit.gpgsign=false` defends against any
+/// global gpg.signing setting that would block `git commit` in CI/macOS.
+fn run_git(cwd: &Path, args: &[&str]) {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(cwd);
+    cmd.args(args);
+    // Override $HOME-derived globals to avoid picking up the developer's
+    // `~/.gitconfig` settings (e.g. signing keys). `GIT_CONFIG_GLOBAL=`
+    // empty means "no global config".
+    cmd.env("GIT_CONFIG_GLOBAL", "");
+    cmd.env("GIT_CONFIG_SYSTEM", "");
+    cmd.env("GIT_AUTHOR_NAME", "TldrTest");
+    cmd.env("GIT_AUTHOR_EMAIL", "tldr-test@example.com");
+    cmd.env("GIT_COMMITTER_NAME", "TldrTest");
+    cmd.env("GIT_COMMITTER_EMAIL", "tldr-test@example.com");
+    let output = cmd.output().unwrap_or_else(|e| {
+        panic!(
+            "failed to spawn `git {}`: {}\n(is git installed and on PATH?)",
+            args.join(" "),
+            e
+        );
+    });
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        panic!(
+            "git command failed in {:?}: `git {}`\nexit: {:?}\n--- stdout ---\n{}\n--- stderr ---\n{}",
+            cwd,
+            args.join(" "),
+            output.status.code(),
+            stdout,
+            stderr
+        );
+    }
+}
+
+/// A language-appropriate single-line-comment line to append. The
+/// trailing newline is included so subsequent appends create one new
+/// line per commit (no merging onto the previous comment line).
+///
+/// Each marker is the canonical "rest-of-line is a comment" sigil for
+/// that language so the appended text is syntactically valid and the
+/// post-touch file still parses cleanly under
+/// `tldr structure` / `tldr cognitive` / etc.
+fn comment_line(lang: &str, body: &str) -> String {
+    match lang {
+        // C-family line comment.
+        "typescript" | "javascript" | "go" | "rust" | "java" | "c"
+        | "cpp" | "kotlin" | "swift" | "csharp" | "scala" | "php" => {
+            format!("// {}\n", body)
+        }
+        // `#` comments.
+        "python" | "ruby" => format!("# {}\n", body),
+        // `--` comments.
+        "lua" | "luau" => format!("-- {}\n", body),
+        // `# ` comments (Elixir).
+        "elixir" => format!("# {}\n", body),
+        // OCaml block comments — single-line `(* ... *)` is the
+        // canonical idiom for trailing comments in `.ml` files.
+        "ocaml" => format!("(* {} *)\n", body),
+        other => panic!("comment_line: unknown lang {:?}", other),
+    }
+}
+
+/// Build the canonical 2-file 3-function fixture for `lang` in `root`,
+/// then wrap it in a git repository with **3 commits** that touch the
+/// entry file:
+///
+///   1. Initial commit ("initial") — entire fixture.
+///   2. Append-line commit ("touch1") — appends a single
+///      language-appropriate comment line to the entry file.
+///   3. Append-line commit ("touch2") — appends another comment line.
+///
+/// 3 commits is the minimum that satisfies `tldr hotspots`'s default
+/// `min_commits = 3` filter (see
+/// `crates/tldr-core/src/quality/hotspots.rs:387`); fewer would cause
+/// hotspots to filter the file out and emit an empty `hotspots` array.
+///
+/// The appended lines use language-appropriate comment syntax (see
+/// `comment_line`) so the post-touch file still parses cleanly. This
+/// matters for `tldr hotspots`, which calls `analyze_cognitive` on each
+/// file in the report.
+///
+/// All git operations run with `GIT_CONFIG_GLOBAL=""` /
+/// `GIT_CONFIG_SYSTEM=""` plus inline author/committer env vars, so the
+/// helper is deterministic and never reads/writes the developer's
+/// global `~/.gitconfig`.
+///
+/// The `--no-gpg-sign` flag on `commit` is redundant (gpg is already
+/// disabled by the empty global config) but cheap and explicit.
+pub fn build_git_fixture(lang: &str, root: &Path) {
+    // Step 1: write the canonical fixture.
+    build_fixture(lang, root);
+
+    // Step 2: init repo + local-only identity config.
+    run_git(root, &["init", "--quiet", "--initial-branch=main"]);
+    run_git(root, &["config", "--local", "user.email", "tldr-test@example.com"]);
+    run_git(root, &["config", "--local", "user.name", "TldrTest"]);
+    run_git(root, &["config", "--local", "commit.gpgsign", "false"]);
+
+    // Step 3: commit 1 (initial fixture).
+    run_git(root, &["add", "-A"]);
+    run_git(
+        root,
+        &["commit", "-m", "initial", "--no-gpg-sign", "--quiet"],
+    );
+
+    // Step 4: commit 2 (append a comment line to entry file).
+    let entry = root.join(fixture_entry_relpath(lang));
+    let line2 = comment_line(lang, "touch1");
+    append_trailing_line(&entry, &line2);
+    run_git(root, &["add", "-A"]);
+    run_git(
+        root,
+        &["commit", "-m", "touch1", "--no-gpg-sign", "--quiet"],
+    );
+
+    // Step 5: commit 3 (another comment line).
+    let line3 = comment_line(lang, "touch2");
+    append_trailing_line(&entry, &line3);
+    run_git(root, &["add", "-A"]);
+    run_git(
+        root,
+        &["commit", "-m", "touch2", "--no-gpg-sign", "--quiet"],
+    );
+}
+
+/// Append a literal string to a file. Used by `build_git_fixture` to
+/// create per-commit deltas.
+fn append_trailing_line(path: &Path, line: &str) {
+    let mut existing = fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("read entry file {:?} for append: {}", path, e));
+    if !existing.ends_with('\n') {
+        existing.push('\n');
+    }
+    existing.push_str(line);
+    fs::write(path, existing).unwrap_or_else(|e| panic!("write entry file {:?}: {}", path, e));
 }
 
 // ============================================================================

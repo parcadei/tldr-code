@@ -1,0 +1,177 @@
+{
+  "assertion_id": "VAL-017",
+  "assertion_text": "Exhaustive matrix covers `tldr churn` and `tldr hotspots` × 18 languages. Both commands are already language-universal in source: churn.rs is pure git-log analysis with no language filter; hotspots.rs uses Language::from_path(...).is_none() => continue (unified VAL-008 detector). The gap is FIXTURE: canonical build_<lang> helpers create bare directories. Fix: add build_git_fixture helper that wraps build_fixture with git init + 3 commits, then add 36 tests (churn × 18 + hotspots × 18). No source changes to churn or hotspots.",
+  "status": "VALIDATED",
+  "date": "2026-04-25",
+  "commit": "PENDING",
+  "files_modified": [
+    "crates/tldr-cli/tests/fixtures/mod.rs",
+    "crates/tldr-cli/tests/exhaustive_matrix.rs",
+    "continuum/autonomous/issue-1-bug-fixes/reports/m13-exhaustive-matrix.md"
+  ],
+  "files_added": [
+    "continuum/autonomous/issue-1-bug-fixes/reports/m17-churn-hotspots.json"
+  ],
+  "diff_stat": {
+    "files_changed": 3,
+    "insertions": 434,
+    "deletions": 0,
+    "by_file": {
+      "crates/tldr-cli/tests/fixtures/mod.rs": "+182",
+      "crates/tldr-cli/tests/exhaustive_matrix.rs": "+181",
+      "continuum/autonomous/issue-1-bug-fixes/reports/m13-exhaustive-matrix.md": "+71"
+    }
+  },
+  "helper_added": {
+    "name": "build_git_fixture",
+    "location": "crates/tldr-cli/tests/fixtures/mod.rs",
+    "supporting_helpers": [
+      "fixture_entry_relpath",
+      "run_git",
+      "comment_line",
+      "append_trailing_line"
+    ],
+    "behavior_summary": "Calls build_fixture(lang, root) for the canonical 2-file 3-function fixture, then `git init --initial-branch=main` and creates 3 commits ('initial', 'touch1', 'touch2') with deterministic local-only git identity (GIT_CONFIG_GLOBAL='', GIT_CONFIG_SYSTEM='', inline GIT_AUTHOR_*/GIT_COMMITTER_* env vars). Each touch commit appends a single language-appropriate comment line (// or # or -- or (* *)) to the entry file. 3 commits is required to satisfy `tldr hotspots`'s default min_commits=3 (hotspots.rs:387) so the hotspots array is non-empty for every language."
+  },
+  "tests_added": {
+    "count": 36,
+    "by_command": {
+      "churn": [
+        "test_churn_on_python",
+        "test_churn_on_typescript",
+        "test_churn_on_javascript",
+        "test_churn_on_go",
+        "test_churn_on_rust",
+        "test_churn_on_java",
+        "test_churn_on_c",
+        "test_churn_on_cpp",
+        "test_churn_on_ruby",
+        "test_churn_on_kotlin",
+        "test_churn_on_swift",
+        "test_churn_on_csharp",
+        "test_churn_on_scala",
+        "test_churn_on_php",
+        "test_churn_on_lua",
+        "test_churn_on_luau",
+        "test_churn_on_elixir",
+        "test_churn_on_ocaml"
+      ],
+      "hotspots": [
+        "test_hotspots_on_python",
+        "test_hotspots_on_typescript",
+        "test_hotspots_on_javascript",
+        "test_hotspots_on_go",
+        "test_hotspots_on_rust",
+        "test_hotspots_on_java",
+        "test_hotspots_on_c",
+        "test_hotspots_on_cpp",
+        "test_hotspots_on_ruby",
+        "test_hotspots_on_kotlin",
+        "test_hotspots_on_swift",
+        "test_hotspots_on_csharp",
+        "test_hotspots_on_scala",
+        "test_hotspots_on_php",
+        "test_hotspots_on_lua",
+        "test_hotspots_on_luau",
+        "test_hotspots_on_elixir",
+        "test_hotspots_on_ocaml"
+      ]
+    },
+    "shape_assertions": {
+      "churn": "ChurnReport.files (Vec<FileChurn>) field present AND non-empty (≥1 entry)",
+      "hotspots": "HotspotsReport.hotspots (Vec<HotspotEntry>) field present AND non-empty (≥1 entry)"
+    },
+    "harness_invariants_inherited": [
+      "30s wall-clock timeout (CELL_TIMEOUT)",
+      "no-panic / no-hang detection (run_tldr_timed)",
+      "exit code in 0..=99 (ok_exit)",
+      "SILENT_FAIL guard (check_success)"
+    ]
+  },
+  "verification_counts": {
+    "exhaustive_matrix_total": "730 passed; 0 failed; 0 ignored",
+    "exhaustive_matrix_pre_val017": "694 passed; 0 failed; 0 ignored",
+    "exhaustive_matrix_delta": "+36",
+    "language_command_matrix": "234 passed; 0 failed; 0 ignored (no regression)",
+    "tldr_core_lib": "4755 passed; 0 failed; 356 ignored (no regression)",
+    "clippy_on_touched_files": "clean (cargo clippy -p tldr-cli --features semantic --test exhaustive_matrix -- -D warnings produces no warnings)"
+  },
+  "real_cli_repros": {
+    "tool": "./target/release/tldr (built --features semantic)",
+    "fixture_construction": "build_git_fixture-equivalent bash: git init + 3 commits with same env-var sandbox as the helper",
+    "results": {
+      "python": {
+        "churn_files_count": 3,
+        "churn_first_file": "main.py",
+        "churn_first_commits": 3,
+        "hotspots_count": 1,
+        "hotspots_first_file": "main.py",
+        "hotspots_first_commits": 3
+      },
+      "typescript": {
+        "churn_files_count": 3,
+        "churn_first_file": "main.ts",
+        "churn_first_commits": 3,
+        "hotspots_count": 1,
+        "hotspots_first_file": "main.ts",
+        "hotspots_first_commits": 3
+      },
+      "rust": {
+        "churn_files_count": 3,
+        "churn_first_file": "src/main.rs",
+        "churn_first_commits": 3,
+        "hotspots_count": 1,
+        "hotspots_first_file": "src/main.rs",
+        "hotspots_first_commits": 3
+      }
+    },
+    "interpretation": "All 3 languages produce non-empty churn.files and hotspots.hotspots, with the entry file (touched by all 3 commits) ranked first. Hotspots reports a single entry per repo because only the entry file clears the default min_commits=3 threshold (manifest + util are touched only by the initial commit)."
+  },
+  "constraints_honored": {
+    "no_gaming": "no #[allow], no weakened assertions, no #[cfg(test)] hide-issues",
+    "no_ignore_without_citation": "0 #[ignore] attributes added; all 36 tests are #[test]",
+    "no_source_changes_to_churn_or_hotspots": "VERIFIED: `git diff crates/tldr-core/src/quality/churn.rs crates/tldr-core/src/quality/hotspots.rs crates/tldr-cli/src/commands/churn.rs crates/tldr-cli/src/commands/hotspots.rs` returns no output (those files unchanged)",
+    "no_workspace_fmt": "true",
+    "no_global_git_config_writes": "build_git_fixture sets GIT_CONFIG_GLOBAL='', GIT_CONFIG_SYSTEM='', and uses `git config --local` for repo-scoped identity; never writes to ~/.gitconfig",
+    "deterministic": "Same lang input produces identical 3-commit history (same author email/name/timestamp via env vars, same comment text)",
+    "preexisting_files_untouched": "111 pre-existing uncommitted files in working tree NOT modified by this commit; only the 4 explicitly listed files staged"
+  },
+  "preexisting_breakage_observed": {
+    "clippy_unrelated": [
+      {
+        "file": "crates/tldr-core/src/dataflow/abstract_interp.rs:3445",
+        "lint": "clippy::approx_constant",
+        "context": "literal `3.14` used in a test assertion; pre-existing, not in VAL-017 scope"
+      },
+      {
+        "file": "crates/tldr-core/src/security/vuln.rs:1207",
+        "lint": "clippy::len_zero",
+        "context": "`result.findings.len() >= 1` should be `!result.findings.is_empty()`; pre-existing, not in VAL-017 scope"
+      },
+      {
+        "file": "crates/tldr-cli/tests/l2_daemon_cache_bench_test.rs:614, :625",
+        "lint": "clippy::needless_range_loop",
+        "context": "indexed for-loops; pre-existing, not in VAL-017 scope"
+      }
+    ],
+    "test_unrelated": "tldr-core lib at HEAD now reports 4755 passed / 0 failed (better than M13's note about a pre-existing surface::typescript failure — that failure has been addressed by an unrelated milestone)."
+  },
+  "checkpoint_phases": {
+    "phase_1_red": {
+      "status": "VALIDATED",
+      "evidence": "cargo build -p tldr-cli --tests --features semantic --release failed with `cannot find function build_git_fixture in module fixtures` (expected RED)"
+    },
+    "phase_2_green": {
+      "status": "VALIDATED",
+      "evidence": "cargo test -p tldr-cli --test exhaustive_matrix --features semantic --release -- test_churn_on test_hotspots_on -> 36 passed; 0 failed"
+    },
+    "phase_3_full_verify": {
+      "status": "VALIDATED",
+      "evidence": "Full exhaustive matrix 730/0/0; language_command_matrix 234/0/0; tldr-core 4755/0/356; clippy clean on touched files"
+    },
+    "phase_4_report_and_commit": {
+      "status": "VALIDATED",
+      "evidence": "M13 addendum + this JSON written; commit pending after report finalisation"
+    }
+  }
+}

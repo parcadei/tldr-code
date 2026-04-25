@@ -257,3 +257,74 @@ Aggregate runtime ≈ **20.1 s** for 658 active tests (36 ignored, 0 failed).
   (NEW, this report).
 - `continuum/autonomous/issue-1-bug-fixes/reports/m13-exhaustive-matrix.json`
   (NEW, machine-readable summary).
+
+## VAL-017 Addendum (2026-04-25): churn + hotspots
+
+### Summary
+
+VAL-017 closes the last two coverage gaps in the exhaustive matrix:
+**`tldr churn`** and **`tldr hotspots`**. Both commands were already
+language-universal in source (verified):
+
+- `crates/tldr-core/src/quality/churn.rs` — pure `git log` parsing, no
+  language filter at all.
+- `crates/tldr-core/src/quality/hotspots.rs:926, :991` — single
+  `Language::from_path(...).is_none()` skip, which by VAL-008's unified
+  detector covers all 18 supported languages.
+
+The gap was infrastructural: the canonical `build_fixture` writes a
+bare directory with no git history, so churn/hotspots invocations on
+matrix fixtures saw an empty `git log` and emitted empty reports. The
+matrix therefore previously routed both commands into the
+orchestrator-sanity-only group (no per-language coverage).
+
+### Fix
+
+Added `build_git_fixture(lang, root)` helper at
+`crates/tldr-cli/tests/fixtures/mod.rs`. It calls `build_fixture`,
+then `git init`s the directory with a deterministic local-only
+identity (no global git config touched), and makes **3 commits**:
+
+  1. `initial` — full canonical fixture.
+  2. `touch1` — appends a language-appropriate single-line comment to
+     the entry file (`// touch1` / `# touch1` / `-- touch1` / `(* touch1 *)`).
+  3. `touch2` — same idea, second comment line.
+
+Three commits is the minimum that satisfies `tldr hotspots`'s default
+`min_commits = 3` (`hotspots.rs:387`). Fewer would cause hotspots to
+filter the file out and emit an empty `hotspots` array — a
+SILENT_FAIL surface this matrix is supposed to catch.
+
+### Tests added (36)
+
+- `test_churn_on_<lang>` × 18 — asserts `ChurnReport.files` non-empty.
+- `test_hotspots_on_<lang>` × 18 — asserts `HotspotsReport.hotspots`
+  non-empty.
+
+### Source changes to churn / hotspots
+
+**None.** Both commands were already language-universal; VAL-017 is
+fixture-infrastructure + tests only.
+
+### New totals
+
+| Stage | Cells (passed/failed/ignored) |
+|-------|------------------------------|
+| Pre-VAL-017 (M13/M14/M15/M16) | 694 / 0 / 0 |
+| **Post-VAL-017** | **730 / 0 / 0** |
+
+`language_command_matrix.rs` (VAL-010/VAL-011) remains 234/0/0.
+`tldr-core --lib` remains 4755/0/356 (no regression).
+
+### Files touched (VAL-017)
+
+- `crates/tldr-cli/tests/fixtures/mod.rs` — added `build_git_fixture`,
+  `comment_line`, `fixture_entry_relpath`, `run_git`,
+  `append_trailing_line` helpers.
+- `crates/tldr-cli/tests/exhaustive_matrix.rs` — added
+  `make_git_fixture`, `check_churn`, `check_hotspots`, plus 36
+  `#[test]` cells (`test_churn_on_<lang>` and `test_hotspots_on_<lang>`).
+- `continuum/autonomous/issue-1-bug-fixes/reports/m13-exhaustive-matrix.md`
+  — this addendum.
+- `continuum/autonomous/issue-1-bug-fixes/reports/m17-churn-hotspots.json`
+  (new machine-readable summary).

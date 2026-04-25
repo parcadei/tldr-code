@@ -327,6 +327,34 @@ fn make_fixture(lang: &str) -> TempDir {
     tmp
 }
 
+/// Build a canonical fixture wrapped in a git repository with 3 commits.
+///
+/// VAL-017: `tldr churn` and `tldr hotspots` operate on `git log` output
+/// and require an initialised repository with real commit history. The
+/// canonical 2-file 3-function fixture written by `build_fixture` lives
+/// in a bare directory, so churn/hotspots see no history and emit empty
+/// reports (ChurnReport.files=[], HotspotsReport.hotspots=[]).
+///
+/// `make_git_fixture` runs `git init`, sets a deterministic local
+/// (NOT global) `user.email` / `user.name`, then makes 3 commits whose
+/// payloads create real `lines_added` deltas:
+///
+///   * Commit 1: initial fixture (`build_fixture(lang, ...)`).
+///   * Commit 2: append a line of trailing whitespace to the entry file
+///     (1-line diff).
+///   * Commit 3: append another line of trailing whitespace to the entry
+///     file (another 1-line diff).
+///
+/// Three commits is required because `tldr hotspots` defaults to
+/// `min_commits = 3` (see `crates/tldr-core/src/quality/hotspots.rs:387`)
+/// — fewer commits would cause hotspots to filter out the file and
+/// return an empty `hotspots` array, which would mask SILENT_FAIL bugs.
+fn make_git_fixture(lang: &str) -> TempDir {
+    let tmp = TempDir::new().unwrap();
+    fixtures::build_git_fixture(lang, tmp.path());
+    tmp
+}
+
 /// Per-language name of the entry function (the one that calls helper
 /// and b_util). Most fixtures define a lowercase `main`, but C# uses
 /// PascalCase `Main` per .NET convention (see `build_csharp` in
@@ -704,6 +732,78 @@ fn check_inheritance(lang: &str) {
     if !json.is_object() || json.get("nodes").is_none() {
         panic!(
             "[inheritance × {lang}] SILENT_FAIL — missing `nodes` field\n--- stdout ---\n{}\n--- stderr ---\n{stderr}",
+            truncate(&stdout, 400)
+        );
+    }
+}
+
+// ============================================================================
+// GROUP-GIT: project-level commands that consume `git log` history
+// ============================================================================
+//
+// VAL-017: `tldr churn` and `tldr hotspots` are language-universal in
+// source — `crates/tldr-core/src/quality/churn.rs` has no language
+// filter at all (pure git-log analysis), and
+// `crates/tldr-core/src/quality/hotspots.rs:926` skips files only when
+// `Language::from_path(...).is_none()`, which by VAL-008 covers all 18
+// supported languages. The gap closed by VAL-017 was infrastructure: the
+// canonical `build_fixture` helper writes a bare directory with no git
+// history, so churn/hotspots saw zero commits and returned empty
+// reports. `make_git_fixture` (added below) wraps the fixture with
+// `git init` + 3 commits so the fixture file actually shows up in
+// `git log`.
+//
+// Both cells assert the per-command JSON shape AND that the result list
+// has at least one entry — a stricter SILENT_FAIL guard than most other
+// cells, justified because the 3-commit fixture is constructed
+// specifically to populate these reports.
+
+fn check_churn(lang: &str) {
+    let tmp = make_git_fixture(lang);
+    let path = tmp.path().to_str().unwrap();
+    let (json, stdout, stderr) = check_success(
+        "churn", lang,
+        &["churn", path, "--format", "json", "--quiet"],
+    );
+    // ChurnReport (crates/tldr-core/src/quality/churn.rs:200) serializes
+    // the top-level `files: Vec<FileChurn>` field. Three-commit fixture
+    // ensures at least the entry file appears in churn data.
+    let files = json.get("files").and_then(Value::as_array);
+    if files.is_none() {
+        panic!(
+            "[churn × {lang}] SILENT_FAIL — missing `files` field\n--- stdout ---\n{}\n--- stderr ---\n{stderr}",
+            truncate(&stdout, 400)
+        );
+    }
+    if files.unwrap().is_empty() {
+        panic!(
+            "[churn × {lang}] SILENT_FAIL — `files` array is empty (3-commit fixture should yield ≥1 file)\n--- stdout ---\n{}\n--- stderr ---\n{stderr}",
+            truncate(&stdout, 400)
+        );
+    }
+}
+
+fn check_hotspots(lang: &str) {
+    let tmp = make_git_fixture(lang);
+    let path = tmp.path().to_str().unwrap();
+    let (json, stdout, stderr) = check_success(
+        "hotspots", lang,
+        &["hotspots", path, "--format", "json", "--quiet"],
+    );
+    // HotspotsReport (crates/tldr-core/src/quality/hotspots.rs:327)
+    // serializes top-level `hotspots: Vec<HotspotEntry>`. The default
+    // `min_commits` is 3 (hotspots.rs:387); `make_git_fixture` makes
+    // exactly 3 commits to the entry file so it clears the threshold.
+    let hotspots = json.get("hotspots").and_then(Value::as_array);
+    if hotspots.is_none() {
+        panic!(
+            "[hotspots × {lang}] SILENT_FAIL — missing `hotspots` field\n--- stdout ---\n{}\n--- stderr ---\n{stderr}",
+            truncate(&stdout, 400)
+        );
+    }
+    if hotspots.unwrap().is_empty() {
+        panic!(
+            "[hotspots × {lang}] SILENT_FAIL — `hotspots` array is empty (3-commit fixture should yield ≥1 entry under default min_commits=3)\n--- stdout ---\n{}\n--- stderr ---\n{stderr}",
             truncate(&stdout, 400)
         );
     }
@@ -2556,6 +2656,87 @@ fn test_surface_on_luau() { check_surface("luau"); }
 fn test_surface_on_elixir() { check_surface("elixir"); }
 #[test]
 fn test_surface_on_ocaml() { check_surface("ocaml"); }
+
+// ---------------------------------------------------------------- churn
+// VAL-017: per-language churn cells. `make_git_fixture` provides 3
+// commits so churn always has non-empty `files` to report.
+#[test]
+fn test_churn_on_python() { check_churn("python"); }
+#[test]
+fn test_churn_on_typescript() { check_churn("typescript"); }
+#[test]
+fn test_churn_on_javascript() { check_churn("javascript"); }
+#[test]
+fn test_churn_on_go() { check_churn("go"); }
+#[test]
+fn test_churn_on_rust() { check_churn("rust"); }
+#[test]
+fn test_churn_on_java() { check_churn("java"); }
+#[test]
+fn test_churn_on_c() { check_churn("c"); }
+#[test]
+fn test_churn_on_cpp() { check_churn("cpp"); }
+#[test]
+fn test_churn_on_ruby() { check_churn("ruby"); }
+#[test]
+fn test_churn_on_kotlin() { check_churn("kotlin"); }
+#[test]
+fn test_churn_on_swift() { check_churn("swift"); }
+#[test]
+fn test_churn_on_csharp() { check_churn("csharp"); }
+#[test]
+fn test_churn_on_scala() { check_churn("scala"); }
+#[test]
+fn test_churn_on_php() { check_churn("php"); }
+#[test]
+fn test_churn_on_lua() { check_churn("lua"); }
+#[test]
+fn test_churn_on_luau() { check_churn("luau"); }
+#[test]
+fn test_churn_on_elixir() { check_churn("elixir"); }
+#[test]
+fn test_churn_on_ocaml() { check_churn("ocaml"); }
+
+// ---------------------------------------------------------------- hotspots
+// VAL-017: per-language hotspots cells. The 3-commit fixture matches
+// the default `min_commits = 3` threshold, ensuring `hotspots` array
+// is non-empty for every language.
+#[test]
+fn test_hotspots_on_python() { check_hotspots("python"); }
+#[test]
+fn test_hotspots_on_typescript() { check_hotspots("typescript"); }
+#[test]
+fn test_hotspots_on_javascript() { check_hotspots("javascript"); }
+#[test]
+fn test_hotspots_on_go() { check_hotspots("go"); }
+#[test]
+fn test_hotspots_on_rust() { check_hotspots("rust"); }
+#[test]
+fn test_hotspots_on_java() { check_hotspots("java"); }
+#[test]
+fn test_hotspots_on_c() { check_hotspots("c"); }
+#[test]
+fn test_hotspots_on_cpp() { check_hotspots("cpp"); }
+#[test]
+fn test_hotspots_on_ruby() { check_hotspots("ruby"); }
+#[test]
+fn test_hotspots_on_kotlin() { check_hotspots("kotlin"); }
+#[test]
+fn test_hotspots_on_swift() { check_hotspots("swift"); }
+#[test]
+fn test_hotspots_on_csharp() { check_hotspots("csharp"); }
+#[test]
+fn test_hotspots_on_scala() { check_hotspots("scala"); }
+#[test]
+fn test_hotspots_on_php() { check_hotspots("php"); }
+#[test]
+fn test_hotspots_on_lua() { check_hotspots("lua"); }
+#[test]
+fn test_hotspots_on_luau() { check_hotspots("luau"); }
+#[test]
+fn test_hotspots_on_elixir() { check_hotspots("elixir"); }
+#[test]
+fn test_hotspots_on_ocaml() { check_hotspots("ocaml"); }
 
 // ============================================================================
 // Orchestrator commands — sanity-only (--help)
