@@ -1,0 +1,64 @@
+{
+  "milestone": "M1",
+  "assertion": "VAL-001",
+  "issue": "parcadei/tldr-code#5",
+  "scope": "Unix-side path-traversal portion (Windows TCP listener deferred to v0.3.0)",
+  "starting_head": "f7cccff3aa0760052e15b455b22d7b835a5c9c4e",
+  "test_file": "crates/tldr-daemon/tests/path_traversal_test.rs",
+  "test_names": [
+    "secrets_handler_rejects_absolute_path_outside_project",
+    "vuln_handler_rejects_absolute_path_outside_project"
+  ],
+  "fix_file": "crates/tldr-daemon/src/handlers/security.rs",
+  "fix_locations": {
+    "secrets_handler_validation": "crates/tldr-daemon/src/handlers/security.rs:53-57",
+    "vuln_handler_validation": "crates/tldr-daemon/src/handlers/security.rs:120-124"
+  },
+  "test_passed": true,
+  "test_passed_red_on_head": true,
+  "red_reason_gate": {
+    "satisfied": true,
+    "secrets_panic_message_names_leaked_content_check": true,
+    "secrets_response_body_contains_canary_token": "VictimSuperSecretValue_canary_xyz_42",
+    "vuln_panic_message_names_validation_failure": true
+  },
+  "matrix_unchanged": true,
+  "matrix_results": {
+    "exhaustive_matrix": "730/730",
+    "language_command_matrix": "234/234",
+    "combined": "964/964",
+    "baseline": "964/964"
+  },
+  "daemon_full_test_suite": {
+    "lib_tests": "10/10",
+    "integration_tests": "17/17",
+    "path_traversal_tests": "2/2",
+    "ignored_pre_existing_perf_tests": 2
+  },
+  "clippy_clean": true,
+  "clippy_command": "cargo clippy --workspace --all-features --tests -- -D warnings",
+  "files_touched_count": 2,
+  "files_touched": [
+    "crates/tldr-daemon/src/handlers/security.rs",
+    "crates/tldr-daemon/tests/path_traversal_test.rs"
+  ],
+  "files_touched_excludes": [
+    "continuum/autonomous/v0.2.1-hotfix/contract.json",
+    "continuum/autonomous/v0.2.1-hotfix/reports/m1-issue-5-daemon-path-traversal.md",
+    "continuum/autonomous/v0.2.1-hotfix/validation/m1-daemon-path-traversal.json"
+  ],
+  "scope_constraint_respected": true,
+  "no_disallowed_patterns": {
+    "no_allow_attributes_added": true,
+    "no_ignore_without_citation": true,
+    "no_unused_underscore_prefix": true,
+    "no_cfg_test_to_hide_issue": true,
+    "no_weakened_assertions": true,
+    "no_cargo_fmt_all": true,
+    "no_git_add_dot": true
+  },
+  "follow_ups_flagged": [
+    "Audit remaining handlers under crates/tldr-daemon/src/handlers/{ast,callgraph,flow,quality,search}.rs for the same unguarded 'is_absolute -> accept' pattern (recommend one VAL in v0.2.2)",
+    "Windows TCP unauthenticated listener (out of scope, deferred to v0.3.0 per contract)"
+  ]
+}

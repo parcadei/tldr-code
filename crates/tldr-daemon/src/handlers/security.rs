@@ -3,7 +3,6 @@
 //! These handlers provide security analysis including secrets scanning
 //! and vulnerability detection via taint analysis.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::{extract::State, Json};
@@ -13,7 +12,8 @@ use crate::server::{DaemonResponse, HandlerError};
 use crate::state::DaemonState;
 
 use tldr_core::{
-    scan_secrets, scan_vulnerabilities, Language, SecretsReport, Severity, VulnReport, VulnType,
+    scan_secrets, scan_vulnerabilities, validate_file_path, Language, SecretsReport, Severity,
+    VulnReport, VulnType,
 };
 
 // =============================================================================
@@ -45,12 +45,14 @@ pub async fn secrets(
     state.touch();
 
     let project = state.project().clone();
+    // VAL-001 / issue #5: validate caller-supplied path stays inside the
+    // project root before any filesystem read. `validate_file_path` resolves
+    // the path (absolute or relative) and returns `PathTraversal` if the
+    // canonical form escapes `project`.
     let path = if let Some(p) = &request.path {
-        if PathBuf::from(p).is_absolute() {
-            PathBuf::from(p)
-        } else {
-            project.join(p)
-        }
+        validate_file_path(p, Some(&project)).map_err(|e| {
+            HandlerError(axum::http::StatusCode::BAD_REQUEST, e.to_string())
+        })?
     } else {
         project
     };
@@ -110,12 +112,14 @@ pub async fn vuln(
     state.touch();
 
     let project = state.project().clone();
+    // VAL-001 / issue #5: validate caller-supplied path stays inside the
+    // project root before any filesystem read. `validate_file_path` resolves
+    // the path (absolute or relative) and returns `PathTraversal` if the
+    // canonical form escapes `project`.
     let path = if let Some(p) = &request.path {
-        if PathBuf::from(p).is_absolute() {
-            PathBuf::from(p)
-        } else {
-            project.join(p)
-        }
+        validate_file_path(p, Some(&project)).map_err(|e| {
+            HandlerError(axum::http::StatusCode::BAD_REQUEST, e.to_string())
+        })?
     } else {
         project
     };
