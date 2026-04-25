@@ -216,6 +216,63 @@ fn check_extract(lang: &str) {
     }
 }
 
+/// Expected number of import declarations parsed from the entry file
+/// for each language's canonical 2-file fixture (see `fixtures/mod.rs`).
+///
+/// VAL-018: tightened from "JSON parses" to per-language exact-count to
+/// catch under-AND over-counting. Each row is verified against the actual
+/// fixture body, not language stereotype.
+///
+/// Languages with EXPLICIT cross-file references (count = 1):
+/// - python: `from util import b_util`
+/// - typescript: `import { b_util } from './util';`
+/// - javascript: `import { b_util } from './util.js';`
+/// - go: `import "example.com/x/util"`
+/// - rust: `mod util;` is a module declaration the imports parser counts
+/// - c: `#include "util.h"`
+/// - cpp: `#include "util.hpp"`
+/// - ruby: `require_relative 'util'`
+/// - php: `require_once 'util.php'`
+/// - lua: `local util = require('util')` — `require` call counts
+/// - luau: `local util = require('./util')`
+///
+/// Languages with IMPLICIT same-package/module visibility (count = 0):
+/// - java: same-package classes auto-visible per JLS section 6.3 ("A
+///   package member is accessible throughout the package without
+///   qualification or import declaration").
+/// - kotlin: same-package top-level declarations are visible without
+///   import (Kotlin spec: package and imports section).
+/// - swift: same-module declarations are visible by default per Swift
+///   access control (`internal` is the default and applies module-wide).
+/// - csharp: same-namespace types auto-visible without `using` (C# spec:
+///   namespaces section).
+/// - scala: same-package members auto-visible (Scala spec: packages
+///   section).
+/// - elixir: full qualified module references (`Util.b_util()`) need no
+///   `import`/`alias` directive — fixture uses `Util.b_util()` directly.
+/// - ocaml: qualified module access (`Util.b_util`) needs no `open Util`
+///   — fixture uses qualified reference.
+const EXPECTED_IMPORTS: &[(&str, usize)] = &[
+    ("python", 1),
+    ("typescript", 1),
+    ("javascript", 1),
+    ("go", 1),
+    ("rust", 1),
+    ("java", 0),
+    ("c", 1),
+    ("cpp", 1),
+    ("ruby", 1),
+    ("kotlin", 0),
+    ("swift", 0),
+    ("csharp", 0),
+    ("scala", 0),
+    ("php", 1),
+    ("lua", 1),
+    ("luau", 1),
+    ("elixir", 0),
+    ("ocaml", 0),
+];
+
 fn check_imports(lang: &str) {
     let tmp = TempDir::new().unwrap();
     fixtures::build_fixture(lang, tmp.path());
@@ -230,15 +287,41 @@ fn check_imports(lang: &str) {
     if !status.success() {
         fail_cell("imports", lang, "non-zero exit", &stdout, &stderr);
     }
-    // Expect a JSON array (possibly empty). We only check exit + parse.
-    // Some languages' entry files don't use imports (e.g. Swift or small
-    // Lua fixtures using require). Accept both empty and non-empty arrays;
-    // the semantic check is that JSON parses.
-    if !json.is_array() && !json.is_object() {
+    // VAL-018: tightened — per-language EXPECTED_IMPORTS exact match.
+    // Catches both under-counting (e.g. handler skips required imports)
+    // and over-counting (e.g. handler treats type annotations as imports).
+    let expected = EXPECTED_IMPORTS
+        .iter()
+        .find(|(l, _)| *l == lang)
+        .map(|(_, n)| *n)
+        .unwrap_or_else(|| {
+            fail_cell(
+                "imports",
+                lang,
+                "missing EXPECTED_IMPORTS entry — every language must be enumerated",
+                &stdout,
+                &stderr,
+            )
+        });
+    let arr = json.as_array().unwrap_or_else(|| {
         fail_cell(
             "imports",
             lang,
-            "output is neither JSON array nor object",
+            "output is not a JSON array (expected array of import records)",
+            &stdout,
+            &stderr,
+        )
+    });
+    if arr.len() != expected {
+        fail_cell(
+            "imports",
+            lang,
+            &format!(
+                "imports count {} != expected {} (see EXPECTED_IMPORTS table). Imports parsed: {}",
+                arr.len(),
+                expected,
+                serde_json::to_string(arr).unwrap_or_default(),
+            ),
             &stdout,
             &stderr,
         );
