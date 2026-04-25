@@ -1,0 +1,92 @@
+{
+  "milestone": "mcp-initialize-camelcase",
+  "assertion": "VAL-004",
+  "issue": "parcadei/tldr-code#19",
+  "starting_head": "1620b6d",
+  "status": "passed",
+  "worker": "kraken (M4 VAL-004)",
+  "gates": {
+    "reproduce_test_red_then_green": {
+      "test_path": "crates/tldr-mcp/tests/mcp_camelcase_test.rs",
+      "tests": [
+        "snake_case_detector_recognizes_target_pattern",
+        "collect_keys_walks_recursively_and_skips_schema_properties",
+        "initialize_response_uses_camel_case",
+        "tools_list_response_uses_camel_case",
+        "day_one_handshake_responses_have_zero_snake_case_keys"
+      ],
+      "red_on_starting_head": true,
+      "red_symptom_substrings_observed": [
+        "protocol_version",
+        "server_info"
+      ],
+      "red_full_panic_excerpt": "initialize response contains snake_case keys (MCP 2024-11-05 requires camelCase): [\"protocol_version\", \"server_info\"]\nfull collected keys: {\"capabilities\", \"listChanged\", \"name\", \"protocol_version\", \"server_info\", \"tools\", \"version\"}\nfull response: {\"jsonrpc\":\"2.0\",\"result\":{\"protocol_version\":\"2024-11-05\",\"capabilities\":{\"tools\":{\"listChanged\":false}},\"server_info\":{\"name\":\"tldr-mcp\",\"version\":\"0.2.0\"}},\"id\":1}",
+      "green_after_fix": true,
+      "green_summary": "5 passed; 0 failed"
+    },
+    "broader_audit_recursive_scan": {
+      "scope": "initialize + tools/list responses, recursive walk of every object key at every depth",
+      "exclusion_zone": "JSON Schema property declarations under inputSchema.properties — these are user-defined argument names, not MCP-defined response struct fields; renaming them would break tools/call argument extraction in handlers (verified at crates/tldr-mcp/src/tools/ast.rs:21,62,90 etc.)",
+      "snake_case_keys_found_post_fix_in_initialize": [],
+      "snake_case_keys_found_post_fix_in_tools_list": [],
+      "result": "zero violations after the protocol_version + server_info renames; tools/list was already clean (its only response-struct snake_case fields list_changed/is_error/input_schema were renamed in v0.1.6 work)"
+    },
+    "tldr_mcp_full_suite": {
+      "command": "cargo test -p tldr-mcp --release",
+      "result": "passed",
+      "totals": {
+        "lib": "45 passed",
+        "mcp_camelcase_test (new)": "5 passed",
+        "mcp_lifecycle_test (M3)": "4 passed",
+        "doc_tests": "0 (none)"
+      },
+      "m3_lifecycle_no_regression": true
+    },
+    "exhaustive_matrix": {
+      "command": "cargo test -p tldr-cli --test exhaustive_matrix --features semantic --release",
+      "result": "passed",
+      "summary": "730 passed; 0 failed"
+    },
+    "language_command_matrix": {
+      "command": "cargo test -p tldr-cli --test language_command_matrix --features semantic --release",
+      "result": "passed",
+      "summary": "234 passed; 0 failed"
+    },
+    "matrix_total_unchanged_at_baseline": {
+      "baseline": "964/964",
+      "post_fix": "964/964",
+      "regression": false
+    },
+    "clippy_clean": {
+      "command": "cargo clippy --workspace --all-features --tests -- -D warnings",
+      "result": "clean",
+      "notes": "Two clippy lints fired in the new test file during initial implementation (search_is_some, manual_contains) — both refactored to use idiomatic constructs (Iterator::any then slice::contains). No #[allow] suppressions used. Final clippy run: clean."
+    }
+  },
+  "files_modified": [
+    "crates/tldr-mcp/src/protocol.rs",
+    "crates/tldr-mcp/tests/mcp_camelcase_test.rs (new)"
+  ],
+  "serde_renames_added": [
+    {
+      "struct": "InitializeResult",
+      "field": "protocol_version",
+      "rename_to": "protocolVersion",
+      "rationale": "MCP 2024-11-05 spec wire format; Issue #19 root cause"
+    },
+    {
+      "struct": "InitializeResult",
+      "field": "server_info",
+      "rename_to": "serverInfo",
+      "rationale": "MCP 2024-11-05 spec wire format; Issue #19 root cause"
+    }
+  ],
+  "snake_case_keys_fixed_count": 2,
+  "files_count": 2,
+  "five_file_cap_respected": true,
+  "broader_audit_outcome": "literal triage line was sufficient — only InitializeResult had unrenamed snake_case fields on the Serialize side; ToolsListResult, ToolDefinition (input_schema), ToolsCallResult (is_error), ToolsCapability (list_changed), ContentItem (content_type → 'type') already had their renames in v0.1.6 work",
+  "scope_decisions": {
+    "InitializeParams_and_ClientInfo_left_unchanged": "These are Deserialize-only structs (incoming params); the contract VAL-004 scope is response wire format (Serialize side). The current code uses .and_then(|p| from_value(p.clone()).ok()) which silently ignores deser failures, so the missing renames here cause only loss of an eprintln client-info log, not a wire-format failure. Out of scope for VAL-004 — flag for v0.2.2 review.",
+    "JSON_Schema_property_keys_left_unchanged": "Under tools/list response, every snake_case key (exclude_hidden, max_results, base_path, entry_points, context_lines, top_k, entry_point, include_docstrings, changed_files, smell_type, include_halstead, entropy_threshold, include_test, severity_filter, vuln_type) appears inside an inputSchema.properties JSON Schema object. These are user-defined argument names extracted by tool handlers via get_optional_*(args, \"<exact_key>\") — renaming them would break the tools/call argument-passing contract. The MCP wire-format requirement applies to MCP-defined message field names, not to JSON Schema property declarations contained within an inputSchema value. The recursive scan in the test explicitly skips these (see collect_keys helper in mcp_camelcase_test.rs)."
+  }
+}

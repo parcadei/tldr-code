@@ -153,11 +153,20 @@ pub struct ClientInfo {
     pub version: Option<String>,
 }
 
-/// MCP initialize response result
+/// MCP initialize response result.
+///
+/// Per MCP 2024-11-05 wire format, the response result object uses
+/// camelCase field names. The `#[serde(rename = ...)]` attributes on
+/// `protocol_version` and `server_info` are load-bearing — without them
+/// the server emits snake_case (`protocol_version`, `server_info`) and
+/// spec-compliant clients (e.g. Claude Code) reject the response,
+/// breaking the lifecycle handshake. See parcadei/tldr-code#19.
 #[derive(Debug, Clone, Serialize)]
 pub struct InitializeResult {
+    #[serde(rename = "protocolVersion")]
     pub protocol_version: String,
     pub capabilities: ServerCapabilities,
+    #[serde(rename = "serverInfo")]
     pub server_info: ServerInfo,
 }
 
