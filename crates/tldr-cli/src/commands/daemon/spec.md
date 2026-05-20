@@ -1010,7 +1010,7 @@ fn compute_tcp_port(project: &Path) -> u16 {
 - **Request:** `{"cmd": "...", ...params}\n`
 - **Response:** `{...}\n`
 - **Encoding:** UTF-8
-- **Max message size:** 64KB (client recv buffer)
+- **Max message size:** 10MB (enforced before allocation)
 
 ### Connection Handling
 
