@@ -83,7 +83,7 @@ impl Default for DaemonConfig {
         Self {
             semantic_enabled: true,
             auto_reindex_threshold: DEFAULT_REINDEX_THRESHOLD,
-            semantic_model: "bge-large-en-v1.5".to_string(),
+            semantic_model: "snowflake-arctic-embed-m".to_string(),
             idle_timeout_secs: IDLE_TIMEOUT.as_secs(),
         }
     }

@@ -51,7 +51,7 @@ impl Default for DaemonConfig {
         Self {
             semantic_enabled: true,
             auto_reindex_threshold: DEFAULT_REINDEX_THRESHOLD,
-            semantic_model: "bge-large-en-v1.5".to_string(),
+            semantic_model: "snowflake-arctic-embed-m".to_string(),
             idle_timeout_secs: IDLE_TIMEOUT_SECS,
         }
     }
@@ -537,7 +537,7 @@ mod tests {
 
         assert!(config.semantic_enabled);
         assert_eq!(config.auto_reindex_threshold, DEFAULT_REINDEX_THRESHOLD);
-        assert_eq!(config.semantic_model, "bge-large-en-v1.5");
+        assert_eq!(config.semantic_model, "snowflake-arctic-embed-m");
         assert_eq!(config.idle_timeout_secs, IDLE_TIMEOUT_SECS);
     }
 

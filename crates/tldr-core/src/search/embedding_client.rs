@@ -20,8 +20,8 @@ pub const DEFAULT_EMBEDDING_URL: &str = "http://localhost:8765";
 /// Default timeout for embedding requests
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Embedding vector dimension (for BGE-large-en-v1.5)
-pub const EMBEDDING_DIM: usize = 1024;
+/// Embedding vector dimension (stale placeholder — actual embeddings use Snowflake Arctic via fastembed-rs)
+pub const EMBEDDING_DIM: usize = 768;
 
 /// Request to the embedding service
 #[derive(Debug, Clone, Serialize)]
