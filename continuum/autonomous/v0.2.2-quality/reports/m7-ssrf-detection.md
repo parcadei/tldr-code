@@ -181,7 +181,7 @@ STOP cap of 5).
   - `language_command_matrix --release`: **234/234**
   - **Sum: 964/964** (matches M5 baseline c82e004)
 - `--test-threads=1` confirmed needed for exhaustive_matrix per M5's
-  embedding-mutex contention discovery; multi-threaded would otherwise
+  filesystem race on the cold fastembed model cache discovery; multi-threaded would otherwise
   show 676/730 with 54 transient failures unrelated to vuln work.
 
 ## Constraints honored

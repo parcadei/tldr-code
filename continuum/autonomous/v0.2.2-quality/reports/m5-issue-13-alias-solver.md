@@ -92,7 +92,7 @@ test result: ok. 234 passed; 0 failed; 0 ignored; 0 measured
 ```
 
 Combined: **964/964**. Note the exhaustive matrix is run single-threaded
-to avoid the transient embedding-mutex contention documented in the M4
+to avoid the transient filesystem race on the cold fastembed model cache documented in the M4
 prompt (multi-threaded run shows 676/730 with the 54 transient failures
 that pass on subsequent or single-threaded runs).
 
