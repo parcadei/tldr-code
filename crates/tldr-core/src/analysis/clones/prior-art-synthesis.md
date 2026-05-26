@@ -404,6 +404,8 @@ JavaScript: (function_declaration) @fn
             (arrow_function) @fn
 TypeScript: (function_declaration) @fn
             (method_definition) @method
+            (method_signature) @method
+            (abstract_method_signature) @method
             (arrow_function) @fn
 Go:         (function_declaration) @fn
             (method_declaration) @method

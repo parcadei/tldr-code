@@ -632,7 +632,7 @@ Use tree-sitter to identify top-level syntactic units per language:
 | Language | Fragment units |
 |---|---|
 | Python | `function_definition`, `class_definition` |
-| TypeScript/JS | `function_declaration`, `method_definition`, `arrow_function` (when assigned) |
+| TypeScript/JS | `function_declaration`, `method_definition`, `method_signature`, `abstract_method_signature`, `arrow_function` (when assigned) |
 | Go | `function_declaration`, `method_declaration` |
 | Rust | `function_item`, `impl_item` |
 | Java | `method_declaration`, `class_declaration` |

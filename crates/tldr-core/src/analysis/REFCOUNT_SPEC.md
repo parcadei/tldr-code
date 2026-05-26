@@ -496,7 +496,7 @@ for each file:
 | Language | Function Definition Node | Name Field | Name Node Type | Method Definition Node | Notes |
 |----------|-------------------------|------------|----------------|----------------------|-------|
 | **Python** | `function_definition` | `name` | `identifier` | `function_definition` (inside class) | Same for functions/methods |
-| **TypeScript** | `function_declaration` | `name` | `identifier` | `method_definition` → `name` → `property_identifier` | Also `arrow_function` (anonymous) |
+| **TypeScript** | `function_declaration` | `name` | `identifier` | `method_definition`, `method_signature`, `abstract_method_signature` → `name` → `property_identifier` | Also `arrow_function` (anonymous) |
 | **JavaScript** | `function_declaration` | `name` | `identifier` | `method_definition` → `name` → `property_identifier` | Same as TS minus types |
 | **Go** | `function_declaration` | `name` | `identifier` | `method_declaration` → `name` → `field_identifier` | Receiver in `parameters` |
 | **Rust** | `function_item` | `name` | `identifier` | `function_item` (inside `impl_item`) | Note: `function_item`, not `function_definition` |
@@ -530,6 +530,8 @@ for each file:
 ;; TypeScript/JavaScript
 (function_declaration name: (identifier) @func.def)
 (method_definition name: (property_identifier) @func.def)
+(method_signature name: (property_identifier) @func.def)
+(abstract_method_signature name: (property_identifier) @func.def)
 
 ;; Java
 (method_declaration name: (identifier) @func.def)
