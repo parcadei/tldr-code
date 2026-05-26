@@ -83,7 +83,7 @@ Complete reference table for 18 languages:
 | Python | `function_definition` | `identifier` | `identifier` |
 | Go | `function_declaration`, `method_declaration` | `identifier`, `field_identifier` | `identifier`, `field_identifier` |
 | Rust | `function_item` | `identifier` | `identifier` |
-| TypeScript/JS | `function_declaration`, `method_definition` | `identifier`, `property_identifier` | `identifier`, `property_identifier` |
+| TypeScript/JS | `function_declaration`, `method_definition`, `method_signature`, `abstract_method_signature` | `identifier`, `property_identifier` | `identifier`, `property_identifier` |
 | Java | `method_declaration` | `identifier` | `identifier` |
 | C/C++ | `function_definition` (nested declarators) | `identifier` | `identifier` |
 | Ruby | `method`, `singleton_method` | `identifier` | `identifier` |
