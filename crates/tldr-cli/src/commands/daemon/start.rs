@@ -27,6 +27,20 @@ use super::ipc::{check_socket_alive, cleanup_socket, compute_socket_path, IpcLis
 use super::pid::{compute_pid_path, try_acquire_lock};
 use super::types::DaemonConfig;
 
+fn append_daemon_log(project: &Path, line: &str) -> std::io::Result<()> {
+    use std::io::Write;
+
+    let log_path = project.join(".tldr").join("daemon.log");
+    if let Some(parent) = log_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut log = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)?;
+    writeln!(log, "{}", line)
+}
+
 // =============================================================================
 // CLI Arguments
 // =============================================================================
@@ -96,7 +110,23 @@ impl DaemonStartArgs {
         let socket_path = compute_socket_path(&project);
         if socket_path.exists() && !check_socket_alive(&project).await {
             // Socket exists but daemon is not responding - stale
+            let _ = append_daemon_log(
+                &project,
+                &format!(
+                    "stale_socket_detected project={} socket={}",
+                    project.display(),
+                    socket_path.display()
+                ),
+            );
             cleanup_socket(&project)?;
+            let _ = append_daemon_log(
+                &project,
+                &format!(
+                    "stale_socket_removed project={} socket={}",
+                    project.display(),
+                    socket_path.display()
+                ),
+            );
         }
 
         if self.foreground {

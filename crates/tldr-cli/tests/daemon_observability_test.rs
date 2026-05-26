@@ -58,6 +58,18 @@ fn read_log_until(project: &Path, needle: &str) -> String {
     content
 }
 
+#[cfg(unix)]
+fn socket_path_for_project(project: &Path) -> std::path::PathBuf {
+    let project_str = project
+        .canonicalize()
+        .unwrap_or_else(|_| project.to_path_buf())
+        .to_string_lossy()
+        .to_string();
+    let digest = md5::compute(project_str.as_bytes());
+    let hash = &format!("{:x}", digest)[..8];
+    std::env::temp_dir().join(format!("tldr-{}.sock", hash))
+}
+
 /// Contract: `daemon start` (background mode) must create
 /// `<project>/.tldr/daemon.log` and write at least one byte of daemon output
 /// to it. Prevents regression to the previous behavior where the spawned
@@ -143,6 +155,43 @@ fn daemon_start_logs_readiness_signal() {
         log.contains(&format!("project={}", project.display())),
         "expected readiness log to include canonical project path {}; got: {}",
         project.display(),
+        log
+    );
+}
+
+/// Contract: stale socket detection and recovery must be visible in the
+/// persistent daemon log. This distinguishes "daemon failed to start" from
+/// "startup recovered a dead socket left by an earlier daemon".
+#[cfg(unix)]
+#[test]
+#[ignore = "spawns a real daemon and writes to ~/.tldr/registry.json — run manually with `cargo test -- --ignored`"]
+fn daemon_start_logs_stale_socket_recovery() {
+    let temp = TempDir::new().expect("temp dir");
+    let project = temp.path().canonicalize().expect("canonical project");
+    let socket = socket_path_for_project(&project);
+
+    std::fs::write(&socket, b"stale socket placeholder").unwrap_or_else(|e| {
+        panic!("failed to create stale socket placeholder {:?}: {}", socket, e)
+    });
+
+    start_daemon(&project);
+    let log = read_log_until(&project, "stale_socket_removed");
+    stop_daemon(&project);
+
+    assert!(
+        log.contains("stale_socket_detected"),
+        "expected stale_socket_detected event in daemon.log, got: {}",
+        log
+    );
+    assert!(
+        log.contains("stale_socket_removed"),
+        "expected stale_socket_removed event in daemon.log, got: {}",
+        log
+    );
+    assert!(
+        log.contains(&format!("socket={}", socket.display())),
+        "expected stale-socket log to include socket path {}; got: {}",
+        socket.display(),
         log
     );
 }
