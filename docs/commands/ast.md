@@ -155,7 +155,7 @@ tldr extract src/main.py -f text
 
 ```rust
 // Import parsing
-pub fn get_imports(tree: &Tree, source: &str, language: Language) -> TldrResult<Vec<ImportInfo>>
+pub fn get_imports(file_path: &Path, language: Language) -> TldrResult<Vec<ImportInfo>>
 ```
 
 **How it works:**
