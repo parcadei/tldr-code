@@ -1180,11 +1180,29 @@ impl TLDRDaemon {
 /// Start a daemon in the background for the given project.
 ///
 /// Returns the PID of the daemon process.
+///
+/// Routes the spawned daemon's stdout and stderr into `<project>/.tldr/daemon.log`
+/// (append mode) so tracing output, panics, and backtraces remain inspectable
+/// after the parent CLI invocation exits. Previously both streams were dropped
+/// to `/dev/null`, which made any background daemon crash invisible.
 pub async fn start_daemon_background(project: &std::path::Path) -> DaemonResult<u32> {
+    use std::fs::OpenOptions;
     use std::process::Command;
 
     // Get the current executable path
     let exe_path = std::env::current_exe().map_err(DaemonError::Io)?;
+
+    // Open .tldr/daemon.log for append; create parent dir + file if missing.
+    let log_path = project.join(".tldr").join("daemon.log");
+    if let Some(parent) = log_path.parent() {
+        std::fs::create_dir_all(parent).map_err(DaemonError::Io)?;
+    }
+    let log_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .map_err(DaemonError::Io)?;
+    let log_file_for_stderr = log_file.try_clone().map_err(DaemonError::Io)?;
 
     // Spawn the daemon process
     #[cfg(unix)]
@@ -1197,8 +1215,8 @@ pub async fn start_daemon_background(project: &std::path::Path) -> DaemonResult<
                 .arg(project.as_os_str())
                 .arg("--foreground")
                 .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
+                .stdout(std::process::Stdio::from(log_file))
+                .stderr(std::process::Stdio::from(log_file_for_stderr))
                 .pre_exec(|| {
                     // Create new session (detach from terminal)
                     libc::setsid();
@@ -1222,8 +1240,8 @@ pub async fn start_daemon_background(project: &std::path::Path) -> DaemonResult<
             .arg(project.as_os_str())
             .arg("--foreground")
             .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stdout(std::process::Stdio::from(log_file))
+            .stderr(std::process::Stdio::from(log_file_for_stderr))
             .creation_flags(DETACHED_PROCESS | CREATE_NO_WINDOW)
             .spawn()
             .map_err(DaemonError::Io)?;
