@@ -23,7 +23,10 @@
 
 use std::path::Path;
 use std::process::Command;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
+
+static DAEMON_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 /// A scope guard that issues `daemon stop --project <fixture>` from the
 /// fixture cwd on drop, ensuring the daemon process is cleaned up even if
@@ -78,6 +81,8 @@ fn wait_for_daemon_running(project: &Path, timeout: Duration) -> bool {
 /// and reports `"running"` with the fixture project path.
 #[test]
 fn daemon_status_from_other_cwd_reports_running() {
+    let _guard = DAEMON_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
     // Pre-test cleanup: stop any daemons left over from previous test runs
     // so the cross-cwd discovery has a single canonical active daemon to
     // resolve. Without this, leftover daemons yield "multiple daemons
@@ -180,6 +185,8 @@ fn daemon_status_from_other_cwd_reports_running() {
 /// the active-daemon fallback did not break the explicit-flag path.
 #[test]
 fn daemon_status_with_explicit_project_still_works_from_other_cwd() {
+    let _guard = DAEMON_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
     let fixture = tempfile::Builder::new()
         .prefix("val013-workaround-")
         .tempdir()

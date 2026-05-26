@@ -4,27 +4,13 @@
 //! `daemon-registry.json` file. Each entry records one running daemon; the
 //! file always contains the union of all live daemons known to the user.
 //!
-//! # Concurrency (option c — bounded compare-and-swap retry)
+//! # Concurrency (bounded registry write lock)
 //!
 //! The per-project flock at [`super::pid::try_acquire_lock`] (pid.rs:261,
 //! `libc::flock(LOCK_EX | LOCK_NB)`) protects the SOCKET file, NOT the
 //! registry. Two `daemon start` calls from DIFFERENT projects bypass that
-//! flock and race read-modify-write the shared registry.
-//!
-//! Rather than introducing a new advisory-lock dependency, this module uses
-//! a bounded compare-and-swap retry loop:
-//!
-//! 1. Read the registry file's mtime (pre-mtime).
-//! 2. Read the registry, modify in-memory.
-//! 3. Re-read the mtime (post-mtime).
-//! 4. If pre == post (no concurrent writer landed): atomically write
-//!    (tmp + rename) and return.
-//! 5. Otherwise: retry, up to 3 attempts. On exhaustion return
-//!    [`std::io::ErrorKind::WouldBlock`].
-//!
-//! In practice, a 3-attempt cap is sufficient because each attempt's window
-//! is microseconds and the contender pool is bounded by the number of
-//! projects on disk.
+//! flock and race read-modify-write the shared registry, so registry writes
+//! are serialized with a small adjacent lock file and a bounded retry loop.
 //!
 //! # Migration from v0.2.x
 //!
@@ -33,6 +19,7 @@
 //! converted into a registry entry and the legacy file is deleted. If the
 //! PID is dead, the legacy file is also removed (stale record cleanup).
 
+use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -57,7 +44,8 @@ pub struct DaemonRegistry {
     pub daemons: Vec<DaemonRegistryEntry>,
 }
 
-const CAS_RETRY_ATTEMPTS: usize = 3;
+const LOCK_RETRY_ATTEMPTS: usize = 50;
+const LOCK_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(10);
 
 /// Path to the daemon registry file.
 ///
@@ -85,6 +73,79 @@ fn write_registry_atomic(registry: &DaemonRegistry) -> std::io::Result<()> {
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, json)?;
     std::fs::rename(&tmp, &path)?;
+    Ok(())
+}
+
+fn registry_lock_path() -> PathBuf {
+    registry_file_path().with_extension("json.lock")
+}
+
+fn with_registry_lock<T>(f: impl FnOnce() -> std::io::Result<T>) -> std::io::Result<T> {
+    let lock_path = registry_lock_path();
+    if let Some(parent) = lock_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let lock_file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock_path)?;
+    lock_registry_file(&lock_file)?;
+
+    let result = f();
+    let unlock_result = unlock_registry_file(&lock_file);
+    match (result, unlock_result) {
+        (Ok(value), Ok(())) => Ok(value),
+        (Err(err), _) => Err(err),
+        (Ok(_), Err(err)) => Err(err),
+    }
+}
+
+#[cfg(unix)]
+fn lock_registry_file(file: &File) -> std::io::Result<()> {
+    use std::os::unix::io::AsRawFd;
+
+    for _attempt in 0..LOCK_RETRY_ATTEMPTS {
+        let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        if result == 0 {
+            return Ok(());
+        }
+
+        let err = std::io::Error::last_os_error();
+        let raw = err.raw_os_error();
+        if raw != Some(libc::EWOULDBLOCK) && raw != Some(libc::EAGAIN) {
+            return Err(err);
+        }
+        std::thread::sleep(LOCK_RETRY_DELAY);
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::WouldBlock,
+        "daemon registry lock contended after bounded retries",
+    ))
+}
+
+#[cfg(unix)]
+fn unlock_registry_file(file: &File) -> std::io::Result<()> {
+    use std::os::unix::io::AsRawFd;
+
+    let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_UN) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(unix))]
+fn lock_registry_file(_file: &File) -> std::io::Result<()> {
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn unlock_registry_file(_file: &File) -> std::io::Result<()> {
     Ok(())
 }
 
@@ -125,21 +186,14 @@ pub fn find_entry(project: &Path) -> Option<DaemonRegistryEntry> {
         .find(|d| d.project == canon)
 }
 
-/// Add (or replace) the registry entry for `project` via bounded
-/// compare-and-swap.
-///
-/// Returns `Err(io::ErrorKind::WouldBlock)` if [`CAS_RETRY_ATTEMPTS`] are
-/// exhausted under contention.
+/// Add (or replace) the registry entry for `project` while holding the
+/// registry write lock.
 pub fn add_entry(project: &Path, pid: u32, socket: &Path) -> std::io::Result<()> {
     let canon = project
         .canonicalize()
         .unwrap_or_else(|_| project.to_path_buf());
-    let path = registry_file_path();
 
-    for _attempt in 0..CAS_RETRY_ATTEMPTS {
-        let pre_mtime = std::fs::metadata(&path)
-            .ok()
-            .and_then(|m| m.modified().ok());
+    with_registry_lock(|| {
         let mut registry = read_registry();
         registry.daemons.retain(|d| d.project != canon);
         registry.daemons.push(DaemonRegistryEntry {
@@ -148,32 +202,18 @@ pub fn add_entry(project: &Path, pid: u32, socket: &Path) -> std::io::Result<()>
             socket: socket.to_path_buf(),
             started_at: chrono::Utc::now().to_rfc3339(),
         });
-        let post_mtime = std::fs::metadata(&path)
-            .ok()
-            .and_then(|m| m.modified().ok());
-        if pre_mtime == post_mtime {
-            return write_registry_atomic(&registry);
-        }
-        // Contention: another writer landed between our read and our
-        // intended write. Retry.
-    }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::WouldBlock,
-        "daemon registry contended after 3 CAS attempts",
-    ))
+        write_registry_atomic(&registry)
+    })
 }
 
-/// Remove the registry entry for `project` via bounded compare-and-swap.
+/// Remove the registry entry for `project` while holding the registry write
+/// lock.
 pub fn remove_entry(project: &Path) -> std::io::Result<()> {
     let canon = project
         .canonicalize()
         .unwrap_or_else(|_| project.to_path_buf());
-    let path = registry_file_path();
 
-    for _attempt in 0..CAS_RETRY_ATTEMPTS {
-        let pre_mtime = std::fs::metadata(&path)
-            .ok()
-            .and_then(|m| m.modified().ok());
+    with_registry_lock(|| {
         let mut registry = read_registry();
         let before = registry.daemons.len();
         registry.daemons.retain(|d| d.project != canon);
@@ -181,17 +221,8 @@ pub fn remove_entry(project: &Path) -> std::io::Result<()> {
             // Nothing to remove — caller's invariant satisfied.
             return Ok(());
         }
-        let post_mtime = std::fs::metadata(&path)
-            .ok()
-            .and_then(|m| m.modified().ok());
-        if pre_mtime == post_mtime {
-            return write_registry_atomic(&registry);
-        }
-    }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::WouldBlock,
-        "daemon registry contended after 3 CAS attempts",
-    ))
+        write_registry_atomic(&registry)
+    })
 }
 
 /// One-shot migration from v0.2.x `daemon-active.json`.
@@ -278,9 +309,7 @@ mod tests {
     fn with_registry_dir<F: FnOnce(&Path)>(prefix: &str, f: F) {
         // Hold the lock for the entire body so set_var / f / remove_var
         // run atomically with respect to other tests in this module.
-        let _guard = REGISTRY_ENV_LOCK
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let _guard = REGISTRY_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let tmp = TempDir::new().expect("tempdir");
         std::env::set_var("TLDR_DAEMON_REGISTRY_DIR", tmp.path());
         let _prefix = prefix;
