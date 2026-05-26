@@ -27,7 +27,7 @@ The [Model Context Protocol](https://modelcontextprotocol.io/) is a standard int
 ### 1. Build the MCP Server
 
 ```bash
-cargo build --release -p tldr-mcp
+cargo build --release
 ```
 
 The binary will be at: `target/release/tldr-mcp`
@@ -252,7 +252,7 @@ impl Tool for MyTool {
 
 2. Register in `tools/mod.rs`
 
-3. Rebuild: `cargo build -p tldr-mcp`
+3. Rebuild: `cargo build --release`
 
 ### Testing MCP Server
 
