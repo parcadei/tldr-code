@@ -141,6 +141,13 @@ impl DaemonStartArgs {
         let socket_path = compute_socket_path(project);
         let our_pid = std::process::id();
 
+        eprintln!(
+            "daemon_startup project={} pid={} socket={}",
+            project.display(),
+            our_pid,
+            socket_path.display()
+        );
+
         // VAL-003 (v0.3.0): register the daemon in the multi-daemon
         // registry. Replaces v0.2.x's single-slot daemon-active.json.
         // Failures are logged but non-fatal — the file is auxiliary
