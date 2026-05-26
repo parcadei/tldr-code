@@ -120,3 +120,29 @@ fn daemon_start_logs_startup_metadata() {
         log
     );
 }
+
+/// Contract: readiness must be visible as a stable log event after the daemon
+/// transitions to `Ready`. This gives tests and operators a non-timing-based
+/// signal that the daemon reached its IPC-serving state.
+#[test]
+#[ignore = "spawns a real daemon and writes to ~/.tldr/registry.json — run manually with `cargo test -- --ignored`"]
+fn daemon_start_logs_readiness_signal() {
+    let temp = TempDir::new().expect("temp dir");
+    let project = temp.path().canonicalize().expect("canonical project");
+
+    start_daemon(&project);
+    let log = read_log_until(&project, "daemon_ready");
+    stop_daemon(&project);
+
+    assert!(
+        log.contains("daemon_ready"),
+        "expected daemon_ready event in daemon.log, got: {}",
+        log
+    );
+    assert!(
+        log.contains(&format!("project={}", project.display())),
+        "expected readiness log to include canonical project path {}; got: {}",
+        project.display(),
+        log
+    );
+}

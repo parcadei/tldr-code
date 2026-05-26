@@ -223,6 +223,7 @@ impl TLDRDaemon {
             let mut status = self.status.write().await;
             *status = DaemonStatus::Ready;
         }
+        eprintln!("daemon_ready project={}", self.project.display());
 
         // Set up signal handlers for graceful shutdown
         #[cfg(unix)]
