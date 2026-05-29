@@ -309,7 +309,8 @@ impl IpcStream {
     /// Connect to a daemon for the given project.
     ///
     /// # Unix
-    /// Connects to Unix domain socket at `/tmp/tldr-{hash}.sock`
+    /// Resolves the socket path from the daemon registry first (TMPDIR-independent),
+    /// falling back to `{temp_dir}/tldr-{hash}.sock` when no registry entry exists.
     ///
     /// # Windows
     /// Connects to TCP localhost on a deterministic port.
@@ -326,17 +327,36 @@ impl IpcStream {
 
     #[cfg(unix)]
     async fn connect_unix(project: &Path) -> DaemonResult<Self> {
-        let socket_path = compute_socket_path(project);
+        // Resolve socket path via the daemon registry first. This is
+        // TMPDIR-independent and works across shell sessions (launchd
+        // inherits a different TMPDIR than interactive shells). Fall back
+        // to the TMPDIR-derived path for the single-daemon / no-registry case.
+        let (socket_path, from_registry) = match super::daemon_registry::find_entry(project) {
+            Some(entry) => (entry.socket, true),
+            None => (compute_socket_path(project), false),
+        };
 
-        // Validate socket path security
-        validate_socket_path(&socket_path)?;
+        // Registry path came from our cache-dir registry file — skip
+        // TMPDIR-containment (the daemon's TMPDIR differs from ours) but
+        // verify the filename matches what we'd compute for this project.
+        if from_registry {
+            let expected_name = compute_socket_path(project).file_name().map(|f| f.to_os_string());
+            let actual_name = socket_path.file_name().map(|f| f.to_os_string());
+            if expected_name != actual_name {
+                return Err(DaemonError::PermissionDenied {
+                    path: socket_path.clone(),
+                });
+            }
+        } else {
+            validate_socket_path(&socket_path)?;
+        }
 
         // Check socket exists
         if !socket_path.exists() {
             return Err(DaemonError::NotRunning);
         }
 
-        // Check for symlink attack (TIGER-P3-04)
+        // Symlink check applies regardless of source (TIGER-P3-04)
         check_not_symlink(&socket_path)?;
 
         // Connect with timeout
