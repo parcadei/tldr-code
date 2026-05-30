@@ -18,7 +18,7 @@ use crate::output::OutputFormat;
 use super::daemon_active::remove_active;
 use super::daemon_registry::{live_entries, remove_entry};
 use super::error::DaemonError;
-use super::ipc::{check_socket_alive, cleanup_socket, send_command};
+use super::ipc::{check_socket_alive, cleanup_socket_at, send_command, snapshot_socket_path};
 use super::pid::{cleanup_stale_pid, compute_pid_path};
 use super::types::DaemonCommand;
 
@@ -84,6 +84,14 @@ impl DaemonStopArgs {
                 .join(&self.project)
         });
 
+        // Snapshot the socket path from the unpruned registry BEFORE any
+        // operation that triggers read_registry() (which prunes dead PIDs and
+        // writes back). Without this, check_socket_alive -> connect ->
+        // find_entry -> read_registry() drops the dead entry, and the later
+        // cleanup_socket -> find_entry_unpruned finds nothing — orphaning a
+        // cross-TMPDIR socket (W6/W3).
+        let socket_snapshot = snapshot_socket_path(&project);
+
         // Check if daemon is running
         if !check_socket_alive(&project).await {
             // Daemon not running
@@ -107,7 +115,7 @@ impl DaemonStopArgs {
             // registry entry).
             let pid_path = compute_pid_path(&project);
             let _ = cleanup_stale_pid(&pid_path);
-            let _ = cleanup_socket(&project);
+            let _ = cleanup_socket_at(&socket_snapshot);
             let _ = remove_active();
             let _ = remove_entry(&project);
 
@@ -130,7 +138,7 @@ impl DaemonStopArgs {
                 }
 
                 // Clean up files (legacy daemon-active.json + v0.3.0 entry).
-                let _ = cleanup_socket(&project);
+                let _ = cleanup_socket_at(&socket_snapshot);
                 let pid_path = compute_pid_path(&project);
                 let _ = cleanup_stale_pid(&pid_path);
                 let _ = remove_active();
@@ -174,7 +182,7 @@ impl DaemonStopArgs {
 
                 // Clean up any stale files (legacy daemon-active.json +
                 // v0.3.0 registry entry).
-                let _ = cleanup_socket(&project);
+                let _ = cleanup_socket_at(&socket_snapshot);
                 let pid_path = compute_pid_path(&project);
                 let _ = cleanup_stale_pid(&pid_path);
                 let _ = remove_active();
@@ -218,10 +226,10 @@ impl DaemonStopArgs {
         let mut failed = 0usize;
         for entry in &entries {
             let project = &entry.project;
+            let socket = snapshot_socket_path(project);
             let cmd = DaemonCommand::Shutdown;
             match send_command(project, &cmd).await {
                 Ok(_response) => {
-                    // Wait briefly for the daemon to exit.
                     let mut retries = 0;
                     while retries < 50 {
                         if !check_socket_alive(project).await {
@@ -230,15 +238,14 @@ impl DaemonStopArgs {
                         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                         retries += 1;
                     }
-                    let _ = cleanup_socket(project);
+                    let _ = cleanup_socket_at(&socket);
                     let pid_path = compute_pid_path(project);
                     let _ = cleanup_stale_pid(&pid_path);
                     let _ = remove_entry(project);
                     stopped += 1;
                 }
                 Err(DaemonError::NotRunning) | Err(DaemonError::ConnectionRefused) => {
-                    // Already dead — clean up the registry record.
-                    let _ = cleanup_socket(project);
+                    let _ = cleanup_socket_at(&socket);
                     let pid_path = compute_pid_path(project);
                     let _ = cleanup_stale_pid(&pid_path);
                     let _ = remove_entry(project);

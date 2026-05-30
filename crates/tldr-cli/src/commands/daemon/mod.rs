@@ -69,7 +69,8 @@ pub use daemon_impl as daemon;
 // Re-export core types for convenience
 pub use error::{DaemonError, DaemonResult};
 pub use ipc::{
-    check_socket_alive, cleanup_socket, read_command, send_command, send_raw_command,
+    check_socket_alive, cleanup_socket, cleanup_socket_at, read_command, send_command,
+    send_raw_command, snapshot_socket_path,
     send_response, validate_socket_path, IpcListener, IpcStream, CONNECTION_TIMEOUT_SECS,
     MAX_MESSAGE_SIZE, READ_TIMEOUT_SECS,
 };

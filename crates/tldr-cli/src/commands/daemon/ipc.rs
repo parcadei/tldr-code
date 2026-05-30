@@ -632,14 +632,36 @@ pub async fn send_response(stream: &mut IpcStream, response: &DaemonResponse) ->
 /// startup over a bad registry entry.
 pub fn cleanup_socket(project: &Path) -> DaemonResult<()> {
     let socket_path = resolve_socket_path_for_cleanup(project);
+    cleanup_socket_at(&socket_path)
+}
 
+/// Remove the socket file at an explicit path. Use this when the caller has
+/// already resolved the path (e.g. via [`snapshot_socket_path`]) to avoid a
+/// second registry lookup that may see pruned state.
+pub fn cleanup_socket_at(socket_path: &Path) -> DaemonResult<()> {
     if socket_path.exists() {
-        // Safety check: don't remove symlinks
-        check_not_symlink(&socket_path)?;
-        std::fs::remove_file(&socket_path)?;
+        check_not_symlink(socket_path)?;
+        std::fs::remove_file(socket_path)?;
     }
-
     Ok(())
+}
+
+/// Snapshot the socket path from the unpruned registry BEFORE any operation
+/// that might trigger a pruning `read_registry()` call (e.g.
+/// `check_socket_alive`, `send_command`). The returned path is safe to pass
+/// to [`cleanup_socket_at`] later, even if the registry entry has been pruned
+/// in the meantime.
+///
+/// Unlike [`resolve_socket_path_for_cleanup`], this does NOT gate on
+/// `!is_pid_alive` — the caller knows it is about to kill the daemon, so
+/// the PID will be dead by the time cleanup runs.
+pub fn snapshot_socket_path(project: &Path) -> PathBuf {
+    if let Some(entry) = super::daemon_registry::find_entry_unpruned(project) {
+        if registry_socket_name_matches(project, &entry.socket) {
+            return entry.socket;
+        }
+    }
+    compute_socket_path(project)
 }
 
 /// Check if a socket exists and is connectable.
@@ -812,6 +834,37 @@ mod tests {
             assert!(
                 !sock.exists(),
                 "orphaned socket of dead cross-TMPDIR daemon should be removed"
+            );
+        });
+    }
+
+    /// W3: `snapshot_socket_path` must return the registry-recorded path even
+    /// when the daemon is still alive. The caller (stop.rs) captures this before
+    /// sending shutdown — by the time `cleanup_socket_at` runs the PID is dead,
+    /// but the snapshot was taken while it was alive.
+    #[cfg(unix)]
+    #[test]
+    fn test_snapshot_socket_path_returns_registry_path_for_live_daemon() {
+        use crate::commands::daemon::daemon_registry::{add_entry, test_support::with_registry_dir};
+        with_registry_dir(|dir| {
+            let project = dir.join("proj-snap");
+            std::fs::create_dir_all(&project).unwrap();
+
+            let sock_name = compute_socket_path(&project).file_name().unwrap().to_owned();
+            let registry_sock = dir.join(&sock_name);
+
+            // Live PID (this test process) — simulates snapshotting before shutdown.
+            add_entry(&project, std::process::id(), &registry_sock).expect("add");
+
+            let snapped = snapshot_socket_path(&project);
+            assert_eq!(
+                snapped, registry_sock,
+                "snapshot must return the registry path even for a live daemon"
+            );
+            assert_ne!(
+                snapped,
+                compute_socket_path(&project),
+                "snapshot must NOT fall back to local TMPDIR when a registry entry exists"
             );
         });
     }
