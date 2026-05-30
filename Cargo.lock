@@ -3391,7 +3391,7 @@ dependencies = [
 
 [[package]]
 name = "tldr-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -3408,6 +3408,7 @@ dependencies = [
  "libc",
  "line-numbers",
  "md5",
+ "paste",
  "predicates",
  "proptest",
  "radix-heap",
@@ -3453,7 +3454,7 @@ dependencies = [
 
 [[package]]
 name = "tldr-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "bitvec",
@@ -3503,7 +3504,7 @@ dependencies = [
 
 [[package]]
 name = "tldr-daemon"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -3527,7 +3528,7 @@ dependencies = [
 
 [[package]]
 name = "tldr-mcp"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "serde",
