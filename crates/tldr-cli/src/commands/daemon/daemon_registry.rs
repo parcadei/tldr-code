@@ -234,6 +234,35 @@ pub fn find_entry(project: &Path) -> Option<DaemonRegistryEntry> {
         .find(|d| d.project == canon)
 }
 
+/// Read the registry from disk WITHOUT pruning dead-PID entries, migrating, or
+/// writing back.
+///
+/// [`read_registry`] prunes dead entries, which is wrong for socket cleanup:
+/// the stale-cleanup scenario is *precisely* when the daemon is dead, so a
+/// pruning read would drop the very entry whose recorded socket path must be
+/// removed — leaving a cross-TMPDIR orphan behind (W6). Callers that act on a
+/// dead daemon's record (only `ipc::cleanup_socket`) must use this.
+fn read_registry_unpruned() -> DaemonRegistry {
+    let path = registry_file_path();
+    match std::fs::read_to_string(&path) {
+        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+        Err(_) => DaemonRegistry::default(),
+    }
+}
+
+/// Look up a registry entry by canonicalized project path WITHOUT pruning dead
+/// PIDs. The returned entry's [`is_pid_alive`] status is the caller's to check.
+/// See [`read_registry_unpruned`] for why cleanup must not prune.
+pub fn find_entry_unpruned(project: &Path) -> Option<DaemonRegistryEntry> {
+    let canon = project
+        .canonicalize()
+        .unwrap_or_else(|_| project.to_path_buf());
+    read_registry_unpruned()
+        .daemons
+        .into_iter()
+        .find(|d| d.project == canon)
+}
+
 /// Add (or replace) the registry entry for `project` while holding the
 /// registry write lock.
 pub fn add_entry(project: &Path, pid: u32, socket: &Path) -> std::io::Result<()> {
@@ -325,7 +354,7 @@ fn migrate_from_active_if_needed() {
 
 /// Best-effort PID liveness check. Mirrors `daemon_active::is_pid_alive`.
 #[cfg(unix)]
-fn is_pid_alive(pid: u32) -> bool {
+pub(crate) fn is_pid_alive(pid: u32) -> bool {
     let rc = unsafe { libc::kill(pid as i32, 0) };
     if rc == 0 {
         return true;
@@ -337,7 +366,7 @@ fn is_pid_alive(pid: u32) -> bool {
 }
 
 #[cfg(not(unix))]
-fn is_pid_alive(_pid: u32) -> bool {
+pub(crate) fn is_pid_alive(_pid: u32) -> bool {
     true
 }
 
