@@ -1,7 +1,7 @@
 .PHONY: build test lint fmt clean release install
 
 build:
-	cargo build --release
+	cargo build --release --features semantic
 
 test:
 	cargo test -p tldr-core --lib
