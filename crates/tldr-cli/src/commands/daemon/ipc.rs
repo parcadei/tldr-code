@@ -166,6 +166,35 @@ pub fn check_not_symlink(path: &Path) -> DaemonResult<()> {
 }
 
 // =============================================================================
+// Socket path resolution (registry-first)
+// =============================================================================
+
+/// Resolve a project's socket path, preferring the TMPDIR-independent daemon
+/// registry over the local TMPDIR-derived path.
+///
+/// The daemon binds its socket under *its own* `TMPDIR` (launchd inherits a
+/// different `TMPDIR` than interactive shells), so a client that recomputes the
+/// path from its own `TMPDIR` can diverge. The registry records the actual
+/// socket path, so we consult it first and fall back to `compute_socket_path`
+/// only when no live entry exists.
+///
+/// Returns `(path, from_registry)`.
+fn resolve_socket_path(project: &Path) -> (PathBuf, bool) {
+    match super::daemon_registry::find_entry(project) {
+        Some(entry) => (entry.socket, true),
+        None => (compute_socket_path(project), false),
+    }
+}
+
+/// A registry-sourced socket path is trusted only if its file name matches the
+/// deterministic `tldr-{hash}.sock` we would compute for this project. This
+/// binds the registry entry to the project and prevents a poisoned/corrupt
+/// registry from redirecting a connect or a *deletion* to an arbitrary file.
+fn registry_socket_name_matches(project: &Path, socket_path: &Path) -> bool {
+    compute_socket_path(project).file_name() == socket_path.file_name()
+}
+
+// =============================================================================
 // IpcListener - Server Side
 // =============================================================================
 
@@ -327,27 +356,33 @@ impl IpcStream {
 
     #[cfg(unix)]
     async fn connect_unix(project: &Path) -> DaemonResult<Self> {
-        // Resolve socket path via the daemon registry first. This is
-        // TMPDIR-independent and works across shell sessions (launchd
-        // inherits a different TMPDIR than interactive shells). Fall back
-        // to the TMPDIR-derived path for the single-daemon / no-registry case.
-        let (socket_path, from_registry) = match super::daemon_registry::find_entry(project) {
-            Some(entry) => (entry.socket, true),
-            None => (compute_socket_path(project), false),
-        };
+        // Resolve socket path via the daemon registry first (TMPDIR-independent;
+        // see `resolve_socket_path`). Fall back to the TMPDIR-derived path for
+        // the single-daemon / no-registry case.
+        let (socket_path, from_registry) = resolve_socket_path(project);
 
         // Registry path came from our cache-dir registry file — skip
         // TMPDIR-containment (the daemon's TMPDIR differs from ours) but
         // verify the filename matches what we'd compute for this project.
         if from_registry {
-            let expected_name = compute_socket_path(project).file_name().map(|f| f.to_os_string());
-            let actual_name = socket_path.file_name().map(|f| f.to_os_string());
-            if expected_name != actual_name {
+            if !registry_socket_name_matches(project, &socket_path) {
                 return Err(DaemonError::PermissionDenied {
                     path: socket_path.clone(),
                 });
             }
         } else {
+            // W1/W2: a registry miss silently re-introduces the original
+            // cross-TMPDIR bug if the daemon bound its socket under a different
+            // TMPDIR. Surface it under TLDR_DEBUG so the failure mode is
+            // diagnosable instead of a bare "not running".
+            if std::env::var_os("TLDR_DEBUG").is_some() {
+                eprintln!(
+                    "[tldr-debug] daemon registry miss for {}; falling back to \
+                     TMPDIR-derived socket {}",
+                    project.display(),
+                    socket_path.display()
+                );
+            }
             validate_socket_path(&socket_path)?;
         }
 
@@ -553,8 +588,27 @@ pub async fn send_response(stream: &mut IpcStream, response: &DaemonResponse) ->
 /// Clean up the socket file for a project.
 ///
 /// Safe to call even if socket doesn't exist.
+///
+/// # W6 (cross-TMPDIR cleanup)
+///
+/// The socket is resolved via the daemon registry first, mirroring
+/// `connect_unix`. Computing the path from the *caller's* `TMPDIR` would
+/// no-op when the daemon bound its socket under a different `TMPDIR`, orphaning
+/// the real socket file. Callers (`stop.rs`) invoke this BEFORE `remove_entry`,
+/// so the registry entry is still live here.
+///
+/// Cleanup is best-effort: a registry path whose filename does not match this
+/// project's deterministic socket name (poisoned/corrupt registry) is NOT
+/// deleted — we fall back to the local TMPDIR-derived path. This also keeps the
+/// one `?`-propagating caller (`start.rs` stale-socket cleanup) from aborting
+/// startup over a bad registry entry.
 pub fn cleanup_socket(project: &Path) -> DaemonResult<()> {
-    let socket_path = compute_socket_path(project);
+    let (resolved, from_registry) = resolve_socket_path(project);
+    let socket_path = if from_registry && !registry_socket_name_matches(project, &resolved) {
+        compute_socket_path(project)
+    } else {
+        resolved
+    };
 
     if socket_path.exists() {
         // Safety check: don't remove symlinks
@@ -682,12 +736,51 @@ mod tests {
 
     #[test]
     fn test_cleanup_socket_nonexistent() {
-        let temp = TempDir::new().unwrap();
-        let project = temp.path().join("nonexistent");
+        use crate::commands::daemon::daemon_registry::test_support::with_registry_dir;
+        // Redirect the registry to a temp dir: cleanup_socket now reads the
+        // registry, and we must not touch the developer's real registry.
+        with_registry_dir(|dir| {
+            let project = dir.join("nonexistent");
 
-        // Should not error on nonexistent socket
-        let result = cleanup_socket(&project);
-        assert!(result.is_ok());
+            // Should not error on nonexistent socket
+            let result = cleanup_socket(&project);
+            assert!(result.is_ok());
+        });
+    }
+
+    /// W6: when the daemon recorded its socket under a different directory than
+    /// this caller's `TMPDIR` would compute, `cleanup_socket` must remove the
+    /// registry-recorded socket rather than no-op on a non-existent local path.
+    #[cfg(unix)]
+    #[test]
+    fn test_cleanup_socket_removes_registry_path() {
+        use crate::commands::daemon::daemon_registry::{add_entry, test_support::with_registry_dir};
+        with_registry_dir(|dir| {
+            // A real, canonicalizable project dir.
+            let project = dir.join("proj");
+            std::fs::create_dir_all(&project).unwrap();
+
+            // Socket lives under `dir` (stand-in for the daemon's TMPDIR), not
+            // the system temp dir that `compute_socket_path` would yield. The
+            // filename still matches this project's deterministic socket name.
+            let sock_name = compute_socket_path(&project).file_name().unwrap().to_owned();
+            let sock = dir.join(&sock_name);
+            std::fs::write(&sock, b"").unwrap();
+            assert_ne!(
+                sock,
+                compute_socket_path(&project),
+                "test premise: registry socket must differ from local path"
+            );
+
+            add_entry(&project, std::process::id(), &sock).expect("add");
+            assert!(sock.exists());
+
+            cleanup_socket(&project).expect("cleanup");
+            assert!(
+                !sock.exists(),
+                "registry-recorded socket should have been removed"
+            );
+        });
     }
 
     #[cfg(unix)]
@@ -725,10 +818,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_connect_nonexistent_daemon() {
+        use crate::commands::daemon::daemon_registry::test_support::REGISTRY_ENV_LOCK;
+        // connect resolves via the registry first; isolate it from the real one.
+        // `with_registry_dir` takes a sync closure, so hold the env override
+        // manually across the await. tokio::test is current-thread, so holding
+        // the !Send guard across `.await` is fine.
+        let _guard = REGISTRY_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = TempDir::new().unwrap();
-        let project = temp.path();
+        std::env::set_var("TLDR_DAEMON_REGISTRY_DIR", temp.path());
+        let project = temp.path().join("nonexistent");
 
-        let result = IpcStream::connect(project).await;
+        let result = IpcStream::connect(&project).await;
+        std::env::remove_var("TLDR_DAEMON_REGISTRY_DIR");
         assert!(matches!(result, Err(DaemonError::NotRunning)));
     }
 

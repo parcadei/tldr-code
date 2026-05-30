@@ -55,6 +55,7 @@ const LOCK_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(1
 /// 3. `./.cache/tldr/daemon-registry.json` fallback (mirrors `daemon_active`).
 pub fn registry_file_path() -> PathBuf {
     if let Ok(dir) = std::env::var("TLDR_DAEMON_REGISTRY_DIR") {
+        warn_registry_override_once();
         return PathBuf::from(dir).join("daemon-registry.json");
     }
     dirs::cache_dir()
@@ -63,15 +64,59 @@ pub fn registry_file_path() -> PathBuf {
         .join("daemon-registry.json")
 }
 
+/// Emit a one-time stderr warning when the `TLDR_DAEMON_REGISTRY_DIR` override
+/// is honored in a production build (W5). The override is a test-isolation
+/// hook; in normal operation it silently redirects every daemon lookup, so a
+/// caller (or attacker) who controls the environment could point clients at a
+/// registry they own. Surfacing it once keeps the diagnostic visible without
+/// spamming the many `registry_file_path` callers.
+#[cfg(not(test))]
+fn warn_registry_override_once() {
+    use std::sync::Once;
+    static WARN: Once = Once::new();
+    WARN.call_once(|| {
+        eprintln!(
+            "warning: TLDR_DAEMON_REGISTRY_DIR is set — daemon registry lookups are \
+             redirected to a non-default location. Unset it for normal operation."
+        );
+    });
+}
+
+#[cfg(test)]
+fn warn_registry_override_once() {}
+
+/// Create `dir` (if missing) and constrain it to owner-only access (`0700` on
+/// unix). The registry records project paths and PIDs, so the directory must
+/// not be world-traversable even under a permissive umask (e.g. `umask 000`
+/// in CI/Docker), which would otherwise defeat the socket filename binding in
+/// `ipc::connect_unix` (W3/W4).
+fn ensure_secure_dir(dir: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
+}
+
 /// Atomically write `registry` to [`registry_file_path`] via tmp + rename.
 fn write_registry_atomic(registry: &DaemonRegistry) -> std::io::Result<()> {
     let path = registry_file_path();
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
+        ensure_secure_dir(parent)?;
     }
     let json = serde_json::to_string_pretty(registry).map_err(std::io::Error::other)?;
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, json)?;
+    // Constrain the registry file to owner read/write before it is published
+    // via rename — it leaks project paths and PIDs otherwise (W4). rename
+    // preserves the mode, so the live file inherits 0600.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
+    }
     std::fs::rename(&tmp, &path)?;
     Ok(())
 }
@@ -83,7 +128,10 @@ fn registry_lock_path() -> PathBuf {
 fn with_registry_lock<T>(f: impl FnOnce() -> std::io::Result<T>) -> std::io::Result<T> {
     let lock_path = registry_lock_path();
     if let Some(parent) = lock_path.parent() {
-        std::fs::create_dir_all(parent)?;
+        // The lock file is usually the first thing to create `<cache>/tldr`,
+        // so secure the directory here too — not just in `write_registry_atomic`
+        // (W3).
+        ensure_secure_dir(parent)?;
     }
 
     let lock_file = std::fs::OpenOptions::new()
@@ -293,8 +341,11 @@ fn is_pid_alive(_pid: u32) -> bool {
     true
 }
 
+/// Test-only support shared with sibling modules (e.g. `ipc`'s cleanup tests),
+/// which must redirect the registry to a temp dir so they neither read nor
+/// rewrite the developer's real `~/Library/Caches/tldr/daemon-registry.json`.
 #[cfg(test)]
-mod tests {
+pub(crate) mod test_support {
     use super::*;
     use std::sync::Mutex;
     use tempfile::TempDir;
@@ -303,23 +354,29 @@ mod tests {
     /// env var. Without this, parallel tests stomp on each other's overrides
     /// and `add_entry` sees a NotFound when another thread has already
     /// removed the env var (registry dir resolves to a non-existent default).
-    static REGISTRY_ENV_LOCK: Mutex<()> = Mutex::new(());
+    pub(crate) static REGISTRY_ENV_LOCK: Mutex<()> = Mutex::new(());
 
-    /// Helper: scope an env var override for the duration of a closure.
-    fn with_registry_dir<F: FnOnce(&Path)>(prefix: &str, f: F) {
+    /// Helper: scope an env var override for the duration of a closure. The
+    /// returned temp dir IS the registry directory for the closure's body.
+    pub(crate) fn with_registry_dir<F: FnOnce(&Path)>(f: F) {
         // Hold the lock for the entire body so set_var / f / remove_var
-        // run atomically with respect to other tests in this module.
+        // run atomically with respect to other tests in this binary.
         let _guard = REGISTRY_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let tmp = TempDir::new().expect("tempdir");
         std::env::set_var("TLDR_DAEMON_REGISTRY_DIR", tmp.path());
-        let _prefix = prefix;
         f(tmp.path());
         std::env::remove_var("TLDR_DAEMON_REGISTRY_DIR");
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_support::with_registry_dir;
+    use super::*;
 
     #[test]
     fn registry_path_honors_env_override() {
-        with_registry_dir("env-override", |dir| {
+        with_registry_dir(|dir| {
             let path = registry_file_path();
             assert_eq!(path, dir.join("daemon-registry.json"));
         });
@@ -327,15 +384,37 @@ mod tests {
 
     #[test]
     fn read_registry_on_missing_file_returns_empty() {
-        with_registry_dir("missing-file", |_dir| {
+        with_registry_dir(|_dir| {
             let r = read_registry();
             assert!(r.daemons.is_empty());
         });
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn registry_dir_and_file_are_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        with_registry_dir(|dir| {
+            let project = dir.join("perms-proj");
+            std::fs::create_dir_all(&project).unwrap();
+            add_entry(&project, std::process::id(), &dir.join("perms.sock")).expect("add");
+
+            let file = registry_file_path();
+            let file_mode = std::fs::metadata(&file).unwrap().permissions().mode() & 0o777;
+            assert_eq!(file_mode, 0o600, "registry file must be owner-only (W4)");
+
+            let dir_mode = std::fs::metadata(file.parent().unwrap())
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(dir_mode, 0o700, "registry dir must be owner-only (W3)");
+        });
+    }
+
     #[test]
     fn add_then_find_round_trips() {
-        with_registry_dir("round-trip", |dir| {
+        with_registry_dir(|dir| {
             let project = dir.join("proj");
             std::fs::create_dir_all(&project).unwrap();
             let socket = dir.join("proj.sock");
@@ -348,7 +427,7 @@ mod tests {
 
     #[test]
     fn remove_entry_drops_record() {
-        with_registry_dir("remove", |dir| {
+        with_registry_dir(|dir| {
             let project = dir.join("proj-r");
             std::fs::create_dir_all(&project).unwrap();
             let socket = dir.join("proj-r.sock");
@@ -360,7 +439,7 @@ mod tests {
 
     #[test]
     fn dead_pid_entries_are_pruned_on_read() {
-        with_registry_dir("prune", |dir| {
+        with_registry_dir(|dir| {
             let project = dir.join("proj-dead");
             std::fs::create_dir_all(&project).unwrap();
             // Spawn `true` and reap → PID is now definitely dead.
