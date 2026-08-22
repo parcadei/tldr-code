@@ -836,6 +836,8 @@ mod structure_tests {
             "type_alias",
             "object",
             "field",
+            // anonymous-callback-definitions-v1: a callback region named after its callee.
+            "call",
         ];
         let cases: Vec<(&str, Language)> = vec![
             ("test_python.py", Language::Python),

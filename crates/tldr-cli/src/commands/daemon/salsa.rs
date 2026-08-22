@@ -61,7 +61,13 @@ const CACHE_VERSION: u8 = 1;
 /// would make older payloads fail to deserialize cleanly. Loading a
 /// payload with a mismatched `schema_version` triggers graceful-discard
 /// in `QueryCache::load_from_file`.
-pub const CACHE_SCHEMA_VERSION: u32 = 2;
+/// anonymous-callback-definitions-v1 bumped 2 → 3. The payload SHAPE did not change, but the
+/// structure query now yields strictly more definitions (`kind: "call"`), and the daemon caches
+/// structure results with NO dependencies (`daemon.rs` `insert(key, &val, vec![])`) and no
+/// revision check on read — so a pre-upgrade entry stays valid forever and the new binary keeps
+/// serving the old, callback-less map. A version that only tracks deserialization compatibility
+/// cannot express "still parses, now wrong"; bumping it is the one mechanism that discards those.
+pub const CACHE_SCHEMA_VERSION: u32 = 3;
 
 // =============================================================================
 // Core Types

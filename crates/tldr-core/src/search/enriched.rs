@@ -1309,8 +1309,34 @@ fn extract_structure_entries(path: &Path, language: Language) -> TldrResult<Vec<
     let mut entries = Vec::new();
 
     collect_structure_nodes(root_node, &source, language, &mut entries);
+    // anonymous-callback-definitions-v1: same call-scoped numbering the extractor applies, run
+    // through the SAME function. The cached search path reuses `DefinitionInfo` straight from the
+    // structure cache while this uncached path re-derives entries, and
+    // `structure_search_test.rs::test_enriched_search_with_structure_cache_matches_uncached`
+    // asserts the two agree — so a second numbering implementation here would be a slow-motion
+    // divergence, green until someone's file happened to contain two same-named callbacks.
+    disambiguate_structure_entry_call_names(&mut entries);
 
     Ok(entries)
+}
+
+/// `disambiguate_call_names` for this module's own entry type. Delegates the rule so the numbering
+/// itself lives in exactly one place.
+fn disambiguate_structure_entry_call_names(entries: &mut [StructureEntry]) {
+    let mut defs: Vec<crate::types::DefinitionInfo> = entries
+        .iter()
+        .map(|e| crate::types::DefinitionInfo {
+            name: e.name.clone(),
+            kind: e.kind.clone(),
+            line_start: e.line_start,
+            line_end: e.line_end,
+            signature: e.signature.clone(),
+        })
+        .collect();
+    crate::ast::extractor::disambiguate_call_names(&mut defs);
+    for (entry, def) in entries.iter_mut().zip(defs) {
+        entry.name = def.name;
+    }
 }
 
 /// Recursively collect function/class/struct nodes from a tree-sitter AST.
@@ -1321,6 +1347,21 @@ fn collect_structure_nodes(
     entries: &mut Vec<StructureEntry>,
 ) {
     let kind = node.kind();
+
+    // anonymous-callback-definitions-v1: emit the same callback regions the structure extractor
+    // does, via the SAME helper. The cached path serves `DefinitionInfo` produced by that
+    // extractor, so anything this collector cannot see becomes a cached-vs-uncached mismatch
+    // rather than a missing feature.
+    if let Some(def) = crate::ast::extractor::try_callback_call_definition(node, source, language) {
+        entries.push(StructureEntry {
+            name: def.name,
+            kind: def.kind,
+            line_start: def.line_start,
+            line_end: def.line_end,
+            signature: def.signature,
+            preview: String::new(),
+        });
+    }
 
     let (is_func, is_class) = classify_node(kind, language);
 

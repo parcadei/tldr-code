@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`structure` now maps anonymous callbacks.** A multi-line anonymous callable passed to a call
+  — the test block, the `spawn`/`forEach`/`HandleFunc` closure, the `do` block — is emitted as a
+  definition with `kind: "call"`. Covered in all 17 of the 18 supported languages that have such
+  a form (C has none). Without it, the bodies holding most of a test suite's and most async
+  code's real logic were invisible to `structure`, so an agent had to read whole files to find
+  them.
+  - The name is the **call that receives it**, since an anonymous callable has none of its own:
+    `suiteSetup`, `test:a-title-here`, `it:does-a-thing`, `HandleFunc:x`. A first string-literal
+    argument becomes a `:slug` (lowercased, hyphenated, capped at 40 chars) so sibling blocks are
+    distinguishable **and stay stable when a sibling is inserted above them** — which a
+    positional index would not be. Only genuine collisions fall back to a `#N` suffix.
+  - The per-language node-kind tables were read off the actual grammars at their pinned versions
+    rather than recalled, because kinds differ between grammars that look alike.
+- **The agent skill ships in-repo** at `skills/tldr-code/`, installable from a checkout with
+  `make install-skill` (`npx skills add -g --all ./skills/tldr-code`) via the open skills CLI.
+  Local path on purpose: it installs the skill matching the binary you just built. `-g` is
+  load-bearing — without it the CLI installs project-level, into this repo, the one project
+  where nobody needs it.
+- **`make install-fastedit` / `make install-full`** — optional bundle for
+  [fastedit](https://github.com/parcadei/fastedit), the AST-scoped WRITE companion. Not a
+  manifest dependency: fastedit is a Python package and `cargo install` has no post-install hook.
+  Idempotent, platform-detected, and does **not** pull the ~3 GB merge model (it prints the
+  command).
+- **`tldr doctor` reports the companions**, since the common install path never runs the
+  Makefile and would otherwise never mention them. Both rows are **detected**, not assumed: the
+  skill row searches the four agent roots the skills CLI writes to and degrades to "not
+  detected" plus the install hint rather than making a false claim. Text output only — `-f json`
+  serializes the per-language map directly, and wrapping it would break existing consumers.
+
 ## v0.4.0 — 2026-05-10
 
 First published release after 202 internal milestones since v0.3.0. ~58 bugs

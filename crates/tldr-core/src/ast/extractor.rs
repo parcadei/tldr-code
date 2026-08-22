@@ -1839,7 +1839,30 @@ fn extract_definitions(tree: &Tree, source: &str, language: Language) -> Vec<Def
     let mut definitions = Vec::new();
     let root = tree.root_node();
     collect_definitions(root, source, language, &mut definitions);
+    disambiguate_call_names(&mut definitions);
     definitions
+}
+
+/// Make `kind: "call"` names unique within a file by appending `#2`, `#3`, … in source order.
+///
+/// Necessary because a name derived from a callee is not unique by construction: one line of real
+/// code, `Promise.race([closed.then(() => true), sleep(5000).then(() => false)])`, yields two
+/// distinct `then` regions. Anything that looks a definition up BY NAME — `fastedit --replace`
+/// resolves first-match-wins with no ambiguity check — would silently edit the wrong one.
+///
+/// Scoped to `"call"` entries ON PURPOSE, and this is what keeps the two collectors in agreement:
+/// `ast::extractor` and `search::enriched` emit DIFFERENT non-call sets (only the former has
+/// `method_signature`, constants, fields), so numbering over all kinds would drift between the
+/// cached and uncached search paths. Over the call subset alone, both see the same sequence.
+pub(crate) fn disambiguate_call_names(definitions: &mut [DefinitionInfo]) {
+    let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for def in definitions.iter_mut().filter(|d| d.kind == "call") {
+        let count = seen.entry(def.name.clone()).or_insert(0);
+        *count += 1;
+        if *count > 1 {
+            def.name = format!("{}#{}", def.name, count);
+        }
+    }
 }
 
 /// Recursively collect definition nodes from a tree-sitter AST.
@@ -1857,6 +1880,18 @@ fn collect_definitions(
         if let Some(def_info) = try_elixir_call_definition(node, source) {
             definitions.push(def_info);
         }
+    }
+
+    // anonymous-callback-definitions-v1: an anonymous callable passed to a call
+    // (`suiteSetup(async function () {…})`, `it "x" do … end`, `http.HandleFunc("/", func(){…})`)
+    // owns a real, multi-line region of the file — but it has no `name` field, so
+    // `get_definition_node_name` returns None below and the generic path DROPS it after having
+    // already classified it as a function. That hole hides every test body in mocha/jest/RSpec/
+    // ExUnit, every route handler, and every trailing-lambda DSL block from `structure`, which is
+    // what an agent reads to decide which lines to open. Named from the enclosing call so the
+    // region is addressable; see `try_callback_call_definition`.
+    if let Some(def_info) = try_callback_call_definition(node, source, language) {
+        definitions.push(def_info);
     }
 
     // Constants: detect const/static/UPPER_CASE assignments across languages.
@@ -2446,6 +2481,227 @@ fn try_field_definition(
     } else {
         Some(defs)
     }
+}
+
+/// Node kinds that are an ANONYMOUS callable in this language — a function literal with no name of
+/// its own. Every entry was read off the grammar at its pinned version with a throwaway probe
+/// harness, not recalled: the same concept is `do_block` in Ruby, `func_literal` in Go,
+/// `lambda_literal` in Kotlin, and plain `function_definition` in Lua (where anonymous and named
+/// share one kind). The harness lived at `crates/tldr-core/tests/anon_callback_kinds_probe.rs`
+/// and was removed once these tables were filled; `git log` recovers it if a grammar bump makes
+/// a kind stale and the names have to be re-read rather than guessed.
+///
+/// C is deliberately absent — it has no lambda form, so there is nothing to name.
+fn anonymous_callable_kinds(language: Language) -> &'static [&'static str] {
+    match language {
+        Language::JavaScript | Language::TypeScript => &["arrow_function", "function_expression"],
+        Language::Python => &["lambda"],
+        Language::Ruby | Language::Elixir => &["do_block"],
+        Language::Go => &["func_literal"],
+        Language::Rust => &["closure_expression"],
+        Language::Java | Language::Scala => &["lambda_expression"],
+        Language::CSharp => &["lambda_expression", "anonymous_method_expression"],
+        Language::Cpp => &["lambda_expression"],
+        Language::Kotlin => &["lambda_literal", "anonymous_function"],
+        Language::Swift => &["lambda_literal"],
+        Language::Php => &["anonymous_function", "arrow_function"],
+        Language::Lua | Language::Luau => &["function_definition"],
+        Language::Ocaml => &["fun_expression"],
+        Language::C => &[],
+    }
+}
+
+/// Node kinds that are a CALL in this language. The anonymous callable is an argument (or a
+/// trailing block) of one of these; the call is what gives it a name.
+fn call_like_kinds(language: Language) -> &'static [&'static str] {
+    match language {
+        Language::Python | Language::Ruby | Language::Elixir => &["call"],
+        Language::Java => &["method_invocation"],
+        Language::CSharp => &["invocation_expression"],
+        Language::Php => &[
+            "function_call_expression",
+            "member_call_expression",
+            "scoped_call_expression",
+        ],
+        Language::Lua | Language::Luau => &["function_call"],
+        Language::Ocaml => &["application_expression"],
+        _ => &["call_expression"],
+    }
+}
+
+/// How far up to look for the enclosing call. Measured: the distance is 1 in Ruby and Elixir (the
+/// `do_block` hangs directly off the `call`) and 3 in C# and PHP
+/// (`argument` < `argument_list` < `invocation_expression`). Bounded so a callable that is NOT an
+/// argument — a closure stored in a variable, a `let f = fun x -> …` — never gets attributed to
+/// some unrelated call further up the tree.
+const MAX_CALL_ANCESTOR_DEPTH: usize = 3;
+
+/// The text naming what is being called: `suiteSetup`, `it`, `http.HandleFunc`.
+fn callee_text<'a>(call: Node<'a>, source: &'a str) -> Option<&'a str> {
+    let callee = call
+        .child_by_field_name("function")
+        .or_else(|| call.child_by_field_name("name"))
+        .or_else(|| call.child(0))?;
+    let text = callee.utf8_text(source.as_bytes()).ok()?;
+    // A multi-line or absurdly long callee is a chained expression, not a name worth showing.
+    if text.is_empty() || text.contains('\n') || text.len() > 80 {
+        return None;
+    }
+    Some(text)
+}
+
+/// Turn a call's first string-literal argument into a name-safe slug: `test('a title')` →
+/// `a-title`. This is what makes two `test(…)` blocks in one file distinguishable, and it is
+/// STABLE — unlike an ordinal, it survives inserting a sibling above.
+fn title_slug(call: Node, callable: Node, source: &str) -> Option<String> {
+    // Found by POSITION, not by container kind. Every grammar nests the argument differently
+    // (`arguments`, `argument_list`, `value_arguments`, `keyword_argument`, `argument`), and
+    // Swift's trailing-closure form `describe("a thing") { … }` puts the string in a `call_suffix`
+    // that is a SIBLING of the one holding the closure — so any container-matching rule is one
+    // grammar away from being wrong. What is true everywhere: the title sits inside the call and
+    // BEFORE the callable starts.
+    fn first_string_before<'a>(
+        node: Node<'a>,
+        limit: tree_sitter::Point,
+        source: &'a str,
+        depth: usize,
+    ) -> Option<&'a str> {
+        if node.start_position() >= limit || depth > 4 {
+            return None;
+        }
+        if matches!(
+            node.kind(),
+            "string"
+                | "string_literal"
+                | "interpreted_string_literal"
+                | "raw_string_literal"
+                | "template_string"
+                | "line_string_literal"
+        ) {
+            return node.utf8_text(source.as_bytes()).ok();
+        }
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            if let Some(hit) = first_string_before(child, limit, source, depth + 1) {
+                return Some(hit);
+            }
+        }
+        None
+    }
+
+    let raw = first_string_before(call, callable.start_position(), source, 0)?;
+    let normalized: String = raw
+        .trim_matches(|c| c == '"' || c == '\'' || c == '`')
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    // Truncate on a WORD boundary. A hard 40-char cut produces names like
+    // `test:gen-ai-choice-arriving-after-its-span-in`, whose tail reads as a typo and can collide
+    // with a differently-truncated sibling.
+    let mut slug = String::new();
+    for part in normalized.split('-').filter(|p| !p.is_empty()) {
+        if !slug.is_empty() && slug.len() + 1 + part.len() > 40 {
+            break;
+        }
+        if !slug.is_empty() {
+            slug.push('-');
+        }
+        slug.push_str(part);
+    }
+    if slug.is_empty() {
+        None
+    } else {
+        Some(slug)
+    }
+}
+
+/// Name an anonymous callable from the call that receives it.
+///
+/// Returns None for anything that is not an anonymous callable sitting inside a call — so a named
+/// function, a closure bound to a variable (already named by `get_definition_node_name` via its
+/// `variable_declarator`), and a bare block all fall through to the generic path untouched.
+///
+/// The emitted `name` is deliberately DOT-FREE: `fastedit --replace <name>` splits a name on its
+/// first dot to mean `Class.method`, so `http.HandleFunc` as a name would be unresolvable. The last
+/// segment is used (`HandleFunc`) and the full callee text is preserved in `signature`, which is
+/// what `fastedit read` displays.
+pub(crate) fn try_callback_call_definition(
+    node: Node,
+    source: &str,
+    language: Language,
+) -> Option<DefinitionInfo> {
+    if !anonymous_callable_kinds(language).contains(&node.kind()) {
+        return None;
+    }
+    // A callable bound to a name is not anonymous — leave it to the generic path, which names it
+    // from the declarator and would otherwise emit it twice under two different kinds.
+    if let Some(parent) = node.parent() {
+        if matches!(
+            parent.kind(),
+            "variable_declarator" | "let_binding" | "assignment" | "assignment_expression" | "pair"
+        ) {
+            return None;
+        }
+    }
+
+    // Walk up to the enclosing call. The intermediate nodes differ per grammar (`arguments`,
+    // `argument_list`, `argument`, `annotated_lambda`, `call_suffix`, `keyword_argument`,
+    // `parenthesized_expression`), so match on the destination instead of enumerating the path.
+    //
+    // Whichever comes FIRST decides, and that ordering is the whole subtlety:
+    //   • a CALL first  ⇒ this callable is that call's argument. Emit — even when the call is
+    //     itself nested inside another callback, which is exactly `describe do … it do … end end`
+    //     and the single most useful case in any test file.
+    //   • a CALLABLE first ⇒ this node is nested inside another callable with no call between
+    //     them, which is how tree-sitter-python represents `key=lambda a: a.b` (a `lambda` holding
+    //     a second `lambda`). Both would resolve to the same call and emit one region twice.
+    let calls = call_like_kinds(language);
+    let callables = anonymous_callable_kinds(language);
+    let mut call = node.parent();
+    let mut depth = 0;
+    while let Some(candidate) = call {
+        if calls.contains(&candidate.kind()) {
+            break;
+        }
+        if callables.contains(&candidate.kind()) {
+            return None;
+        }
+        if depth >= MAX_CALL_ANCESTOR_DEPTH {
+            return None;
+        }
+        depth += 1;
+        call = candidate.parent();
+    }
+    let call = call?;
+
+    let callee = callee_text(call, source)?;
+    // Dot-free, per the fastedit resolver contract above. Ruby/Elixir `Mod.fun` and JS
+    // `http.HandleFunc` both reduce to their last segment.
+    let base = callee.rsplit(['.', ':']).next().unwrap_or(callee).trim();
+    if base.is_empty() || !base.chars().next()?.is_alphabetic() {
+        return None;
+    }
+    let name = match title_slug(call, node, source) {
+        Some(slug) => format!("{base}:{slug}"),
+        None => base.to_string(),
+    };
+
+    // The range spans the WHOLE call, matching the Elixir precedent below: that is the unit a
+    // reader wants to open and the unit an editor must replace to keep the source parseable —
+    // replacing only the callable body would leave a dangling `suiteSetup(` and `)`.
+    Some(DefinitionInfo {
+        name,
+        kind: "call".to_string(),
+        line_start: call.start_position().row as u32 + 1,
+        line_end: call.end_position().row as u32 + 1,
+        signature: format!("{callee}(…)"),
+    })
 }
 
 /// Try to extract a definition from an Elixir `call` node.
@@ -4161,5 +4417,135 @@ interface IFace {
                 methods
             );
         }
+    }
+
+    // =========================================================================
+    // anonymous-callback-definitions-v1
+    // =========================================================================
+
+    /// Every `kind == "call"` definition, as `(name, line_start, line_end)`.
+    fn call_defs(source: &str, lang: Language) -> Vec<(String, u32, u32)> {
+        let tree = parse(source, lang).expect("parse");
+        extract_definitions(&tree, source, lang)
+            .into_iter()
+            .filter(|d| d.kind == "call")
+            .map(|d| (d.name, d.line_start, d.line_end))
+            .collect()
+    }
+
+    #[test]
+    fn test_anon_callback_named_from_its_call_js() {
+        // The motivating case: mocha's setup hook. Before this, the whole block was invisible —
+        // classified as a function, then dropped for having no name.
+        let source = "suiteSetup(async function () {\n  const a = 1;\n  return a;\n});\n";
+        let defs = call_defs(source, Language::JavaScript);
+        assert_eq!(
+            defs,
+            vec![("suiteSetup".to_string(), 1, 4)],
+            "the call's FULL range must be mapped (the unit a reader opens and an editor replaces)"
+        );
+    }
+
+    #[test]
+    fn test_anon_callback_title_slug_disambiguates_siblings() {
+        // Two `test(…)` calls: the callee alone would name both identically, and a name-keyed
+        // consumer (fastedit --replace) resolves first-match-wins — it would edit the wrong one.
+        let source =
+            "test('first case', () => {\n  a();\n});\ntest('second case', () => {\n  b();\n});\n";
+        let defs = call_defs(source, Language::TypeScript);
+        assert_eq!(
+            defs,
+            vec![
+                ("test:first-case".to_string(), 1, 3),
+                ("test:second-case".to_string(), 4, 6),
+            ],
+            "titles make sibling calls distinguishable AND stable against inserting a sibling"
+        );
+    }
+
+    #[test]
+    fn test_anon_callback_member_callee_is_dot_free() {
+        // `fastedit --replace` splits a name on its FIRST dot to mean Class.method, so a name
+        // like `http.HandleFunc` could never resolve. Last segment only; full text in signature.
+        let source = "func main() {\n\thttp.HandleFunc(\"/api\", func(w int, r int) {\n\t\tprintln(w)\n\t})\n}\n";
+        let tree = parse(source, Language::Go).unwrap();
+        let def = extract_definitions(&tree, source, Language::Go)
+            .into_iter()
+            .find(|d| d.kind == "call")
+            .expect("Go func_literal argument must be mapped");
+        assert!(
+            !def.name.contains('.'),
+            "name must be dot-free, got {}",
+            def.name
+        );
+        assert!(def.name.starts_with("HandleFunc"), "got {}", def.name);
+        assert!(
+            def.signature.contains("http.HandleFunc"),
+            "the full callee belongs in signature, got {}",
+            def.signature
+        );
+    }
+
+    #[test]
+    fn test_anon_callback_collisions_get_stable_ordinals() {
+        // Real code from this project's own test suite: two DIFFERENT `.then(…)` calls on one
+        // line. Same derived name, same range — only an ordinal separates them.
+        let source =
+            "const r = Promise.race([closed.then(() => true), sleep(5).then(() => false)]);\n";
+        let names: Vec<String> = call_defs(source, Language::TypeScript)
+            .into_iter()
+            .map(|(n, _, _)| n)
+            .collect();
+        assert_eq!(
+            names,
+            vec!["then".to_string(), "then#2".to_string()],
+            "same-named calls must be separable; numbering follows source order"
+        );
+    }
+
+    #[test]
+    fn test_anon_callback_emitted_once_per_call_not_per_nested_callable() {
+        // tree-sitter-python nests a `lambda` inside the `lambda` node. Emitting per callable
+        // would produce the same call twice, with the same name and range.
+        let source = "sorted(items, key=lambda a:\n    a.b\n)\n";
+        let defs = call_defs(source, Language::Python);
+        assert_eq!(defs.len(), 1, "one call ⇒ one definition, got {defs:?}");
+        assert_eq!(defs[0].0, "sorted");
+    }
+
+    #[test]
+    fn test_anon_callback_ruby_block_and_nesting() {
+        // RSpec is the same shape as mocha, via `do … end`. Nested blocks must BOTH appear:
+        // the outer describe is the region you read, the inner it is the region you edit.
+        let source =
+            "describe 'a widget' do\n  it 'works' do\n    expect(1).to eq(1)\n  end\nend\n";
+        let defs = call_defs(source, Language::Ruby);
+        assert_eq!(
+            defs,
+            vec![
+                ("describe:a-widget".to_string(), 1, 5),
+                ("it:works".to_string(), 2, 4),
+            ],
+            "nested callback regions are strictly contained, and both are mapped"
+        );
+    }
+
+    #[test]
+    fn test_named_callable_is_left_to_the_generic_path() {
+        // A closure bound to a name is NOT anonymous — the generic path already names it from the
+        // declarator. Emitting it here too would double-count it under two different kinds.
+        let source = "const handler = () => {\n  return 1;\n};\n";
+        assert!(
+            call_defs(source, Language::TypeScript).is_empty(),
+            "a variable-bound arrow must not be re-emitted as a call"
+        );
+    }
+
+    #[test]
+    fn test_c_has_no_anonymous_callable_form() {
+        // Not an oversight — C has no lambda, so there is nothing to name. Asserted so a future
+        // table edit cannot quietly start inventing entries for it.
+        let source = "int main(void) {\n  return 0;\n}\n";
+        assert!(call_defs(source, Language::C).is_empty());
     }
 }

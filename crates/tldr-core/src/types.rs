@@ -1251,7 +1251,10 @@ pub struct CodeStructure {
 pub struct DefinitionInfo {
     /// Symbol name
     pub name: String,
-    /// Kind: "function", "method", "class", "struct"
+    /// Kind: "function", "method", "class", "struct", "call" (an anonymous callable passed to a
+    /// call — `suiteSetup(async function () {…})`, `it "x" do … end` — named after its callee;
+    /// the line range spans the whole call, which is the unit that can be read or replaced).
+    /// The authoritative full set is the whitelist in `tests/bench_l1_multilang.rs`.
     pub kind: String,
     /// Start line (1-indexed)
     pub line_start: u32,

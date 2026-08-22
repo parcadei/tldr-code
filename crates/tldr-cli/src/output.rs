@@ -350,6 +350,27 @@ pub fn format_structure_text(structure: &tldr_core::CodeStructure) -> String {
             }
         }
 
+        // anonymous-callback-definitions-v1: callback regions (`suiteSetup(…)`, `it "x" do … end`,
+        // `http.HandleFunc("/", func(){…})`) are their own kind, so neither the `functions` list
+        // nor `method_infos` above will ever show them. Rendering them here is what makes the text
+        // output — the default, and what a human reads — agree with the JSON that fastedit and the
+        // agents consume. One-liners are omitted: a `map(x => x+1)` owns no region worth opening,
+        // and listing every one of them would bury the blocks that do.
+        let callbacks: Vec<&tldr_core::types::DefinitionInfo> = file
+            .definitions
+            .iter()
+            .filter(|d| d.kind == "call" && d.line_end > d.line_start)
+            .collect();
+        if !callbacks.is_empty() {
+            output.push_str("  Callbacks:\n");
+            for cb in callbacks {
+                output.push_str(&format!(
+                    "    - {} (L{}-{})\n",
+                    cb.name, cb.line_start, cb.line_end
+                ));
+            }
+        }
+
         if !file.classes.is_empty() {
             // Group methods (from method_infos) by their owning class.
             // method_infos doesn't carry an explicit class link, so we do a

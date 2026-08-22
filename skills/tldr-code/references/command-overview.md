@@ -32,44 +32,6 @@ Adds three commands:
 
 This pulls in `fastembed` + ONNX Runtime. On first run it downloads the arctic-embed-m model (~110MB, cached). Builds reliably on Mac. Other platforms are unverified — if it doesn't compile for you, a PR with the fix is very welcome.
 
-### The agent skill
-
-This repo ships an agent skill under [`skills/tldr-code/`](skills/tldr-code/) — a command
-catalog, argument shapes that surprise people, the performance envelope, and the recipes worth
-reaching for. Install it from **this checkout** with the open skills CLI:
-
-```bash
-make install-skill                          # npx skills add -g --all ./skills/tldr-code
-```
-
-The local-path source is the point: it installs the skill matching the binary you just built, so
-an agent never reads docs for a `tldr` you do not have. `skills add` writes to every supported
-agent it finds (Claude Code, Codex, Cursor, OpenCode, and [73 more](https://github.com/vercel-labs/skills))
-and is idempotent. `-g` puts it at user level, next to the binary — the default is project-level,
-which would install it into this repo and nowhere you actually work.
-
-`tldr doctor` tells you whether it took.
-
-### With fastedit — the WRITE companion
-
-`tldr` reads code. [`fastedit`](https://github.com/parcadei/fastedit) edits it, by symbol name,
-so an agent never repeats old lines just to say where an edit goes. They pair naturally: `tldr
-structure` locates the symbol, `fastedit --replace <symbol>` changes it.
-
-```bash
-make install-full     # tldr + fastedit + the skill
-make install-fastedit # just the companion
-```
-
-Optional, and deliberately not a manifest dependency: `fastedit` is a Python package
-(`uv tool install 'fastedits[mlx,mcp]'`), and `cargo install` has no post-install hook — a
-`build.rs` that reached the network would fire during CI and docs.rs builds. The Make target
-detects the platform, skips if `fastedit` is already present, and **does not** pull the ~3 GB
-merge model; it prints that command for you to run.
-
-Note the direction: fastedit lists `tldr` as *its* prerequisite, not the reverse. Nothing in
-`tldr` requires fastedit.
-
 ## Quick start
 
 ```bash
