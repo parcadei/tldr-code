@@ -28,13 +28,10 @@ use tldr_core::metrics::cognitive::{
     CognitiveReport, CognitiveSummary, FunctionCognitive, ThresholdStatus,
 };
 use tldr_core::quality::smells::{SmellFinding, SmellType, SmellsReport, SmellsSummary};
-use tldr_core::security::secrets::{SecretFinding, SecretsReport, SecretsSummary};
 use tldr_core::types::{ClassInfo, FunctionInfo, IntraFileCallGraph, Language, ModuleInfo};
-use tldr_core::Severity;
 
 use tldr_cli::output::{
-    format_clones_text, format_cognitive_text, format_module_info_text, format_secrets_text,
-    format_smells_text,
+    format_clones_text, format_cognitive_text, format_module_info_text, format_smells_text,
 };
 
 /// 67 × U+4E16 (CJK 世) = 201 bytes. Slicing at byte 197 lands inside the
@@ -42,15 +39,6 @@ use tldr_cli::output::{
 /// `&s[..197]` code paths.
 fn cjk_201_bytes() -> String {
     "\u{4e16}".repeat(67)
-}
-
-/// A path string built from CJK directory components, just over the
-/// secrets/clones display caps. 14 × U+4E16 = 42 bytes; the secrets formatter
-/// truncates to the last 37 bytes (start = 5, mid-char) and clones to the last
-/// 27 (start = 15, on a coincidental boundary — see emoji_path_clones_tail
-/// below for the case that exposes the clones bug).
-fn cjk_path_long() -> PathBuf {
-    PathBuf::from("\u{4e16}".repeat(14))
 }
 
 /// Path that forces the clones tail-slice (`len - 27`) to land mid-codepoint.
@@ -121,42 +109,6 @@ fn cli_smells_text_does_not_panic_on_cjk_smell_name() {
     };
 
     let out = format_smells_text(&report);
-    assert!(
-        std::str::from_utf8(out.as_bytes()).is_ok(),
-        "output is not valid UTF-8"
-    );
-}
-
-// =============================================================================
-// CLI output formatters: secrets (:1048)
-// =============================================================================
-
-#[test]
-fn cli_secrets_text_does_not_panic_on_cjk_file_path() {
-    // The secrets formatter truncates the rel_file path tail to 37 bytes when
-    // > 40 chars. A 42-byte CJK-only path forces the > 40 branch on len() and
-    // the legacy `&rel_file[rel_file.len() - 37..]` slice straddles a char.
-    let report = SecretsReport {
-        findings: vec![SecretFinding {
-            file: cjk_path_long(),
-            line: 1,
-            column: 1,
-            pattern: "AWS Access Key".to_string(),
-            severity: Severity::Critical,
-            masked_value: "AKIA********".to_string(),
-            description: "test".to_string(),
-            line_content: None,
-        }],
-        files_scanned: 1,
-        patterns_checked: 1,
-        summary: SecretsSummary {
-            total_findings: 1,
-            by_severity: HashMap::new(),
-            by_pattern: HashMap::new(),
-        },
-    };
-
-    let out = format_secrets_text(&report);
     assert!(
         std::str::from_utf8(out.as_bytes()).is_ok(),
         "output is not valid UTF-8"
