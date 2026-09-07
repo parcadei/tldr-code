@@ -123,21 +123,5 @@ pub fn compute_alias_from_ssa(ssa: &SsaFunction) -> Result<AliasInfo, AliasError
     Ok(solver.build_alias_info(&ssa.function))
 }
 
-/// Compute alias analysis for a function (convenience wrapper).
-///
-/// This is a convenience wrapper that takes an SSA function reference
-/// and returns alias analysis results. Use this when you have an SSA
-/// function ready for analysis.
-///
-/// # Arguments
-/// * `ssa` - Reference to SSA function
-///
-/// # Returns
-/// * `Ok(AliasInfo)` - Alias analysis results
-/// * `Err(AliasError)` - If analysis fails
-pub fn compute_alias(ssa: &SsaFunction) -> Result<AliasInfo, AliasError> {
-    compute_alias_from_ssa(ssa)
-}
-
 #[cfg(test)]
 mod alias_tests;
