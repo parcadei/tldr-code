@@ -537,65 +537,6 @@ pub enum TokenCategory {
 }
 
 // =============================================================================
-// Token Sequence Types
-// =============================================================================
-
-/// Token sequence from a file region
-///
-/// Used internally to represent a tokenized code fragment for clone detection.
-#[derive(Debug, Clone)]
-pub struct TokenSequence {
-    /// File path
-    pub file: PathBuf,
-
-    /// Start line (1-indexed)
-    pub start_line: usize,
-
-    /// End line (1-indexed)
-    pub end_line: usize,
-
-    /// Normalized tokens
-    pub tokens: Vec<NormalizedToken>,
-
-    /// Hash of the token sequence (for quick comparison)
-    pub hash: u64,
-}
-
-impl TokenSequence {
-    /// Create a new token sequence
-    pub fn new(
-        file: PathBuf,
-        start_line: usize,
-        end_line: usize,
-        tokens: Vec<NormalizedToken>,
-        hash: u64,
-    ) -> Self {
-        Self {
-            file,
-            start_line,
-            end_line,
-            tokens,
-            hash,
-        }
-    }
-
-    /// Get the number of tokens in the sequence
-    pub fn len(&self) -> usize {
-        self.tokens.len()
-    }
-
-    /// Check if the sequence is empty
-    pub fn is_empty(&self) -> bool {
-        self.tokens.is_empty()
-    }
-
-    /// Get the line count
-    pub fn line_count(&self) -> usize {
-        self.end_line.saturating_sub(self.start_line) + 1
-    }
-}
-
-// =============================================================================
 // Rolling Hash Types
 // =============================================================================
 
@@ -658,27 +599,6 @@ impl RollingHash {
         let reduced_token = token_hash % self.modulus;
         self.value = (self.value.wrapping_mul(self.base) % self.modulus)
             .wrapping_add(reduced_token)
-            % self.modulus;
-    }
-
-    /// Remove oldest token and add new token (rolling)
-    ///
-    /// # Overflow Safety
-    ///
-    /// Token hashes are reduced modulo MODULUS before use to prevent overflow.
-    /// The subtraction uses (value + MODULUS - x) pattern to handle underflow.
-    pub fn roll(&mut self, old_token_hash: u64, new_token_hash: u64) {
-        // Reduce token hashes to prevent overflow
-        let old_reduced = old_token_hash % self.modulus;
-        let new_reduced = new_token_hash % self.modulus;
-
-        // Remove contribution of oldest token: (value - old * base_power) mod M
-        // Using (value + M - (old * base_power % M)) % M to handle underflow
-        let old_contribution = old_reduced.wrapping_mul(self.base_power) % self.modulus;
-        self.value = (self.value + self.modulus - old_contribution) % self.modulus;
-
-        // Shift and add new token: (value * BASE + new) mod M
-        self.value = (self.value.wrapping_mul(self.base) % self.modulus).wrapping_add(new_reduced)
             % self.modulus;
     }
 
@@ -973,80 +893,6 @@ pub fn compute_dice_similarity(tokens1: &[NormalizedToken], tokens2: &[Normalize
     (2.0 * intersection as f64) / (size1 + size2) as f64
 }
 
-/// Verify that a hash match is a real clone (not just a hash collision)
-///
-/// This is CRITICAL for S8-P1-T2: Hash collisions will produce false positives
-/// if not verified by comparing actual token sequences.
-///
-/// # Arguments
-/// * `tokens1` - First token sequence
-/// * `tokens2` - Second token sequence
-/// * `threshold` - Minimum similarity threshold (e.g., 0.7 for Type-3)
-///
-/// # Returns
-/// * `Some(similarity)` if similarity >= threshold (real clone)
-/// * `None` if similarity < threshold (hash collision, not a clone)
-pub fn verify_clone_match(
-    tokens1: &[NormalizedToken],
-    tokens2: &[NormalizedToken],
-    threshold: f64,
-) -> Option<f64> {
-    let similarity = compute_dice_similarity(tokens1, tokens2);
-    if similarity >= threshold {
-        Some(similarity)
-    } else {
-        None // Hash collision, not a real clone
-    }
-}
-
-/// Find verified clones from a hash index
-///
-/// After finding hash matches in the index, this function verifies each candidate
-/// pair by comparing actual token sequences to filter out hash collisions.
-///
-/// # Arguments
-/// * `index` - The hash index with candidate clone locations
-/// * `file_sequences` - Token sequences for each file (file_idx -> sequences)
-/// * `threshold` - Minimum similarity threshold
-///
-/// # Returns
-/// * Vector of verified clone pairs: (file1_idx, seq1_idx, file2_idx, seq2_idx, similarity)
-pub fn find_verified_clones(
-    index: &HashIndex,
-    file_sequences: &[Vec<TokenSequence>],
-    threshold: f64,
-) -> Vec<(usize, usize, usize, usize, f64)> {
-    let mut verified = Vec::new();
-
-    // Get all candidate pairs from hash collisions
-    let candidates = index.find_candidates();
-
-    for (entry1, entry2) in candidates {
-        // Get the actual token sequences
-        let seq1 = file_sequences
-            .get(entry1.file_idx)
-            .and_then(|seqs| seqs.get(entry1.start_pos));
-        let seq2 = file_sequences
-            .get(entry2.file_idx)
-            .and_then(|seqs| seqs.get(entry2.start_pos));
-
-        if let (Some(seq1), Some(seq2)) = (seq1, seq2) {
-            // Verify by comparing actual tokens
-            if let Some(similarity) = verify_clone_match(&seq1.tokens, &seq2.tokens, threshold) {
-                verified.push((
-                    entry1.file_idx,
-                    entry1.start_pos,
-                    entry2.file_idx,
-                    entry2.start_pos,
-                    similarity,
-                ));
-            }
-        }
-    }
-
-    verified
-}
-
 // =============================================================================
 // Normalization Functions
 // =============================================================================
@@ -1080,60 +926,6 @@ pub fn normalize_tokens(
 
     let tokens = extract_tokens_from_ast(&tree, source.as_bytes(), language);
     Ok(apply_normalization(tokens, mode))
-}
-
-/// Compute rolling hashes for a token sequence
-///
-/// # Arguments
-/// * `tokens` - Normalized tokens
-/// * `window_size` - Hash window size (minimum clone size in tokens)
-///
-/// # Returns
-/// * Vector of (hash, position) pairs where position is the start index of the window
-///
-/// # Algorithm
-///
-/// Uses Rabin-Karp rolling hash:
-/// 1. If tokens.len() < window_size, return empty vec
-/// 2. Initialize hash for first window [0..window_size)
-/// 3. Roll through remaining positions, updating hash in O(1) per position
-///
-/// # Example
-///
-/// ```ignore
-/// let tokens = vec![make_token("a"), make_token("b"), make_token("c"), make_token("d")];
-/// let hashes = compute_rolling_hashes(&tokens, 2);
-/// // Returns: [(hash_ab, 0), (hash_bc, 1), (hash_cd, 2)]
-/// ```
-pub fn compute_rolling_hashes(tokens: &[NormalizedToken], window_size: usize) -> Vec<(u64, usize)> {
-    // Edge case: not enough tokens for even one window
-    if tokens.len() < window_size || window_size == 0 {
-        return vec![];
-    }
-
-    // Pre-allocate result vector
-    let num_windows = tokens.len() - window_size + 1;
-    let mut result = Vec::with_capacity(num_windows);
-
-    // Create rolling hash
-    let mut hasher = RollingHash::new(window_size);
-
-    // Compute hash for first window [0..window_size)
-    for token in tokens.iter().take(window_size) {
-        hasher.push(hash_token(token));
-    }
-    result.push((hasher.current(), 0));
-
-    // Roll through remaining positions
-    for i in 1..num_windows {
-        // Remove token at (i-1), add token at (i + window_size - 1)
-        let old_token_hash = hash_token(&tokens[i - 1]);
-        let new_token_hash = hash_token(&tokens[i + window_size - 1]);
-        hasher.roll(old_token_hash, new_token_hash);
-        result.push((hasher.current(), i));
-    }
-
-    result
 }
 
 /// Hash a single token

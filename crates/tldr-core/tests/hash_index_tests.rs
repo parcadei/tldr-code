@@ -199,7 +199,7 @@ mod hash_index_collisions {
 
 mod clone_verification {
     use super::*;
-    use tldr_core::analysis::clones::{compute_dice_similarity, verify_clone_match};
+    use tldr_core::analysis::clones::compute_dice_similarity;
 
     fn make_token(value: &str, category: TokenCategory) -> NormalizedToken {
         NormalizedToken {
@@ -214,75 +214,6 @@ mod clone_verification {
             .iter()
             .map(|v| make_token(v, TokenCategory::Other))
             .collect()
-    }
-
-    #[test]
-    fn test_verify_clone_match_identical_tokens() {
-        // GIVEN: Two identical token sequences
-        let tokens1 = make_tokens(&["def", "$ID", "(", ")", ":"]);
-        let tokens2 = make_tokens(&["def", "$ID", "(", ")", ":"]);
-
-        // WHEN: We verify clone match
-        let result = verify_clone_match(&tokens1, &tokens2, 0.7);
-
-        // THEN: It should return similarity 1.0
-        assert!(result.is_some());
-        let similarity = result.unwrap();
-        assert!((similarity - 1.0).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_verify_clone_match_completely_different() {
-        // GIVEN: Two completely different token sequences
-        let tokens1 = make_tokens(&["def", "foo", "(", ")", ":"]);
-        let tokens2 = make_tokens(&["class", "Bar", "{", "}"]);
-
-        // WHEN: We verify clone match with threshold 0.7
-        let result = verify_clone_match(&tokens1, &tokens2, 0.7);
-
-        // THEN: It should return None (below threshold)
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_verify_clone_match_above_threshold() {
-        // GIVEN: Two similar token sequences (80% similar)
-        let tokens1 = make_tokens(&["def", "$ID", "(", "$ID", ")", ":", "return", "$ID"]);
-        let tokens2 = make_tokens(&["def", "$ID", "(", "$ID", ")", ":", "return", "$NUM"]);
-
-        // WHEN: We verify with threshold 0.7
-        let result = verify_clone_match(&tokens1, &tokens2, 0.7);
-
-        // THEN: It should return Some with similarity >= 0.7
-        assert!(result.is_some());
-        assert!(result.unwrap() >= 0.7);
-    }
-
-    #[test]
-    fn test_verify_clone_match_below_threshold() {
-        // GIVEN: Two sequences with ~50% similarity
-        let tokens1 = make_tokens(&["a", "b", "c", "d"]);
-        let tokens2 = make_tokens(&["a", "b", "x", "y"]);
-
-        // WHEN: We verify with threshold 0.7
-        let result = verify_clone_match(&tokens1, &tokens2, 0.7);
-
-        // THEN: It should return None (below threshold)
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_hash_collision_different_content_not_clone() {
-        // GIVEN: Two sequences that might have same hash but different content
-        // (This tests the risk S8-P1-T2: hash collision verification)
-        let tokens1 = make_tokens(&["alpha", "beta", "gamma"]);
-        let tokens2 = make_tokens(&["delta", "epsilon", "zeta"]);
-
-        // WHEN: We verify (simulating what happens after hash match)
-        let result = verify_clone_match(&tokens1, &tokens2, 0.7);
-
-        // THEN: Should return None - not a real clone
-        assert!(result.is_none());
     }
 
     #[test]
@@ -378,109 +309,5 @@ mod clone_verification {
 
         // THEN: Should be 1.0 (both empty = identical)
         assert!((similarity - 1.0).abs() < 0.001);
-    }
-}
-
-// =============================================================================
-// Integration: HashIndex with Verification
-// =============================================================================
-
-mod hash_index_with_verification {
-    use super::*;
-    use std::path::PathBuf;
-    use tldr_core::analysis::clones::{find_verified_clones, TokenSequence};
-
-    fn make_token(value: &str) -> NormalizedToken {
-        NormalizedToken {
-            value: value.to_string(),
-            original: value.to_string(),
-            category: TokenCategory::Other,
-        }
-    }
-
-    #[test]
-    fn test_find_verified_clones_filters_hash_collisions() {
-        // GIVEN: An index with a hash collision (same hash, different content)
-        let mut index = HashIndex::new();
-
-        // Two sequences with same hash but different content
-        let seq1 = TokenSequence::new(
-            PathBuf::from("file1.py"),
-            1,
-            10,
-            vec![make_token("alpha"), make_token("beta"), make_token("gamma")],
-            12345, // Same hash
-        );
-        let seq2 = TokenSequence::new(
-            PathBuf::from("file2.py"),
-            1,
-            10,
-            vec![
-                make_token("delta"),
-                make_token("epsilon"),
-                make_token("zeta"),
-            ],
-            12345, // Same hash (collision!)
-        );
-
-        // Put them in a file sequences list
-        let file_sequences = vec![vec![seq1], vec![seq2]];
-
-        // Insert into index
-        index.insert_location(12345, 0, 0, 0); // file 0, sequence 0
-        index.insert_location(12345, 1, 0, 0); // file 1, sequence 0
-
-        // WHEN: We find verified clones
-        let verified = find_verified_clones(&index, &file_sequences, 0.7);
-
-        // THEN: No clones should be found (they're different content)
-        assert!(verified.is_empty(), "Hash collision should be filtered out");
-    }
-
-    #[test]
-    fn test_find_verified_clones_keeps_real_clones() {
-        // GIVEN: An index with a real clone (same hash, same/similar content)
-        let mut index = HashIndex::new();
-
-        let seq1 = TokenSequence::new(
-            PathBuf::from("file1.py"),
-            1,
-            10,
-            vec![
-                make_token("def"),
-                make_token("$ID"),
-                make_token("("),
-                make_token(")"),
-            ],
-            12345,
-        );
-        let seq2 = TokenSequence::new(
-            PathBuf::from("file2.py"),
-            1,
-            10,
-            vec![
-                make_token("def"),
-                make_token("$ID"),
-                make_token("("),
-                make_token(")"),
-            ],
-            12345,
-        );
-
-        let file_sequences = vec![vec![seq1], vec![seq2]];
-
-        index.insert_location(12345, 0, 0, 0);
-        index.insert_location(12345, 1, 0, 0);
-
-        // WHEN: We find verified clones
-        let verified = find_verified_clones(&index, &file_sequences, 0.7);
-
-        // THEN: One clone pair should be found
-        assert_eq!(verified.len(), 1, "Real clone should be kept");
-        // Tuple is (file1_idx, seq1_idx, file2_idx, seq2_idx, similarity)
-        assert!(
-            (verified[0].4 - 1.0).abs() < 0.001,
-            "Should have similarity 1.0"
-        );
     }
 }
