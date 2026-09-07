@@ -58,11 +58,11 @@ pub use change_impact::{
     ChangeImpactStatus, DetectionMethod, TestFunction,
 };
 pub use clones::{
-    classify_clone_type, compute_dice_similarity, compute_rolling_hashes, detect_clones,
-    find_verified_clones, hash_token, interpret_similarity, is_generated_file, normalize_tokens,
-    verify_clone_match, CloneClass, CloneConfig, CloneFragment, ClonePair, CloneStats, CloneType,
+    classify_clone_type, compute_dice_similarity, detect_clones,
+    hash_token, interpret_similarity, is_generated_file, normalize_tokens,
+    CloneClass, CloneConfig, CloneFragment, ClonePair, CloneStats, CloneType,
     ClonesOptions, ClonesReport, HashEntry, HashIndex, NormalizationMode, NormalizedToken,
-    RollingHash, TokenCategory, TokenSequence, UnionFind,
+    RollingHash, TokenCategory, UnionFind,
 };
 pub use dead::{collect_all_functions, dead_code_analysis, dead_code_analysis_refcount};
 pub use deps::{
