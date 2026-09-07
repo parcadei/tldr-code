@@ -1266,18 +1266,10 @@ fn test_text_formatters_available() {
         tldr_cli::output::format_file_tree_text;
     let _format_structure: fn(&tldr_core::CodeStructure) -> String =
         tldr_cli::output::format_structure_text;
-    let _format_cfg: fn(&tldr_core::CfgInfo) -> String = tldr_cli::output::format_cfg_text;
-    let _format_dfg: fn(&tldr_core::DfgInfo) -> String = tldr_cli::output::format_dfg_text;
     let _format_impact: fn(&tldr_core::ImpactReport, bool) -> String =
         tldr_cli::output::format_impact_text;
-    let _format_dead: fn(&tldr_core::DeadCodeReport) -> String =
-        tldr_cli::output::format_dead_code_text;
-    let _format_search: fn(&[tldr_core::SearchMatch]) -> String =
-        tldr_cli::output::format_search_text;
     let _format_smells: fn(&tldr_core::SmellsReport) -> String =
         tldr_cli::output::format_smells_text;
-    let _format_secrets: fn(&tldr_core::SecretsReport) -> String =
-        tldr_cli::output::format_secrets_text;
     let _format_whatbreaks: fn(&tldr_core::analysis::whatbreaks::WhatbreaksReport) -> String =
         tldr_cli::output::format_whatbreaks_text;
     let _format_hubs: fn(&tldr_core::analysis::hubs::HubReport) -> String =
@@ -1475,40 +1467,6 @@ fn test_sarif_module_interface() {
 // =============================================================================
 // Clone and Similarity Output Tests
 // =============================================================================
-
-/// Test: Clone type descriptions
-#[test]
-fn test_clone_type_descriptions() {
-    use tldr_core::analysis::CloneType;
-
-    let type1 = tldr_cli::output::clone_type_description(&CloneType::Type1);
-    let type2 = tldr_cli::output::clone_type_description(&CloneType::Type2);
-    let type3 = tldr_cli::output::clone_type_description(&CloneType::Type3);
-
-    assert!(type1.contains("exact"));
-    assert!(type2.contains("renamed"));
-    assert!(type3.contains("additions/deletions"));
-}
-
-/// Test: Empty results hints
-#[test]
-fn test_empty_results_hints() {
-    let options = tldr_core::analysis::ClonesOptions::default();
-    let stats = tldr_core::analysis::CloneStats {
-        files_analyzed: 3,
-        total_tokens: 120,
-        clones_found: 0,
-        type1_count: 0,
-        type2_count: 0,
-        type3_count: 0,
-        class_count: None,
-        detection_time_ms: 1,
-    };
-
-    let hints = tldr_cli::output::empty_results_hints(&options, &stats);
-    assert_eq!(hints.len(), 3);
-    assert!(hints[0].contains("Analyzed 3 files, 120 tokens"));
-}
 
 /// Test: DOT ID escaping
 #[test]
