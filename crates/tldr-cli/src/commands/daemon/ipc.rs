@@ -38,8 +38,12 @@ pub const MAX_MESSAGE_SIZE: usize = 10 * 1024 * 1024;
 /// Connection timeout in seconds
 pub const CONNECTION_TIMEOUT_SECS: u64 = 5;
 
-/// Read timeout in seconds
-pub const READ_TIMEOUT_SECS: u64 = 30;
+/// Read timeout in seconds.
+///
+/// Must exceed the worst-case cold build (`warm`/`calls` on a large project
+/// take ~60s+); a 30s ceiling made every cold request time out and silently
+/// fall back to a local rebuild, so the daemon cache never warmed.
+pub const READ_TIMEOUT_SECS: u64 = 300;
 
 // =============================================================================
 // Path/Port Computation

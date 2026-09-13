@@ -32,7 +32,7 @@ use std::process::Command as StdCommand;
 use clap::Args;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use tldr_core::walker::walk_project;
+use tldr_core::{walker::walk_project, Language};
 
 use crate::output::OutputFormat;
 
@@ -399,6 +399,33 @@ fn detect_languages(project: &Path) -> anyhow::Result<Vec<String>> {
                     "c" => {
                         languages.insert("c".to_string());
                     }
+                    "php" => {
+                        languages.insert("php".to_string());
+                    }
+                    "cs" => {
+                        languages.insert("csharp".to_string());
+                    }
+                    "kt" | "kts" => {
+                        languages.insert("kotlin".to_string());
+                    }
+                    "swift" => {
+                        languages.insert("swift".to_string());
+                    }
+                    "scala" => {
+                        languages.insert("scala".to_string());
+                    }
+                    "lua" => {
+                        languages.insert("lua".to_string());
+                    }
+                    "luau" => {
+                        languages.insert("luau".to_string());
+                    }
+                    "ex" | "exs" => {
+                        languages.insert("elixir".to_string());
+                    }
+                    "ml" | "mli" => {
+                        languages.insert("ocaml".to_string());
+                    }
                     _ => {}
                 }
             }
@@ -422,47 +449,38 @@ fn build_call_graph(
     project: &Path,
     languages: &[String],
 ) -> anyhow::Result<(usize, Vec<CallEdge>)> {
-    let mut file_count = 0;
-    let mut edges = Vec::new();
-
-    // Get language extensions to filter
-    let extensions: HashSet<&str> = languages
-        .iter()
-        .flat_map(|lang| match lang.as_str() {
-            "python" => vec!["py"],
-            "typescript" => vec!["ts", "tsx"],
-            "javascript" => vec!["js", "jsx"],
-            "rust" => vec!["rs"],
-            "go" => vec!["go"],
-            "java" => vec!["java"],
-            "ruby" => vec!["rb"],
-            "cpp" => vec!["cpp", "cc", "cxx", "hpp", "h"],
-            "c" => vec!["c", "h"],
-            _ => vec![],
-        })
-        .collect();
-
-    // Walk project and extract function definitions and calls. The
-    // shared walker handles SKIP_DIRS + hidden dirs; we post-filter
-    // for user-defined `.tldrignore` patterns.
+    // Use the canonical tree-sitter builder so every supported language
+    // (including PHP, C#, Kotlin, …) produces real edges. The previous
+    // hand-rolled regex extractor only knew ~9 languages and silently
+    // produced zero edges for everything else — which made `warm` report
+    // `languages: ["javascript"]` / 32 files on a PHP project.
     let ignore_patterns = load_tldrignore(project);
+
+    let mut edges = Vec::new();
+    for lang_name in languages {
+        let Ok(language) = lang_name.parse::<Language>() else {
+            continue;
+        };
+        if let Ok(graph) = tldr_core::build_project_call_graph(project, language, None, true) {
+            for e in graph.edges() {
+                edges.push(CallEdge {
+                    from_file: e.src_file.clone(),
+                    from_func: e.src_func.clone(),
+                    to_file: e.dst_file.clone(),
+                    to_func: e.dst_func.clone(),
+                });
+            }
+        }
+    }
+
+    // Count every source file the shared walker yields (respecting
+    // `.tldrignore`), not just the hardcoded extension subset.
+    let mut file_count = 0usize;
     for entry in walk_project(project)
         .filter(|e| !path_has_ignored_component(e.path(), project, &ignore_patterns))
     {
         if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
-            let path = entry.path();
-            if let Some(ext) = path.extension() {
-                let ext_str = ext.to_string_lossy().to_lowercase();
-                if extensions.contains(ext_str.as_str()) {
-                    file_count += 1;
-
-                    // Extract call edges from this file
-                    if let Ok(content) = fs::read_to_string(path) {
-                        let file_edges = extract_call_edges(path, &content, &ext_str);
-                        edges.extend(file_edges);
-                    }
-                }
-            }
+            file_count += 1;
         }
     }
 
@@ -473,6 +491,7 @@ fn build_call_graph(
 ///
 /// This is a simplified regex-based implementation.
 /// Production code would use tree-sitter for accurate parsing.
+#[allow(dead_code)] // retained for its unit tests; `build_call_graph` now uses tldr-core
 fn extract_call_edges(file_path: &std::path::Path, content: &str, lang: &str) -> Vec<CallEdge> {
     let mut edges = Vec::new();
     let mut current_func: Option<String> = None;
@@ -530,6 +549,7 @@ fn extract_call_edges(file_path: &std::path::Path, content: &str, lang: &str) ->
 }
 
 /// Check if a name is a builtin or language keyword.
+#[allow(dead_code)] // retained for its unit tests
 fn is_builtin_or_keyword(name: &str) -> bool {
     let common_builtins = [
         "if",

@@ -60,9 +60,8 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use walkdir::WalkDir;
-
 use crate::ast::parser::ParserPool;
+use crate::walker::ProjectWalker;
 use crate::error::TldrError;
 use crate::types::{
     BaseResolution, InheritanceEdge, InheritanceGraph, InheritanceReport, Language,
@@ -239,22 +238,19 @@ fn collect_source_files(path: &Path, lang: Option<Language>) -> Vec<PathBuf> {
         return files;
     }
 
-    // Walk directory
-    for entry in WalkDir::new(path)
-        .follow_links(true)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    // Walk directory with the shared ProjectWalker so `.gitignore` and the
+    // default exclude list (vendor/, node_modules/, target/, ...) are honored.
+    // A raw `walkdir::WalkDir` only skipped hidden entries and pulled in
+    // `vendor/` on projects that commit their dependency tree, blowing up both
+    // scan time and output size. Pass the language hint so the JS/TS-preserved
+    // subset of the default excludes (build/, dist/, out/, bin/, obj/) is not
+    // applied when the caller targets JavaScript/TypeScript.
+    let walker = match lang {
+        Some(language) => ProjectWalker::new(path).lang_hint(language),
+        None => ProjectWalker::new(path),
+    };
+    for entry in walker.iter() {
         let entry_path = entry.path();
-
-        // Skip hidden files and directories
-        if entry_path
-            .file_name()
-            .map(|n| n.to_string_lossy().starts_with('.'))
-            .unwrap_or(false)
-        {
-            continue;
-        }
 
         // Skip non-files
         if !entry_path.is_file() {

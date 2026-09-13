@@ -1847,6 +1847,8 @@ mod language_threading {
         let cmd = DaemonCommand::Calls {
             path: Some(PathBuf::from("/tmp/proj")),
             language: Some(Language::TypeScript),
+            respect_ignore: true,
+            max_items: 200,
         };
         let json = serde_json::to_string(&cmd).expect("serialize Calls");
         assert!(
@@ -1858,9 +1860,16 @@ mod language_threading {
         let back: DaemonCommand =
             serde_json::from_str(&json).expect("deserialize Calls round-trip");
         match back {
-            DaemonCommand::Calls { path, language } => {
+            DaemonCommand::Calls {
+                path,
+                language,
+                respect_ignore,
+                max_items,
+            } => {
                 assert_eq!(path, Some(PathBuf::from("/tmp/proj")));
                 assert_eq!(language, Some(Language::TypeScript));
+                assert!(respect_ignore);
+                assert_eq!(max_items, 200);
             }
             other => panic!("expected DaemonCommand::Calls, got {:?}", other),
         }
@@ -2137,6 +2146,8 @@ export function caller(): number {
             .handle_command(DaemonCommand::Calls {
                 path: Some(temp.path().to_path_buf()),
                 language: Some(Language::TypeScript),
+                respect_ignore: true,
+                max_items: 200,
             })
             .await;
 
@@ -2215,6 +2226,8 @@ export function caller(): number {
             .handle_command(DaemonCommand::Calls {
                 path: Some(temp.path().to_path_buf()),
                 language: Some(Language::TypeScript),
+                respect_ignore: true,
+                max_items: 200,
             })
             .await;
 
@@ -2300,6 +2313,8 @@ export function caller(): number { return callee(); }
             .handle_command(DaemonCommand::Calls {
                 path: Some(temp.path().to_path_buf()),
                 language: Some(Language::Python),
+                respect_ignore: true,
+                max_items: 200,
             })
             .await;
         let py_value = match py_response {
@@ -2323,6 +2338,8 @@ export function caller(): number { return callee(); }
             .handle_command(DaemonCommand::Calls {
                 path: Some(temp.path().to_path_buf()),
                 language: Some(Language::TypeScript),
+                respect_ignore: true,
+                max_items: 200,
             })
             .await;
         let ts_value = match ts_response {
@@ -2365,6 +2382,8 @@ export function caller(): number { return callee(); }
             .handle_command(DaemonCommand::Calls {
                 path: Some(temp.path().to_path_buf()),
                 language: Some(Language::Python),
+                respect_ignore: true,
+                max_items: 200,
             })
             .await;
         let py2_value = match py2_response {

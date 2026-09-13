@@ -3,7 +3,7 @@
 //! Builds and displays the cross-file call graph for a project.
 //! Auto-routes through daemon when available for ~35x speedup.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::Args;
@@ -13,7 +13,7 @@ use tldr_core::callgraph::cross_file_types::CallType;
 use tldr_core::callgraph::{build_project_call_graph_v2, BuildConfig};
 use tldr_core::Language;
 
-use crate::commands::daemon_router::{params_with_path, try_daemon_route};
+use crate::commands::daemon_router::{params_with_calls, try_daemon_route};
 use crate::output::{format_calls_dot, DotCallEdge, OutputFormat, OutputWriter};
 
 /// Build and display cross-file call graph
@@ -31,7 +31,7 @@ pub struct CallsArgs {
     #[arg(long, default_value = "true")]
     pub respect_ignore: bool,
 
-    /// Maximum items (edges) to include in output (default: 200)
+    /// Maximum items (edges and nodes) to include in output (default: 200)
     #[arg(long, default_value = "200")]
     pub max_items: usize,
 }
@@ -44,7 +44,7 @@ pub struct CallsArgs {
 /// and `dead` use); `node_count` was always equal to `nodes.len()` so
 /// consumers can derive it locally.
 #[derive(Debug, Serialize, Deserialize)]
-struct CallGraphOutput {
+pub(crate) struct CallGraphOutput {
     root: PathBuf,
     /// Resolved language. `None` (serialized as JSON `null`) when the
     /// caller passed no `--lang` flag and `Language::from_directory`
@@ -66,7 +66,8 @@ struct CallGraphOutput {
     /// when `false` — so schema consumers do not need to handle the
     /// absent-key case. Previously elided via `skip_serializing_if`, but
     /// downstream tooling (and `references`, `dead`, `dice`, etc.) all
-    /// treat `truncated` as a stable boolean key.
+    /// treat `truncated` as a stable boolean key. Set when either the edge
+    /// list or the node list exceeds `max_items`.
     #[serde(default)]
     truncated: bool,
     /// Total number of edges before truncation
@@ -114,7 +115,12 @@ impl CallsArgs {
         if let Some(output) = try_daemon_route::<CallGraphOutput>(
             &self.path,
             "calls",
-            params_with_path(Some(&self.path)),
+            params_with_calls(
+                &self.path,
+                self.lang.map(|l| l.as_str()),
+                self.respect_ignore,
+                self.max_items,
+            ),
         ) {
             // Output based on format
             if writer.is_text() {
@@ -182,91 +188,17 @@ impl CallsArgs {
             language
         ));
 
-        // Build call graph (V2 canonical)
-        let config = BuildConfig {
-            language: language.as_str().to_string(),
-            respect_ignore: self.respect_ignore,
-            use_type_resolution: true,
-            ..Default::default()
-        };
-        let ir = build_project_call_graph_v2(&self.path, config)?;
-        // Bypass compat layer - output ir.edges directly with normalized paths
-        let root = self
-            .path
-            .canonicalize()
-            .unwrap_or_else(|_| self.path.clone());
-        let edges: Vec<EdgeOutput> = ir
-            .edges
-            .iter()
-            .map(|e| {
-                let src = e.src_file.strip_prefix(&root).unwrap_or(&e.src_file);
-                let dst = e.dst_file.strip_prefix(&root).unwrap_or(&e.dst_file);
-                EdgeOutput {
-                    src_file: src.to_path_buf(),
-                    src_func: e.src_func.clone(),
-                    dst_file: dst.to_path_buf(),
-                    dst_func: e.dst_func.clone(),
-                    call_type: e.call_type,
-                }
-            })
-            .collect();
-
-        // Sort and truncate edges by max_items
-        let total_edges = edges.len();
-        let truncated = total_edges > self.max_items;
-        let mut edges = edges;
-        if edges.len() > self.max_items {
-            // Sort by source file + function as a simple importance metric
-            edges.sort_by(|a, b| {
-                let a_key = format!("{}:{}", a.src_file.display(), a.src_func);
-                let b_key = format!("{}:{}", b.src_file.display(), b.src_func);
-                a_key.cmp(&b_key)
-            });
-            edges.truncate(self.max_items);
-        }
-        let shown_edges = edges.len();
-
-        // Build unique node set from truncated edges AND from every
-        // defined function in the project. The original derivation was
-        // edges-only, which under-reported the call graph for files like
-        // OCaml functor bodies (`module Make (V) = struct ... end`)
-        // whose let-bindings make external calls (`Format.fprintf`, …)
-        // that don't resolve to in-project targets. Phase-12 audit
-        // (BUG-AGG12-4) caught dag.ml reporting nodes=2 even though
-        // `tldr structure dag.ml` finds 19 functions. Including defined
-        // funcs as graph nodes (zero-out-degree where appropriate) gives
-        // every language a faithful node count: the call graph now
-        // exposes both call relationships AND the function inventory.
-        let mut node_set = std::collections::BTreeSet::new();
-        for edge in &edges {
-            node_set.insert(format!("{}:{}", edge.src_file.display(), edge.src_func));
-            node_set.insert(format!("{}:{}", edge.dst_file.display(), edge.dst_func));
-        }
-        for (file_path, file_ir) in &ir.files {
-            // FileIR paths are already normalized to forward-slash
-            // relative form; strip the canonicalized root just in case
-            // the FileIR happens to be absolute (defensive).
-            let rel = file_path.strip_prefix(&root).unwrap_or(file_path);
-            for func in &file_ir.funcs {
-                let qualified = if let Some(class) = &func.class_name {
-                    format!("{}.{}", class, func.name)
-                } else {
-                    func.name.clone()
-                };
-                node_set.insert(format!("{}:{}", rel.display(), qualified));
-            }
-        }
-        let nodes: Vec<String> = node_set.into_iter().collect();
-
-        let output = CallGraphOutput {
-            root: self.path.clone(),
-            language: detected_language,
-            nodes,
-            edges,
-            truncated,
-            total_edges,
-            shown_edges,
-        };
+        // Build call graph (V2 canonical). Shared with the daemon `Calls`
+        // handler so both serialise the identical shape — the daemon used to
+        // emit a different type (`{"edges":…}` only), which failed to
+        // deserialize and forced a silent local rebuild on every call.
+        let output = compute_call_graph_output(
+            &self.path,
+            language,
+            detected_language,
+            self.respect_ignore,
+            self.max_items,
+        )?;
 
         // Output based on format
         if writer.is_dot() {
@@ -326,4 +258,138 @@ impl CallsArgs {
 
         Ok(())
     }
+}
+
+/// Compute the canonical call-graph output for a project.
+///
+/// Shared by the CLI's direct path and the daemon `Calls` handler. The daemon
+/// previously serialised a different type (`build_project_call_graph`, whose
+/// JSON carries only an `edges` key), so the CLI's `try_daemon_route` could
+/// never deserialize the response and silently fell back to a full local
+/// rebuild on every invocation — which made `warm` useless.
+pub(crate) fn compute_call_graph_output(
+    path: &Path,
+    build_language: Language,
+    detected_language: Option<Language>,
+    respect_ignore: bool,
+    max_items: usize,
+) -> Result<CallGraphOutput> {
+    let config = BuildConfig {
+        language: build_language.as_str().to_string(),
+        respect_ignore,
+        use_type_resolution: true,
+        ..Default::default()
+    };
+    let ir = build_project_call_graph_v2(path, config)?;
+    // Bypass compat layer - output ir.edges directly with normalized paths
+    let root = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let edges: Vec<EdgeOutput> = ir
+        .edges
+        .iter()
+        .map(|e| {
+            let src = e.src_file.strip_prefix(&root).unwrap_or(&e.src_file);
+            let dst = e.dst_file.strip_prefix(&root).unwrap_or(&e.dst_file);
+            EdgeOutput {
+                src_file: src.to_path_buf(),
+                src_func: e.src_func.clone(),
+                dst_file: dst.to_path_buf(),
+                dst_func: e.dst_func.clone(),
+                call_type: e.call_type,
+            }
+        })
+        .collect();
+
+    // Sort and truncate edges by max_items
+    let total_edges = edges.len();
+    let truncated = total_edges > max_items;
+    let mut edges = edges;
+    if edges.len() > max_items {
+        // Sort by source file + function as a simple importance metric
+        edges.sort_by(|a, b| {
+            let a_key = format!("{}:{}", a.src_file.display(), a.src_func);
+            let b_key = format!("{}:{}", b.src_file.display(), b.src_func);
+            a_key.cmp(&b_key)
+        });
+        edges.truncate(max_items);
+    }
+    let shown_edges = edges.len();
+
+    // Build unique node set from truncated edges AND from every defined
+    // function in the project (BUG-AGG12-4): including defined funcs as graph
+    // nodes gives every language a faithful node count.
+    let mut node_set = std::collections::BTreeSet::new();
+    for edge in &edges {
+        node_set.insert(format!("{}:{}", edge.src_file.display(), edge.src_func));
+        node_set.insert(format!("{}:{}", edge.dst_file.display(), edge.dst_func));
+    }
+    for (file_path, file_ir) in &ir.files {
+        let rel = file_path.strip_prefix(&root).unwrap_or(file_path);
+        for func in &file_ir.funcs {
+            let qualified = if let Some(class) = &func.class_name {
+                format!("{}.{}", class, func.name)
+            } else {
+                func.name.clone()
+            };
+            node_set.insert(format!("{}:{}", rel.display(), qualified));
+        }
+    }
+    let mut nodes: Vec<String> = node_set.into_iter().collect();
+    // Cap nodes with the same `max_items` budget as edges. Repo-wide `calls`
+    // otherwise returned every function in the project (20k+ nodes / >500k
+    // tokens) because `--max-items` only limited edges, not the node list.
+    let nodes_truncated = nodes.len() > max_items;
+    if nodes_truncated {
+        nodes.truncate(max_items);
+    }
+
+    Ok(CallGraphOutput {
+        root: path.to_path_buf(),
+        language: detected_language,
+        nodes,
+        edges,
+        truncated: truncated || nodes_truncated,
+        total_edges,
+        shown_edges,
+    })
+}
+
+/// Re-apply the `max_items` truncation to an already-built output.
+///
+/// Used by the daemon to cache a full graph once (for `impact`) and derive the
+/// truncated `calls` shape from it without rebuilding.
+pub(crate) fn truncate_output(mut output: CallGraphOutput, max_items: usize) -> CallGraphOutput {
+    output.total_edges = output.edges.len();
+    let edges_truncated = output.total_edges > max_items;
+    if output.edges.len() > max_items {
+        output.edges.sort_by(|a, b| {
+            let a_key = format!("{}:{}", a.src_file.display(), a.src_func);
+            let b_key = format!("{}:{}", b.src_file.display(), b.src_func);
+            a_key.cmp(&b_key)
+        });
+        output.edges.truncate(max_items);
+    }
+    output.shown_edges = output.edges.len();
+
+    let nodes_truncated = output.nodes.len() > max_items;
+    if nodes_truncated {
+        output.nodes.truncate(max_items);
+    }
+    output.truncated = edges_truncated || nodes_truncated;
+    output
+}
+
+/// Rebuild the V1 call graph consumed by `impact_analysis` from a cached
+/// `CallGraphOutput`, so `impact` can reuse the graph `warm`/`calls` built
+/// instead of paying another ~60s cold build.
+pub(crate) fn project_graph_from_output(output: &CallGraphOutput) -> tldr_core::ProjectCallGraph {
+    let mut graph = tldr_core::ProjectCallGraph::new();
+    for e in &output.edges {
+        graph.add_edge(tldr_core::CallEdge {
+            src_file: e.src_file.clone(),
+            src_func: e.src_func.clone(),
+            dst_file: e.dst_file.clone(),
+            dst_func: e.dst_func.clone(),
+        });
+    }
+    graph
 }

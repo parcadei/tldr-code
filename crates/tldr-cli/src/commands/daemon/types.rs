@@ -399,6 +399,13 @@ pub enum DaemonCommand {
         /// `None`. Accepts the legacy `lang` key for v0.2.x clients.
         #[serde(default, alias = "lang", skip_serializing_if = "Option::is_none")]
         language: Option<Language>,
+        /// Mirror `CallsArgs::respect_ignore` so daemon and direct execution
+        /// build the same graph.
+        #[serde(default = "default_true")]
+        respect_ignore: bool,
+        /// Mirror `CallsArgs::max_items` (caps both edges and nodes).
+        #[serde(default = "default_max_items")]
+        max_items: usize,
     },
 
     /// Get impact analysis
@@ -467,6 +474,10 @@ fn default_true() -> bool {
 
 fn default_top_k() -> usize {
     10
+}
+
+fn default_max_items() -> usize {
+    200
 }
 
 /// Response from daemon

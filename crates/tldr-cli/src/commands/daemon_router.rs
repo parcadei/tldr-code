@@ -154,10 +154,15 @@ pub async fn is_daemon_running_async(project: &Path) -> bool {
 // =============================================================================
 
 /// Build JSON params with optional path.
+///
+/// The path is canonicalised before being sent: the daemon keys its cache on
+/// the absolute path (mirroring `warm`), so sending a relative path like `.`
+/// produced a different QueryKey and guaranteed a cache miss.
 pub fn params_with_path(path: Option<&Path>) -> serde_json::Value {
     let mut obj = serde_json::Map::new();
     if let Some(p) = path {
-        obj.insert("path".to_string(), serde_json::json!(p));
+        let resolved = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+        obj.insert("path".to_string(), serde_json::json!(resolved));
     }
     serde_json::Value::Object(obj)
 }
@@ -167,6 +172,30 @@ pub fn params_with_file(file: &Path) -> serde_json::Value {
     serde_json::json!({
         "file": file
     })
+}
+
+/// Build JSON params for the `calls` endpoint, mirroring `CallsArgs`.
+///
+/// The daemon keys its cache on these values, so every field that changes the
+/// resulting graph must be part of the request.
+pub fn params_with_calls(
+    path: &Path,
+    lang: Option<&str>,
+    respect_ignore: bool,
+    max_items: usize,
+) -> serde_json::Value {
+    let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let mut obj = serde_json::Map::new();
+    obj.insert("path".to_string(), serde_json::json!(resolved));
+    if let Some(l) = lang {
+        obj.insert("language".to_string(), serde_json::json!(l));
+    }
+    obj.insert(
+        "respect_ignore".to_string(),
+        serde_json::json!(respect_ignore),
+    );
+    obj.insert("max_items".to_string(), serde_json::json!(max_items));
+    serde_json::Value::Object(obj)
 }
 
 /// Build JSON params with file path and optional language hint.
