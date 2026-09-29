@@ -46,15 +46,6 @@ pub enum TldrError {
         max_mb: usize,
     },
 
-    /// Encoding error when reading file
-    #[error("Encoding error in {path}: {detail}")]
-    EncodingError {
-        /// File path that could not be decoded.
-        path: PathBuf,
-        /// Decoder failure details.
-        detail: String,
-    },
-
     /// Coverage report parsing error
     #[error("Coverage parse error ({format}): {detail}")]
     CoverageParseError {
@@ -63,14 +54,6 @@ pub enum TldrError {
         /// Parser failure details.
         detail: String,
     },
-
-    /// Not a git repository (for hotspots command)
-    #[error("Not a git repository: {0}")]
-    NotGitRepository(PathBuf),
-
-    /// Git operation in progress (rebase, merge, etc.)
-    #[error("Git operation in progress: {0}. Complete or abort the operation first.")]
-    GitOperationInProgress(String),
 
     /// Generic git command failure
     #[error("Git error: {0}")]
@@ -117,14 +100,6 @@ pub enum TldrError {
         suggestions: Vec<String>,
     },
 
-    /// Invalid slice direction (must be "backward" or "forward")
-    #[error("Invalid direction: {0}. Expected 'backward' or 'forward'")]
-    InvalidDirection(String),
-
-    /// Line number is not within the specified function
-    #[error("Line {0} is not within the specified function")]
-    LineNotInFunction(u32),
-
     /// No supported files found in directory (T32 mitigation)
     #[error("No supported files found in {0}")]
     NoSupportedFiles(PathBuf),
@@ -156,10 +131,6 @@ pub enum TldrError {
     // =========================================================================
     // Daemon Errors
     // =========================================================================
-    /// Error communicating with the daemon
-    #[error("Daemon error: {0}")]
-    DaemonError(String),
-
     /// Connection to daemon failed
     #[error("Connection failed: {0}")]
     ConnectionFailed(String),
@@ -167,13 +138,6 @@ pub enum TldrError {
     /// Operation timed out
     #[error("Timeout: {0}")]
     Timeout(String),
-
-    // =========================================================================
-    // MCP Errors
-    // =========================================================================
-    /// Error in MCP protocol handling
-    #[error("MCP error: {0}")]
-    McpError(String),
 
     // =========================================================================
     // Serialization Errors
@@ -243,28 +207,6 @@ impl TldrError {
         }
     }
 
-    /// Create a FunctionNotFound error with file context
-    pub fn function_not_found_in_file(name: impl Into<String>, file: PathBuf) -> Self {
-        TldrError::FunctionNotFound {
-            name: name.into(),
-            file: Some(file),
-            suggestions: Vec::new(),
-        }
-    }
-
-    /// Create a FunctionNotFound error with suggestions (M20)
-    pub fn function_not_found_with_suggestions(
-        name: impl Into<String>,
-        file: Option<PathBuf>,
-        suggestions: Vec<String>,
-    ) -> Self {
-        TldrError::FunctionNotFound {
-            name: name.into(),
-            file,
-            suggestions,
-        }
-    }
-
     /// Create a ParseError with line information
     pub fn parse_error(file: PathBuf, line: Option<u32>, message: impl Into<String>) -> Self {
         TldrError::ParseError {
@@ -319,9 +261,6 @@ impl TldrError {
             TldrError::SymlinkCycle(_) => 4,
             TldrError::PermissionDenied(_) => 5,
             TldrError::FileTooLarge { .. } => 6,
-            TldrError::EncodingError { .. } => 7,
-            TldrError::NotGitRepository(_) => 8,
-            TldrError::GitOperationInProgress(_) => 9,
             TldrError::GitError(_) => 9,
 
             // Parse errors (10-19)
@@ -331,17 +270,13 @@ impl TldrError {
 
             // Analysis errors (20-29)
             TldrError::FunctionNotFound { .. } => 20,
-            TldrError::InvalidDirection(_) => 21,
-            TldrError::LineNotInFunction(_) => 22,
             TldrError::NoSupportedFiles(_) => 23,
             TldrError::NotFound { .. } => 24,
             TldrError::InvalidArgs { .. } => 25,
 
             // Network/daemon errors (30-39)
-            TldrError::DaemonError(_) => 30,
             TldrError::ConnectionFailed(_) => 31,
             TldrError::Timeout(_) => 32,
-            TldrError::McpError(_) => 33,
 
             // Serialization errors (40-49)
             TldrError::SerializationError(_) => 40,
@@ -356,56 +291,6 @@ impl TldrError {
             // General IO error
             TldrError::IoError(_) => 1,
         }
-    }
-
-    /// Get a short error category for logging/metrics
-    pub fn category(&self) -> &'static str {
-        match self {
-            TldrError::PathNotFound(_)
-            | TldrError::PathTraversal(_)
-            | TldrError::SymlinkCycle(_)
-            | TldrError::PermissionDenied(_)
-            | TldrError::FileTooLarge { .. }
-            | TldrError::EncodingError { .. } => "filesystem",
-
-            TldrError::NotGitRepository(_)
-            | TldrError::GitOperationInProgress(_)
-            | TldrError::GitError(_) => "git",
-
-            TldrError::ParseError { .. }
-            | TldrError::UnsupportedLanguage(_)
-            | TldrError::CoverageParseError { .. } => "parse",
-
-            TldrError::FunctionNotFound { .. }
-            | TldrError::InvalidDirection(_)
-            | TldrError::LineNotInFunction(_)
-            | TldrError::NoSupportedFiles(_)
-            | TldrError::NotFound { .. }
-            | TldrError::InvalidArgs { .. } => "analysis",
-
-            TldrError::DaemonError(_) | TldrError::ConnectionFailed(_) | TldrError::Timeout(_) => {
-                "daemon"
-            }
-
-            TldrError::McpError(_) => "mcp",
-
-            TldrError::SerializationError(_) => "serialization",
-
-            TldrError::Embedding(_)
-            | TldrError::ModelLoadError { .. }
-            | TldrError::IndexTooLarge { .. }
-            | TldrError::MemoryLimitExceeded { .. }
-            | TldrError::ChunkNotFound { .. } => "semantic",
-
-            TldrError::IoError(_) => "io",
-        }
-    }
-}
-
-// Allow conversion from serde_json errors
-impl From<serde_json::Error> for TldrError {
-    fn from(err: serde_json::Error) -> Self {
-        TldrError::SerializationError(err.to_string())
     }
 }
 
@@ -452,31 +337,6 @@ mod tests {
     }
 
     #[test]
-    fn test_error_display_function_not_found_with_file() {
-        let err =
-            TldrError::function_not_found_in_file("process_data", PathBuf::from("src/main.py"));
-        assert_eq!(
-            err.to_string(),
-            "Function not found: process_data in src/main.py"
-        );
-    }
-
-    #[test]
-    fn test_error_display_function_not_found_with_suggestions() {
-        let err = TldrError::function_not_found_with_suggestions(
-            "proces_data",
-            Some(PathBuf::from("src/main.py")),
-            vec!["process_data".to_string(), "process_data_v2".to_string()],
-        );
-        let msg = err.to_string();
-        assert!(msg.contains("proces_data"));
-        assert!(msg.contains("src/main.py"));
-        assert!(msg.contains("Did you mean:"));
-        assert!(msg.contains("process_data"));
-        assert!(msg.contains("process_data_v2"));
-    }
-
-    #[test]
     fn test_error_is_recoverable() {
         assert!(TldrError::function_not_found("foo").is_recoverable());
         assert!(TldrError::parse_error(PathBuf::from("x"), None, "e").is_recoverable());
@@ -491,26 +351,9 @@ mod tests {
         assert_eq!(TldrError::PathNotFound(PathBuf::from("/")).exit_code(), 2);
         assert_eq!(TldrError::PathTraversal(PathBuf::from("/")).exit_code(), 3);
         assert_eq!(TldrError::function_not_found("foo").exit_code(), 20);
-        assert_eq!(TldrError::DaemonError("test".to_string()).exit_code(), 30);
-        assert_eq!(TldrError::McpError("test".to_string()).exit_code(), 33);
         assert_eq!(
             TldrError::SerializationError("test".to_string()).exit_code(),
             40
         );
-    }
-
-    #[test]
-    fn test_error_categories() {
-        assert_eq!(
-            TldrError::PathNotFound(PathBuf::from("/")).category(),
-            "filesystem"
-        );
-        assert_eq!(
-            TldrError::parse_error(PathBuf::from("x"), None, "e").category(),
-            "parse"
-        );
-        assert_eq!(TldrError::function_not_found("foo").category(), "analysis");
-        assert_eq!(TldrError::DaemonError("x".to_string()).category(), "daemon");
-        assert_eq!(TldrError::McpError("x".to_string()).category(), "mcp");
     }
 }

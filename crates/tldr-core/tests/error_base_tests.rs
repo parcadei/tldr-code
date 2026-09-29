@@ -49,17 +49,6 @@ fn test_error_display_file_too_large() {
 }
 
 #[test]
-fn test_error_display_encoding_error() {
-    let err = TldrError::EncodingError {
-        path: PathBuf::from("/file.txt"),
-        detail: "Invalid UTF-8 sequence".to_string(),
-    };
-    let msg = err.to_string();
-    assert!(msg.contains("Encoding error"));
-    assert!(msg.contains("Invalid UTF-8 sequence"));
-}
-
-#[test]
 fn test_error_display_coverage_parse_error() {
     let err = TldrError::CoverageParseError {
         format: "lcov".to_string(),
@@ -69,20 +58,6 @@ fn test_error_display_coverage_parse_error() {
     assert!(msg.contains("Coverage parse error"));
     assert!(msg.contains("lcov"));
     assert!(msg.contains("Missing SF line"));
-}
-
-#[test]
-fn test_error_display_not_git_repository() {
-    let err = TldrError::NotGitRepository(PathBuf::from("/not/a/repo"));
-    assert_eq!(err.to_string(), "Not a git repository: /not/a/repo");
-}
-
-#[test]
-fn test_error_display_git_operation_in_progress() {
-    let err = TldrError::GitOperationInProgress("rebase".to_string());
-    let msg = err.to_string();
-    assert!(msg.contains("Git operation in progress"));
-    assert!(msg.contains("rebase"));
 }
 
 #[test]
@@ -165,25 +140,6 @@ fn test_error_display_function_not_found_with_file_and_suggestions() {
 }
 
 #[test]
-fn test_error_display_invalid_direction() {
-    let err = TldrError::InvalidDirection("up".to_string());
-    let msg = err.to_string();
-    assert!(msg.contains("Invalid direction"));
-    assert!(msg.contains("up"));
-    assert!(msg.contains("backward"));
-    assert!(msg.contains("forward"));
-}
-
-#[test]
-fn test_error_display_line_not_in_function() {
-    let err = TldrError::LineNotInFunction(100);
-    assert_eq!(
-        err.to_string(),
-        "Line 100 is not within the specified function"
-    );
-}
-
-#[test]
 fn test_error_display_no_supported_files() {
     let err = TldrError::NoSupportedFiles(PathBuf::from("/empty/dir"));
     assert_eq!(err.to_string(), "No supported files found in /empty/dir");
@@ -238,12 +194,6 @@ fn test_error_display_invalid_args_with_suggestion() {
 }
 
 #[test]
-fn test_error_display_daemon_error() {
-    let err = TldrError::DaemonError("Connection refused".to_string());
-    assert_eq!(err.to_string(), "Daemon error: Connection refused");
-}
-
-#[test]
 fn test_error_display_connection_failed() {
     let err = TldrError::ConnectionFailed("timeout".to_string());
     assert_eq!(err.to_string(), "Connection failed: timeout");
@@ -253,12 +203,6 @@ fn test_error_display_connection_failed() {
 fn test_error_display_timeout() {
     let err = TldrError::Timeout("Analysis took too long".to_string());
     assert_eq!(err.to_string(), "Timeout: Analysis took too long");
-}
-
-#[test]
-fn test_error_display_mcp_error() {
-    let err = TldrError::McpError("Invalid request".to_string());
-    assert_eq!(err.to_string(), "MCP error: Invalid request");
 }
 
 #[test]
@@ -356,47 +300,6 @@ fn test_function_not_found_helper() {
 }
 
 #[test]
-fn test_function_not_found_in_file_helper() {
-    let err = TldrError::function_not_found_in_file("my_function", PathBuf::from("/test.py"));
-
-    match err {
-        TldrError::FunctionNotFound {
-            name,
-            file,
-            suggestions,
-        } => {
-            assert_eq!(name, "my_function");
-            assert_eq!(file, Some(PathBuf::from("/test.py")));
-            assert!(suggestions.is_empty());
-        }
-        _ => panic!("Expected FunctionNotFound error"),
-    }
-}
-
-#[test]
-fn test_function_not_found_with_suggestions_helper() {
-    let err = TldrError::function_not_found_with_suggestions(
-        "my_func",
-        Some(PathBuf::from("/test.py")),
-        vec!["my_function".to_string(), "my_funcs".to_string()],
-    );
-
-    match err {
-        TldrError::FunctionNotFound {
-            name,
-            file,
-            suggestions,
-        } => {
-            assert_eq!(name, "my_func");
-            assert_eq!(file, Some(PathBuf::from("/test.py")));
-            assert_eq!(suggestions.len(), 2);
-            assert!(suggestions.contains(&"my_function".to_string()));
-        }
-        _ => panic!("Expected FunctionNotFound error"),
-    }
-}
-
-#[test]
 fn test_parse_error_helper() {
     let err = TldrError::parse_error(PathBuf::from("/test.py"), Some(42), "unexpected indent");
 
@@ -459,14 +362,8 @@ fn test_is_recoverable_false_cases() {
     // SymlinkCycle is not recoverable
     assert!(!TldrError::SymlinkCycle(PathBuf::from("/link")).is_recoverable());
 
-    // DaemonError is not recoverable
-    assert!(!TldrError::DaemonError("test".to_string()).is_recoverable());
-
     // Timeout is not recoverable
     assert!(!TldrError::Timeout("test".to_string()).is_recoverable());
-
-    // InvalidDirection is not recoverable
-    assert!(!TldrError::InvalidDirection("up".to_string()).is_recoverable());
 }
 
 // =============================================================================
@@ -490,22 +387,6 @@ fn test_exit_code_file_system_errors() {
         }
         .exit_code(),
         6
-    );
-    assert_eq!(
-        TldrError::EncodingError {
-            path: PathBuf::from("/"),
-            detail: "err".to_string()
-        }
-        .exit_code(),
-        7
-    );
-    assert_eq!(
-        TldrError::NotGitRepository(PathBuf::from("/")).exit_code(),
-        8
-    );
-    assert_eq!(
-        TldrError::GitOperationInProgress("rebase".to_string()).exit_code(),
-        9
     );
 }
 
@@ -533,11 +414,6 @@ fn test_exit_code_parse_errors() {
 fn test_exit_code_analysis_errors() {
     assert_eq!(TldrError::function_not_found("foo").exit_code(), 20);
     assert_eq!(
-        TldrError::InvalidDirection("up".to_string()).exit_code(),
-        21
-    );
-    assert_eq!(TldrError::LineNotInFunction(42).exit_code(), 22);
-    assert_eq!(
         TldrError::NoSupportedFiles(PathBuf::from("/")).exit_code(),
         23
     );
@@ -563,13 +439,11 @@ fn test_exit_code_analysis_errors() {
 
 #[test]
 fn test_exit_code_daemon_errors() {
-    assert_eq!(TldrError::DaemonError("err".to_string()).exit_code(), 30);
     assert_eq!(
         TldrError::ConnectionFailed("err".to_string()).exit_code(),
         31
     );
     assert_eq!(TldrError::Timeout("err".to_string()).exit_code(), 32);
-    assert_eq!(TldrError::McpError("err".to_string()).exit_code(), 33);
 }
 
 #[test]
@@ -624,198 +498,8 @@ fn test_exit_code_io_error() {
 }
 
 // =============================================================================
-// category Tests
-// =============================================================================
-
-#[test]
-fn test_category_filesystem() {
-    assert_eq!(
-        TldrError::PathNotFound(PathBuf::from("/")).category(),
-        "filesystem"
-    );
-    assert_eq!(
-        TldrError::PathTraversal(PathBuf::from("/")).category(),
-        "filesystem"
-    );
-    assert_eq!(
-        TldrError::SymlinkCycle(PathBuf::from("/")).category(),
-        "filesystem"
-    );
-    assert_eq!(
-        TldrError::PermissionDenied(PathBuf::from("/")).category(),
-        "filesystem"
-    );
-    assert_eq!(
-        TldrError::FileTooLarge {
-            path: PathBuf::from("/"),
-            size_mb: 100,
-            max_mb: 50
-        }
-        .category(),
-        "filesystem"
-    );
-    assert_eq!(
-        TldrError::EncodingError {
-            path: PathBuf::from("/"),
-            detail: "err".to_string()
-        }
-        .category(),
-        "filesystem"
-    );
-}
-
-#[test]
-fn test_category_git() {
-    assert_eq!(
-        TldrError::NotGitRepository(PathBuf::from("/")).category(),
-        "git"
-    );
-    assert_eq!(
-        TldrError::GitOperationInProgress("rebase".to_string()).category(),
-        "git"
-    );
-}
-
-#[test]
-fn test_category_parse() {
-    assert_eq!(
-        TldrError::parse_error(PathBuf::from("/"), None, "err").category(),
-        "parse"
-    );
-    assert_eq!(
-        TldrError::UnsupportedLanguage("xyz".to_string()).category(),
-        "parse"
-    );
-    assert_eq!(
-        TldrError::CoverageParseError {
-            format: "lcov".to_string(),
-            detail: "err".to_string()
-        }
-        .category(),
-        "parse"
-    );
-}
-
-#[test]
-fn test_category_analysis() {
-    assert_eq!(TldrError::function_not_found("foo").category(), "analysis");
-    assert_eq!(
-        TldrError::InvalidDirection("up".to_string()).category(),
-        "analysis"
-    );
-    assert_eq!(TldrError::LineNotInFunction(42).category(), "analysis");
-    assert_eq!(
-        TldrError::NoSupportedFiles(PathBuf::from("/")).category(),
-        "analysis"
-    );
-    assert_eq!(
-        TldrError::NotFound {
-            entity: "X".to_string(),
-            name: "Y".to_string(),
-            suggestion: None
-        }
-        .category(),
-        "analysis"
-    );
-    assert_eq!(
-        TldrError::InvalidArgs {
-            arg: "x".to_string(),
-            message: "err".to_string(),
-            suggestion: None
-        }
-        .category(),
-        "analysis"
-    );
-}
-
-#[test]
-fn test_category_daemon() {
-    assert_eq!(
-        TldrError::DaemonError("err".to_string()).category(),
-        "daemon"
-    );
-    assert_eq!(
-        TldrError::ConnectionFailed("err".to_string()).category(),
-        "daemon"
-    );
-    assert_eq!(TldrError::Timeout("err".to_string()).category(), "daemon");
-}
-
-#[test]
-fn test_category_mcp() {
-    assert_eq!(TldrError::McpError("err".to_string()).category(), "mcp");
-}
-
-#[test]
-fn test_category_serialization() {
-    assert_eq!(
-        TldrError::SerializationError("err".to_string()).category(),
-        "serialization"
-    );
-}
-
-#[test]
-fn test_category_semantic() {
-    assert_eq!(
-        TldrError::Embedding("err".to_string()).category(),
-        "semantic"
-    );
-    assert_eq!(
-        TldrError::ModelLoadError {
-            model: "x".to_string(),
-            detail: "err".to_string()
-        }
-        .category(),
-        "semantic"
-    );
-    assert_eq!(
-        TldrError::IndexTooLarge {
-            count: 100,
-            max: 50
-        }
-        .category(),
-        "semantic"
-    );
-    assert_eq!(
-        TldrError::MemoryLimitExceeded {
-            estimated_mb: 100,
-            max_mb: 50
-        }
-        .category(),
-        "semantic"
-    );
-    assert_eq!(
-        TldrError::ChunkNotFound {
-            file: "x".to_string(),
-            function: None
-        }
-        .category(),
-        "semantic"
-    );
-}
-
-#[test]
-fn test_category_io() {
-    let io_err = std::io::Error::other("test");
-    assert_eq!(TldrError::IoError(io_err).category(), "io");
-}
-
-// =============================================================================
 // From Trait Tests
 // =============================================================================
-
-#[test]
-fn test_from_serde_json_error() {
-    let json_err = serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
-    let tldr_err: TldrError = json_err.into();
-
-    match tldr_err {
-        TldrError::SerializationError(msg) => {
-            assert!(msg.contains("expected"));
-        }
-        _ => panic!("Expected SerializationError"),
-    }
-}
 
 #[test]
 fn test_from_regex_error() {
@@ -885,12 +569,6 @@ fn test_error_with_unicode() {
     let err = TldrError::PathNotFound(PathBuf::from("/世界/🌍/ñáéíóú"));
     let msg = err.to_string();
     assert!(msg.contains("/世界/🌍/ñáéíóú"));
-}
-
-#[test]
-fn test_error_with_empty_strings() {
-    let err = TldrError::DaemonError("".to_string());
-    assert_eq!(err.to_string(), "Daemon error: ");
 }
 
 #[test]
