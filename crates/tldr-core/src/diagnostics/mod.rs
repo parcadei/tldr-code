@@ -19,24 +19,6 @@
 //! - **Scala**: scalac
 //! - **Elixir**: mix compile, credo
 //! - **Lua**: luacheck
-//!
-//! # Example
-//!
-//! ```rust,ignore
-//! use tldr_core::diagnostics::{run_diagnostics, Severity};
-//!
-//! let report = run_diagnostics(
-//!     Path::new("src/"),
-//!     Language::Python,
-//!     DiagnosticsOptions::default(),
-//! )?;
-//!
-//! for diag in &report.diagnostics {
-//!     if diag.severity == Severity::Error {
-//!         println!("{}:{}:{}: {}", diag.file, diag.line, diag.column, diag.message);
-//!     }
-//! }
-//! ```
 
 #[cfg(test)]
 mod tests;
@@ -187,27 +169,6 @@ pub struct ToolConfig {
     pub is_type_checker: bool,
     /// Whether this is a linter
     pub is_linter: bool,
-}
-
-/// Options for running diagnostics
-#[derive(Debug, Clone, Default)]
-pub struct DiagnosticsOptions {
-    /// Minimum severity to report
-    pub min_severity: Severity,
-    /// Skip type checkers
-    pub no_typecheck: bool,
-    /// Skip linters
-    pub no_lint: bool,
-    /// Specific tools to run (empty = auto-detect)
-    pub tools: Vec<String>,
-    /// Timeout per tool in seconds
-    pub timeout_secs: u64,
-    /// Analyze entire project
-    pub project_mode: bool,
-    /// File patterns to filter
-    pub filter_files: Vec<String>,
-    /// Error codes to ignore
-    pub ignore_codes: Vec<String>,
 }
 
 // =============================================================================
