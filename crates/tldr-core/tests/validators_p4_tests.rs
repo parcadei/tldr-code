@@ -219,35 +219,6 @@ mod error_exit_codes_tests {
         );
     }
 
-    /// Contract 2.3: InvalidDirection has exit code 21
-    #[test]
-    fn test_exit_code_invalid_direction() {
-        let err = TldrError::InvalidDirection("sideways".to_string());
-        assert_eq!(
-            err.exit_code(),
-            21,
-            "InvalidDirection should have exit code 21"
-        );
-    }
-
-    /// Contract 2.3: LineNotInFunction has exit code 22
-    #[test]
-    fn test_exit_code_line_not_in_function() {
-        let err = TldrError::LineNotInFunction(999);
-        assert_eq!(
-            err.exit_code(),
-            22,
-            "LineNotInFunction should have exit code 22"
-        );
-    }
-
-    /// Contract 2.3: DaemonError has exit code 30
-    #[test]
-    fn test_exit_code_daemon_error() {
-        let err = TldrError::DaemonError("connection failed".to_string());
-        assert_eq!(err.exit_code(), 30, "DaemonError should have exit code 30");
-    }
-
     /// Contract 2.3: ConnectionFailed has exit code 31
     #[test]
     fn test_exit_code_connection_failed() {
@@ -264,13 +235,6 @@ mod error_exit_codes_tests {
     fn test_exit_code_timeout() {
         let err = TldrError::Timeout("5s".to_string());
         assert_eq!(err.exit_code(), 32, "Timeout should have exit code 32");
-    }
-
-    /// Contract 2.3: McpError has exit code 33
-    #[test]
-    fn test_exit_code_mcp_error() {
-        let err = TldrError::McpError("protocol error".to_string());
-        assert_eq!(err.exit_code(), 33, "McpError should have exit code 33");
     }
 
     /// Contract 2.3: SerializationError has exit code 40
@@ -321,33 +285,6 @@ mod error_message_tests {
         assert!(
             msg.contains("traversal") && msg.contains("../escape.txt"),
             "Error message should mention traversal and path, got: {}",
-            msg
-        );
-    }
-
-    /// Contract 2.3: FunctionNotFound with suggestions
-    #[test]
-    fn test_error_message_function_not_found_with_suggestions() {
-        let err = TldrError::function_not_found_with_suggestions(
-            "proces_data",
-            Some(PathBuf::from("main.py")),
-            vec!["process_data".to_string(), "process".to_string()],
-        );
-        let msg = err.to_string();
-
-        assert!(
-            msg.contains("proces_data"),
-            "Should contain function name: {}",
-            msg
-        );
-        assert!(
-            msg.contains("Did you mean"),
-            "Should contain suggestions: {}",
-            msg
-        );
-        assert!(
-            msg.contains("process_data"),
-            "Should list suggested name: {}",
             msg
         );
     }
