@@ -55,7 +55,7 @@ pub use reaching::{
     build_def_use_chains, build_reaching_defs_report, build_use_def_chains,
     compute_reaching_definitions, compute_reaching_definitions_bitvec,
     compute_reaching_definitions_rpo, compute_rpo, create_dense_def_mapping,
-    definitions_reaching_line, detect_uninitialized, detect_uninitialized_simple,
+    detect_uninitialized, detect_uninitialized_simple,
     BitVectorReachingDefs, DefId, DenseDefMapping, ReachingDefinitions,
     ReachingDefinitionsWithStats,
 };
