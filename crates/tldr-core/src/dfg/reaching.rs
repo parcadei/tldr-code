@@ -232,50 +232,6 @@ pub fn compute_reaching_definitions(cfg: &CfgInfo, refs: &[VarRef]) -> ReachingD
     }
 }
 
-/// Find which definitions reach a specific line
-pub fn definitions_reaching_line(
-    reaching: &ReachingDefinitions,
-    cfg: &CfgInfo,
-    refs: &[VarRef],
-    line: u32,
-    variable: Option<&str>,
-) -> Vec<DefId> {
-    // Find which block contains this line
-    let block_id = cfg
-        .blocks
-        .iter()
-        .find(|b| line >= b.lines.0 && line <= b.lines.1)
-        .map(|b| b.id);
-
-    let Some(block_id) = block_id else {
-        return Vec::new();
-    };
-
-    // Get reaching definitions at this block
-    let Some(reaching_in) = reaching.reaching_in.get(&block_id) else {
-        return Vec::new();
-    };
-
-    // Filter by variable if specified
-    let result: Vec<DefId> = reaching_in
-        .iter()
-        .filter(|def_id| {
-            if let Some(var_name) = variable {
-                if let Some(var_ref) = refs.get(def_id.ref_index) {
-                    var_ref.name == var_name
-                } else {
-                    false
-                }
-            } else {
-                true
-            }
-        })
-        .copied()
-        .collect();
-
-    result
-}
-
 // =============================================================================
 // Def-Use Chains (RD-7)
 // =============================================================================
