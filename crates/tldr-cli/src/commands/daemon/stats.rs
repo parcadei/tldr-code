@@ -34,7 +34,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::output::OutputFormat;
 
-use super::error::{DaemonError, DaemonResult};
 use super::types::GlobalStats;
 
 // =============================================================================
@@ -305,55 +304,6 @@ fn format_number_signed(n: i64) -> String {
     } else {
         format_number(n as u64)
     }
-}
-
-/// Public function to run stats command (for daemon integration).
-pub async fn cmd_stats(_: StatsArgs) -> DaemonResult<StatsOutput> {
-    let stats_path =
-        get_stats_path().map_err(|e| DaemonError::Io(std::io::Error::other(e.to_string())))?;
-
-    let stats = read_and_aggregate_stats(&stats_path)
-        .map_err(|e| DaemonError::Io(std::io::Error::other(e.to_string())))?;
-
-    match stats {
-        Some(stats) => Ok(StatsOutput {
-            total_invocations: stats.total_invocations,
-            estimated_tokens_saved: stats.estimated_tokens_saved,
-            raw_tokens_total: stats.raw_tokens_total,
-            tldr_tokens_total: stats.tldr_tokens_total,
-            savings_percent: stats.savings_percent,
-        }),
-        None => Ok(StatsOutput {
-            total_invocations: 0,
-            estimated_tokens_saved: 0,
-            raw_tokens_total: 0,
-            tldr_tokens_total: 0,
-            savings_percent: 0.0,
-        }),
-    }
-}
-
-/// Append a stats entry to the stats file.
-///
-/// Used by the daemon to record usage statistics.
-pub fn append_stats_entry(entry: &StatsEntry) -> anyhow::Result<()> {
-    let stats_path = get_stats_path()?;
-
-    // Ensure directory exists
-    if let Some(parent) = stats_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
-    // Append entry as JSON line
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&stats_path)?;
-
-    use std::io::Write;
-    writeln!(file, "{}", serde_json::to_string(entry)?)?;
-
-    Ok(())
 }
 
 // =============================================================================
