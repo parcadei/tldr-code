@@ -36,7 +36,6 @@ use tldr_core::walker::walk_project;
 
 use crate::output::OutputFormat;
 
-use super::error::{DaemonError, DaemonResult};
 use super::ipc::{check_socket_alive, send_command};
 use super::types::DaemonCommand;
 
@@ -623,45 +622,6 @@ fn is_builtin_or_keyword(name: &str) -> bool {
     ];
 
     common_builtins.contains(&name)
-}
-
-/// Public function to run warm command (for daemon integration).
-pub async fn cmd_warm(args: WarmArgs) -> DaemonResult<WarmOutput> {
-    // Resolve project path
-    let project = args.path.canonicalize().unwrap_or_else(|_| {
-        std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join(&args.path)
-    });
-
-    // Auto-detect languages
-    let languages = detect_languages(&project)
-        .map_err(|e| DaemonError::Io(std::io::Error::other(e.to_string())))?;
-
-    // Build call graph
-    let (files, edges) = build_call_graph(&project, &languages)
-        .map_err(|e| DaemonError::Io(std::io::Error::other(e.to_string())))?;
-
-    // Write cache file
-    let cache_dir = project.join(".tldr/cache");
-    fs::create_dir_all(&cache_dir).map_err(DaemonError::Io)?;
-    let cache_path = cache_dir.join("call_graph.json");
-
-    let cache = CallGraphCache {
-        edges: edges.clone(),
-        languages: languages.clone(),
-        timestamp: chrono::Utc::now().timestamp(),
-    };
-
-    fs::write(&cache_path, serde_json::to_string_pretty(&cache)?)?;
-
-    Ok(WarmOutput {
-        status: "ok".to_string(),
-        files,
-        edges: edges.len(),
-        languages,
-        cache_path: PathBuf::from(".tldr/cache/call_graph.json"),
-    })
 }
 
 // =============================================================================
