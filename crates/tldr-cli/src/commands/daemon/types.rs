@@ -141,39 +141,6 @@ pub struct SessionStats {
     pub started_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-impl SessionStats {
-    /// Create a new session with the given ID
-    pub fn new(session_id: String) -> Self {
-        Self {
-            session_id,
-            raw_tokens: 0,
-            tldr_tokens: 0,
-            requests: 0,
-            started_at: Some(chrono::Utc::now()),
-        }
-    }
-
-    /// Record a request's token usage
-    pub fn record_request(&mut self, raw_tokens: u64, tldr_tokens: u64) {
-        self.raw_tokens += raw_tokens;
-        self.tldr_tokens += tldr_tokens;
-        self.requests += 1;
-    }
-
-    /// Tokens saved
-    pub fn savings_tokens(&self) -> i64 {
-        self.raw_tokens as i64 - self.tldr_tokens as i64
-    }
-
-    /// Savings as percentage (0-100)
-    pub fn savings_percent(&self) -> f64 {
-        if self.raw_tokens == 0 {
-            return 0.0;
-        }
-        (self.savings_tokens() as f64 / self.raw_tokens as f64) * 100.0
-    }
-}
-
 /// Per-hook activity statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HookStats {
@@ -585,34 +552,6 @@ mod tests {
             recomputations: 3,
         };
         assert!((stats.hit_rate() - 90.0).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_session_stats_savings_calculation() {
-        let stats = SessionStats {
-            session_id: "test123".to_string(),
-            raw_tokens: 1000,
-            tldr_tokens: 100,
-            requests: 10,
-            started_at: None,
-        };
-
-        assert_eq!(stats.savings_tokens(), 900);
-        assert!((stats.savings_percent() - 90.0).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_session_stats_zero_tokens() {
-        let stats = SessionStats {
-            session_id: "empty".to_string(),
-            raw_tokens: 0,
-            tldr_tokens: 0,
-            requests: 0,
-            started_at: None,
-        };
-
-        assert_eq!(stats.savings_tokens(), 0);
-        assert_eq!(stats.savings_percent(), 0.0);
     }
 
     #[test]
