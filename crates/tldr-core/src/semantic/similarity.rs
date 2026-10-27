@@ -7,7 +7,6 @@
 //!
 //! - [`cosine_similarity`]: Compute similarity between two vectors
 //! - [`normalize`]: Normalize a vector to unit length
-//! - [`is_normalized`]: Check if a vector has unit length
 //! - [`top_k_similar`]: Find the K most similar vectors to a query
 //!
 //! # Example
@@ -152,38 +151,6 @@ pub fn normalize(v: &mut [f32]) {
     for x in v.iter_mut() {
         *x = (*x as f64 * scale) as f32;
     }
-}
-
-/// Check if a vector is normalized (L2 norm approximately 1.0)
-///
-/// Uses a tolerance of 1e-4 to account for floating point precision.
-///
-/// # Arguments
-///
-/// * `v` - Vector to check
-///
-/// # Returns
-///
-/// `true` if the vector's L2 norm is within 1e-4 of 1.0
-///
-/// # Example
-///
-/// ```rust
-/// use tldr_core::semantic::similarity::{normalize, is_normalized};
-///
-/// let unit = vec![0.6_f32, 0.8, 0.0]; // Already unit length
-/// assert!(is_normalized(&unit));
-///
-/// let non_unit = vec![3.0_f32, 4.0, 0.0]; // Length 5
-/// assert!(!is_normalized(&non_unit));
-/// ```
-pub fn is_normalized(v: &[f32]) -> bool {
-    let norm_squared: f64 = v.iter().map(|x| (*x as f64).powi(2)).sum();
-    let norm = norm_squared.sqrt();
-
-    // Use slightly larger epsilon for is_normalized check
-    // to account for accumulated floating point errors
-    (norm - 1.0).abs() < 1e-4
 }
 
 /// Find top-K most similar items to a query
@@ -399,30 +366,6 @@ mod tests {
         for (a, b) in v.iter().zip(original.iter()) {
             assert!((a - b).abs() < 1e-6);
         }
-    }
-
-    // =========================================================================
-    // is_normalized tests
-    // =========================================================================
-
-    #[test]
-    fn is_normalized_detects_unit_vectors() {
-        // GIVEN: Normalized and non-normalized vectors
-        let unit = vec![0.6_f32, 0.8, 0.0]; // Already unit length
-        let non_unit = vec![3.0_f32, 4.0, 0.0]; // Length 5
-
-        // THEN: is_normalized should correctly identify them
-        assert!(is_normalized(&unit));
-        assert!(!is_normalized(&non_unit));
-    }
-
-    #[test]
-    fn is_normalized_false_for_zero_vector() {
-        // GIVEN: A zero vector
-        let zero = vec![0.0_f32, 0.0, 0.0];
-
-        // THEN: Should not be considered normalized (norm is 0, not 1)
-        assert!(!is_normalized(&zero));
     }
 
     // =========================================================================

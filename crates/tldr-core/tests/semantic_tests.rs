@@ -20,7 +20,6 @@ use tempfile::TempDir;
 use tldr_core::semantic::{
     // Functions
     cosine_similarity,
-    is_normalized,
     normalize,
     top_k_similar,
     CacheConfig,

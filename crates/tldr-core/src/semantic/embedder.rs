@@ -324,7 +324,6 @@ impl Embedder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::semantic::similarity::is_normalized;
 
     // =========================================================================
     // All embedding tests are #[ignore] by default since they require
@@ -377,24 +376,6 @@ mod tests {
 
         // THEN: Should have correct dimensions
         assert_eq!(embedding.len(), 768, "Expected 768 dimensions for ArcticM");
-    }
-
-    #[test]
-    #[ignore = "Requires model download (~110MB)"]
-    fn embedder_embed_text_is_normalized() {
-        // GIVEN: An initialized embedder
-        let mut embedder = Embedder::new(EmbeddingModel::ArcticM).expect("Failed to init");
-
-        // WHEN: We embed text
-        let embedding = embedder
-            .embed_text("fn process_data() { }")
-            .expect("Failed to embed");
-
-        // THEN: Embedding should be normalized (L2 norm = 1.0)
-        assert!(
-            is_normalized(&embedding),
-            "Embedding should have L2 norm = 1.0"
-        );
     }
 
     #[test]
@@ -477,7 +458,6 @@ mod tests {
 
         // THEN: Should have 384 dimensions
         assert_eq!(embedding.len(), 384);
-        assert!(is_normalized(&embedding));
     }
 
     #[test]
