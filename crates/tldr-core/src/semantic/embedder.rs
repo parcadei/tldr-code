@@ -43,24 +43,6 @@ use crate::semantic::similarity::normalize;
 use crate::semantic::types::EmbeddingModel;
 use crate::TldrResult;
 
-/// Options for embedding operations
-///
-/// Controls embedding behavior such as progress display and query prefixes.
-#[derive(Debug, Clone, Default)]
-pub struct EmbedOptions {
-    /// Model to use (default: ArcticM)
-    pub model: EmbeddingModel,
-
-    /// Show progress during embedding
-    pub show_progress: bool,
-
-    /// Use query:/passage: prefixes for Arctic models (P1 mitigation 5.4)
-    ///
-    /// Arctic models perform better when queries use "query: " prefix
-    /// and documents use "passage: " prefix. Enable this for search queries.
-    pub use_prefix: bool,
-}
-
 /// Embedding service wrapping fastembed-rs
 ///
 /// Provides validated embedding generation with automatic normalization.
@@ -331,17 +313,6 @@ mod tests {
     // model download (~110MB for Arctic-M). Run with:
     //   cargo test --release -p tldr-core -- --ignored embedder
     // =========================================================================
-
-    #[test]
-    fn embed_options_default_values() {
-        // GIVEN/WHEN: Default EmbedOptions
-        let options = EmbedOptions::default();
-
-        // THEN: Should have sensible defaults
-        assert_eq!(options.model, EmbeddingModel::ArcticM);
-        assert!(!options.show_progress);
-        assert!(!options.use_prefix);
-    }
 
     #[test]
     #[ignore = "Requires model download (~110MB)"]
