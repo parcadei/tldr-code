@@ -20,13 +20,11 @@ use std::path::PathBuf;
 use tldr_core::semantic::{
     // Similarity (Phase 2)
     cosine_similarity,
-    is_normalized,
     normalize,
     top_k_similar,
     ChunkGranularity,
     // Types (Phase 1)
     CodeChunk,
-    EmbedOptions,
     // Embedder (Phase 3)
     Embedder,
     EmbeddingModel,
@@ -310,18 +308,6 @@ mod embedder_tests {
         assert!(embeddings.is_ok());
         assert!(embeddings.unwrap().is_empty());
     }
-
-    #[test]
-    fn embed_options_default_values() {
-        // GIVEN: Default embed options
-        let options = EmbedOptions::default();
-
-        // THEN: Defaults should match spec
-        assert_eq!(options.model, EmbeddingModel::ArcticM);
-        assert!(!options.show_progress);
-        // Default batch size should be reasonable
-        assert!(options.batch_size >= 16 && options.batch_size <= 64);
-    }
 }
 
 // =============================================================================
@@ -410,17 +396,6 @@ mod similarity_tests {
         assert!((l2_norm - 1.0).abs() < 1e-6);
         assert!((v[0] - 0.6).abs() < 1e-6); // 3/5
         assert!((v[1] - 0.8).abs() < 1e-6); // 4/5
-    }
-
-    #[test]
-    fn is_normalized_detects_unit_vectors() {
-        // GIVEN: Normalized and non-normalized vectors
-        let unit = vec![0.6_f32, 0.8, 0.0]; // Already unit length
-        let non_unit = vec![3.0_f32, 4.0, 0.0]; // Length 5
-
-        // THEN: is_normalized should correctly identify them
-        assert!(is_normalized(&unit));
-        assert!(!is_normalized(&non_unit));
     }
 
     #[test]

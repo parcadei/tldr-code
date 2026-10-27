@@ -30,18 +30,17 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use tldr_core::semantic::{SemanticIndex, SearchOptions, ChunkOptions, EmbedOptions};
+//! use tldr_core::semantic::{SemanticIndex, IndexSearchOptions, BuildOptions};
 //!
 //! // Build an index from a project directory
 //! let index = SemanticIndex::build(
 //!     Path::new("src/"),
-//!     ChunkOptions::default(),
-//!     EmbedOptions::default(),
+//!     BuildOptions::default(),
 //!     None, // No cache
 //! )?;
 //!
 //! // Search for semantically related code
-//! let report = index.search("parse configuration file", SearchOptions::default())?;
+//! let report = index.search("parse configuration file", &IndexSearchOptions::default())?;
 //!
 //! for result in report.results {
 //!     println!("{}: {} (score: {:.2})",
@@ -72,11 +71,9 @@ pub use types::{
     // Core types
     CodeChunk,
     // Option types
-    EmbedOptions,
     EmbedReport,
     EmbeddedChunk,
     EmbeddingModel,
-    SearchOptions,
     SemanticSearchReport,
     // Result types
     SemanticSearchResult,
@@ -85,7 +82,7 @@ pub use types::{
 
 // Phase 2: Similarity
 pub mod similarity;
-pub use similarity::{cosine_similarity, is_normalized, normalize, top_k_similar};
+pub use similarity::{cosine_similarity, normalize, top_k_similar};
 
 // Placeholder re-exports for future phases
 // These will be uncommented as each phase is implemented

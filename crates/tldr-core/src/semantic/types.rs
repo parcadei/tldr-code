@@ -298,29 +298,6 @@ pub struct SimilarityReport {
     pub exclude_self: bool,
 }
 
-/// Options for embedding generation
-#[derive(Debug, Clone)]
-pub struct EmbedOptions {
-    /// Model to use (default: ArcticM)
-    pub model: EmbeddingModel,
-
-    /// Show progress during embedding
-    pub show_progress: bool,
-
-    /// Batch size for embedding (default: 32)
-    pub batch_size: usize,
-}
-
-impl Default for EmbedOptions {
-    fn default() -> Self {
-        Self {
-            model: EmbeddingModel::default(),
-            show_progress: false,
-            batch_size: 32,
-        }
-    }
-}
-
 /// Code chunking options
 #[derive(Debug, Clone, Default)]
 pub struct ChunkOptions {
@@ -335,33 +312,6 @@ pub struct ChunkOptions {
 
     /// Languages to process (None = auto-detect)
     pub languages: Option<Vec<Language>>,
-}
-
-/// Options for similarity search
-#[derive(Debug, Clone)]
-pub struct SearchOptions {
-    /// Number of results to return
-    pub top_k: usize,
-
-    /// Minimum similarity threshold (0.0 to 1.0)
-    pub threshold: f64,
-
-    /// Model to use for query embedding
-    pub model: EmbeddingModel,
-
-    /// Exclude exact matches (for similarity search)
-    pub exclude_self: bool,
-}
-
-impl Default for SearchOptions {
-    fn default() -> Self {
-        Self {
-            top_k: 10,
-            threshold: 0.5,
-            model: EmbeddingModel::default(),
-            exclude_self: false,
-        }
-    }
 }
 
 /// Cache configuration
@@ -543,22 +493,5 @@ mod tests {
         assert_eq!(results[0].function_name, Some("b".to_string())); // 0.9
         assert_eq!(results[1].function_name, Some("c".to_string())); // 0.7
         assert_eq!(results[2].function_name, Some("a".to_string())); // 0.5
-    }
-
-    #[test]
-    fn search_options_default_values() {
-        let options = SearchOptions::default();
-        assert_eq!(options.top_k, 10);
-        assert_eq!(options.threshold, 0.5);
-        assert_eq!(options.model, EmbeddingModel::ArcticM);
-        assert!(!options.exclude_self);
-    }
-
-    #[test]
-    fn embed_options_default_values() {
-        let options = EmbedOptions::default();
-        assert_eq!(options.model, EmbeddingModel::ArcticM);
-        assert!(!options.show_progress);
-        assert!(options.batch_size >= 16 && options.batch_size <= 64);
     }
 }
